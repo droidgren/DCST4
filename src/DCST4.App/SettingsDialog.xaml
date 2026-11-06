@@ -52,6 +52,27 @@
                 </StackPanel>
             </TabItem>
 
+            <TabItem Header="Burned-in text">
+                <StackPanel Margin="5">
+                    <CheckBox x:Name="BurnInText" Content="Burn text into the images"/>
+                    <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
+                               Text="Draws the ticked tags in a black box in the upper left corner of each image, so they can be compared with the tags in the viewer. Burned In Annotation (0028,0301) is YES when text is drawn, otherwise NO. The diagonal TEST IMAGE watermark is always there."/>
+                    <TextBlock Margin="0,10,0,4" FontWeight="SemiBold" Text="Tags to burn in"/>
+                    <ItemsControl x:Name="BurnInTagsList" IsEnabled="{Binding IsChecked, ElementName=BurnInText}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Name}" IsChecked="{Binding IsChecked, Mode=TwoWay}" Margin="0,1" ToolTip="{Binding Number}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </TabItem>
+
             <TabItem Header="Additional tags">
                 <DockPanel Margin="5">
                     <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Common tags"/>

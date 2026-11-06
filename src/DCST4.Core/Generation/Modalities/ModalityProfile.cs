@@ -22,7 +22,7 @@ namespace DCST4.Core.Generation.Modalities
         public SliceOrientation Orientation { get; set; } = SliceOrientation.Axial;
         public int DefaultImages { get; set; } = 1;
 
-        // CT, CR and DX exposure
+        // CT, CR, DX, XA, RF and MG exposure
         public double Kvp { get; set; }
         public int TubeCurrentMa { get; set; }
         public int ExposureTimeMs { get; set; }
@@ -39,7 +39,7 @@ namespace DCST4.Core.Generation.Modalities
         public double FlipAngle { get; set; }
         public double MagneticFieldStrengthT { get; set; } = 1.5;
 
-        // CR and DX
+        // CR, DX and MG
         public string ViewPosition { get; set; }
         public string PatientOrientation { get; set; }
         public string ImageLaterality { get; set; } = "U";
@@ -50,6 +50,25 @@ namespace DCST4.Core.Generation.Modalities
         public string TransducerData { get; set; }
         public string TransducerType { get; set; }
         public double ScanDepthCm { get; set; }
+
+        // XA, RF and MG
+        public double PositionerPrimaryAngle { get; set; }
+        public double PositionerSecondaryAngle { get; set; }
+
+        // XA and RF
+        /// <summary>GR for a radiographic exposure, SC for fluoroscopy.</summary>
+        public string RadiationSetting { get; set; }
+
+        // PT and NM
+        public string Radiopharmaceutical { get; set; }
+        public double RadionuclideHalfLifeSeconds { get; set; }
+        public double RadionuclideDoseBq { get; set; }
+        public int FrameDurationMs { get; set; }
+
+        // NM
+        public string EnergyWindowName { get; set; }
+        public double EnergyWindowLowerKev { get; set; }
+        public double EnergyWindowUpperKev { get; set; }
 
         public override string ToString() => Name;
     }
@@ -89,6 +108,9 @@ namespace DCST4.Core.Generation.Modalities
         public virtual double? RescaleIntercept => null;
         public virtual string RescaleType => null;
 
+        /// <summary>A stack in the patient coordinate system: the images get Frame of Reference and Patient Position.</summary>
+        public virtual bool UsesFrameOfReference => false;
+
         public virtual string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY" };
 
         public abstract void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context);
@@ -97,7 +119,7 @@ namespace DCST4.Core.Generation.Modalities
 
         internal static string Ds(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
-        /// <summary>Frame of Reference, Image Plane and related tags shared by CT and MR stacks.</summary>
+        /// <summary>Frame of Reference, Image Plane and related tags shared by CT, MR and PT stacks.</summary>
         protected static void AddSliceGeometry(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
             double[] row, column;
@@ -132,7 +154,7 @@ namespace DCST4.Core.Generation.Modalities
             dataset.AddOrUpdate(DicomTag.SliceLocation, Ds(sliceOffset));
         }
 
-        /// <summary>Imager Pixel Spacing and exposure tags shared by CR and DX.</summary>
+        /// <summary>Imager Pixel Spacing and exposure tags shared by CR, DX and MG.</summary>
         protected static void AddProjectionTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
             var spacing = preset.FieldOfViewMm / Math.Max(context.Rows, context.Columns);
@@ -143,5 +165,61 @@ namespace DCST4.Core.Generation.Modalities
             dataset.AddOrUpdate(DicomTag.ExposureTime, preset.ExposureTimeMs.ToString(CultureInfo.InvariantCulture));
             dataset.AddOrUpdate(DicomTag.XRayTubeCurrent, preset.TubeCurrentMa.ToString(CultureInfo.InvariantCulture));
         }
+
+        /// <summary>The DX modules shared by DX and MG, For Presentation. Each adds its own Anatomic Region Sequence.</summary>
+        protected static void AddDigitalXRayTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            AddProjectionTags(dataset, preset, context);
+            dataset.AddOrUpdate(DicomTag.PresentationIntentType, "FOR PRESENTATION");
+            dataset.AddOrUpdate(DicomTag.PresentationLUTShape, "IDENTITY");
+            dataset.AddOrUpdate(DicomTag.PixelIntensityRelationship, "LIN");
+            dataset.AddOrUpdate(DicomTag.PixelIntensityRelationshipSign, (short)1);
+            dataset.AddOrUpdate(DicomTag.DetectorType, "DIRECT");
+            dataset.AddOrUpdate(DicomTag.ImageLaterality, preset.ImageLaterality);
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.AcquisitionContextSequence));
+        }
+
+        /// <summary>X-Ray Image, X-Ray Acquisition and positioner tags shared by XA and RF.</summary>
+        protected static void AddFluoroscopyTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            var spacing = preset.FieldOfViewMm / Math.Max(context.Rows, context.Columns);
+            dataset.AddOrUpdate(DicomTag.ImagerPixelSpacing, Ds(spacing), Ds(spacing));
+            dataset.AddOrUpdate(DicomTag.PatientOrientation, new string[0]);
+            dataset.AddOrUpdate(DicomTag.PixelIntensityRelationship, "LIN");
+            dataset.AddOrUpdate(DicomTag.RadiationSetting, preset.RadiationSetting);
+            dataset.AddOrUpdate(DicomTag.KVP, Ds(preset.Kvp));
+            dataset.AddOrUpdate(DicomTag.XRayTubeCurrent, preset.TubeCurrentMa.ToString(CultureInfo.InvariantCulture));
+            dataset.AddOrUpdate(DicomTag.ExposureTime, preset.ExposureTimeMs.ToString(CultureInfo.InvariantCulture));
+            var milliampereSeconds = (int)Math.Round(preset.TubeCurrentMa * preset.ExposureTimeMs / 1000.0);
+            dataset.AddOrUpdate(DicomTag.Exposure, milliampereSeconds.ToString(CultureInfo.InvariantCulture));
+            dataset.AddOrUpdate(DicomTag.PositionerPrimaryAngle, Ds(preset.PositionerPrimaryAngle));
+            dataset.AddOrUpdate(DicomTag.PositionerSecondaryAngle, Ds(preset.PositionerSecondaryAngle));
+        }
+
+        /// <summary>The tracer, and the Type 2 patient orientation sequences of the NM/PET Patient Orientation module, shared by PT and NM.</summary>
+        protected static void AddIsotopeTags(DicomDataset dataset, ExamPreset preset, double? positronFraction = null)
+        {
+            var tracer = new DicomDataset
+            {
+                { DicomTag.Radiopharmaceutical, preset.Radiopharmaceutical },
+                { DicomTag.RadionuclideTotalDose, Ds(preset.RadionuclideDoseBq) },
+                { DicomTag.RadionuclideHalfLife, Ds(preset.RadionuclideHalfLifeSeconds) },
+            };
+            if (positronFraction != null) tracer.Add(DicomTag.RadionuclidePositronFraction, Ds(positronFraction.Value));
+            tracer.Add(new DicomSequence(DicomTag.RadionuclideCodeSequence));
+
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.RadiopharmaceuticalInformationSequence, tracer));
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.PatientOrientationCodeSequence));
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.PatientGantryRelationshipCodeSequence));
+            dataset.AddOrUpdate(DicomTag.ActualFrameDuration, preset.FrameDurationMs.ToString(CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>One item of a code sequence.</summary>
+        protected static DicomDataset CodeItem(string codingScheme, string codeValue, string codeMeaning) => new DicomDataset
+        {
+            { DicomTag.CodeValue, codeValue },
+            { DicomTag.CodingSchemeDesignator, codingScheme },
+            { DicomTag.CodeMeaning, codeMeaning },
+        };
     }
 }

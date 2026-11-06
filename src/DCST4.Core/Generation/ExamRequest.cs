@@ -11,6 +11,18 @@ namespace DCST4.Core.Generation
     {
         public const string Latin1 = "ISO_IR 100";
         public const string Utf8 = "ISO_IR 192";
+
+        /// <summary>The tag is present with zero length, which means the default repertoire: Basic ASCII (ISO-IR 6, ISO 646).</summary>
+        public const string Empty = "";
+
+        /// <summary>
+        /// How <see cref="Empty"/> is shown and saved in the App. An empty setting can then never select it by accident:
+        /// an unreadable or blank setting still means the default character set.
+        /// </summary>
+        public const string EmptyDisplayName = "Empty value (Basic ASCII / ISO 646)";
+
+        /// <summary>The value for the tag, from what the App shows and saves.</summary>
+        public static string FromDisplayName(string displayName) => displayName == EmptyDisplayName ? Empty : displayName;
     }
 
     /// <summary>What to generate: one exam with fully resolved identity values.</summary>
@@ -28,6 +40,8 @@ namespace DCST4.Core.Generation
         public int Columns { get; set; } = 512;
         public int BitsStored { get; set; } = 12;
         public string CharacterSet { get; set; } = DicomCharacterSets.Latin1;
+        /// <summary>The tags to burn into the image. Null or empty means no text box.</summary>
+        public IReadOnlyList<DicomTag> BurnedInTags { get; set; }
 
         public int BitsAllocated => BitsStored <= 8 ? 8 : 16;
         public int TotalImages => SeriesCount * ImagesPerSeries;
@@ -58,7 +72,7 @@ namespace DCST4.Core.Generation
                 errors.Add($"{request.Modality.Code} does not allow {request.BitsStored} bits stored. Allowed: {string.Join(", ", request.Modality.BitDepths)}.");
             }
 
-            if (request.CharacterSet != DicomCharacterSets.Latin1 && request.CharacterSet != DicomCharacterSets.Utf8)
+            if (request.CharacterSet != DicomCharacterSets.Latin1 && request.CharacterSet != DicomCharacterSets.Utf8 && request.CharacterSet != DicomCharacterSets.Empty)
             {
                 errors.Add($"Unsupported Specific Character Set '{request.CharacterSet}'.");
             }
@@ -144,6 +158,12 @@ namespace DCST4.Core.Generation
             {
                 var unsupported = string.Join(" ", value.Where(c => c > 0xFF).Distinct());
                 errors.Add($"{field} contains characters that {DicomCharacterSets.Latin1} cannot represent ({unsupported}). Select {DicomCharacterSets.Utf8} or change the value.");
+            }
+            // fo-dicom would write each of these as a question mark without saying so.
+            if (characterSet == DicomCharacterSets.Empty && value.Any(c => c > 0x7F))
+            {
+                var unsupported = string.Join(" ", value.Where(c => c > 0x7F).Distinct());
+                errors.Add($"{field} contains characters that an empty Specific Character Set (Basic ASCII) cannot represent ({unsupported}). Select {DicomCharacterSets.Latin1} or {DicomCharacterSets.Utf8}, or change the value.");
             }
         }
 

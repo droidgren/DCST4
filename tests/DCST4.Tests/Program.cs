@@ -278,6 +278,40 @@ namespace DCST4.Tests
             Check("ISO_IR 192: Å is bytes C3 85 in the file", Contains(utf8, new byte[] { 0xC3, 0x85, (byte)'s', (byte)'t', (byte)'r' }));
             Check("ISO_IR 100: name reads back unchanged", Text(latin1Dataset, DicomTag.PatientName) == "Åström^Märta", Text(latin1Dataset, DicomTag.PatientName));
             Check("ISO_IR 192: name reads back unchanged", Text(utf8Dataset, DicomTag.PatientName) == "Åström^Märta", Text(utf8Dataset, DicomTag.PatientName));
+
+            var empty = SavedBytes(MakeRequest(charset: DicomCharacterSets.Empty, overrides: new IdentityOverrides { PatientName = "Astrom^Marta" }), Path.Combine(temp, "empty.dcm"), out var emptyDataset);
+            Check("Empty: tag is present with zero length", emptyDataset.Contains(DicomTag.SpecificCharacterSet) && emptyDataset.GetDicomItem<DicomElement>(DicomTag.SpecificCharacterSet).Length == 0);
+            Check("Empty: name is ASCII bytes in the file", Contains(empty, Encoding.ASCII.GetBytes("Astrom^Marta")));
+            Check("Empty: name reads back unchanged", Text(emptyDataset, DicomTag.PatientName) == "Astrom^Marta", Text(emptyDataset, DicomTag.PatientName));
+
+            Check("Empty: the display name maps to a zero-length value", DicomCharacterSets.FromDisplayName(DicomCharacterSets.EmptyDisplayName) == DicomCharacterSets.Empty);
+            Check("Empty: other values are left as they are", DicomCharacterSets.FromDisplayName(DicomCharacterSets.Utf8) == DicomCharacterSets.Utf8);
+            Check("Empty is not the default", new ExamRequest().CharacterSet == DicomCharacterSets.Latin1);
+
+            Check("ToAscii removes å, ä and ö", SwedishNames.ToAscii("Åström^Märta") == "Astrom^Marta" && SwedishNames.ToAscii("Öberg^Håkan") == "Oberg^Hakan", SwedishNames.ToAscii("Åström^Märta"));
+            var ct = Modality("CT");
+            var operators = CommonTagCatalog.All.First(c => c.Tag.Element == 0x1070).Tag;
+            var allPassValidation = true;
+            var allSameDraw = true;
+            var foundNonAscii = false;
+            for (var seed = 0; seed < 200; seed++)
+            {
+                var tags = new[] { new AdditionalTagValue(operators, null) };
+                var ascii = new IdentityGenerator(random: new Random(seed)).Generate(new IdentityOverrides { AutoValuesInBasicAscii = true, AdditionalTags = tags }, ct, ct.Presets[0]);
+                var regular = new IdentityGenerator(random: new Random(seed)).Generate(new IdentityOverrides { AdditionalTags = tags }, ct, ct.Presets[0]);
+                foundNonAscii |= SwedishNames.ContainsSwedishCharacter(regular.PatientName);
+
+                var request = MakeRequest(charset: DicomCharacterSets.Empty);
+                request.Identity = ascii;
+                allPassValidation &= ExamValidator.Validate(request).Count == 0;
+                allSameDraw &= ascii.PatientId == regular.PatientId
+                    && ascii.PatientName == SwedishNames.ToAscii(regular.PatientName)
+                    && ascii.ReferringPhysicianName == SwedishNames.ToAscii(regular.ReferringPhysicianName)
+                    && ascii.AdditionalTags[0].Value == SwedishNames.ToAscii(regular.AdditionalTags[0].Value);
+            }
+            Check("Empty: 200 Auto draws all pass validation", allPassValidation);
+            Check("Empty: Auto values are the same draw as with ISO_IR 100, without diacritics", allSameDraw);
+            Check("... and the draws did include names with å, ä or ö", foundNonAscii);
         }
 
         private static byte[] SavedBytes(ExamRequest request, string path, out DicomDataset readBack)
@@ -312,6 +346,10 @@ namespace DCST4.Tests
             var polish = new IdentityOverrides { PatientName = "Łukasz^Żak" };
             Check("ISO_IR 100 blocks a name it cannot represent", errors(polish, 1, 1, DicomCharacterSets.Latin1).Any(e => e.Contains("Patient Name") && e.Contains("ISO_IR 100")));
             Check("ISO_IR 192 accepts the same name", errors(polish, 1, 1, DicomCharacterSets.Utf8).Count == 0);
+            var swedish = new IdentityOverrides { PatientName = "Åström^Märta" };
+            Check("Empty character set blocks a manual å and names the field", errors(swedish, 1, 1, DicomCharacterSets.Empty).Any(e => e.Contains("Patient Name") && e.Contains("Basic ASCII")));
+            Check("Empty character set accepts plain ASCII", errors(new IdentityOverrides { PatientName = "Astrom^Marta" }, 1, 1, DicomCharacterSets.Empty).Count == 0, string.Join("; ", errors(new IdentityOverrides { PatientName = "Astrom^Marta" }, 1, 1, DicomCharacterSets.Empty)));
+            Check("Unknown character set is blocked", errors(null, 1, 1, "ISO_IR 6").Any(e => e.Contains("Unsupported")));
 
             Check("Invalid UID is blocked and named", errors(new IdentityOverrides { StudyInstanceUid = "1.2.abc" }, 1, 1, DicomCharacterSets.Latin1).Any(e => e.Contains("Study Instance UID")));
             Check("UID with leading zero is blocked", !ExamValidator.IsValidUid("1.02.3"));
@@ -370,6 +408,11 @@ namespace DCST4.Tests
                 { "CR", new[] { DicomTag.BodyPartExamined, DicomTag.ViewPosition, DicomTag.ImagerPixelSpacing, DicomTag.PatientOrientation } },
                 { "DX", new[] { DicomTag.PresentationIntentType, DicomTag.PresentationLUTShape, DicomTag.PixelIntensityRelationship, DicomTag.PixelIntensityRelationshipSign, DicomTag.RescaleIntercept, DicomTag.RescaleSlope, DicomTag.RescaleType, DicomTag.DetectorType, DicomTag.ImagerPixelSpacing, DicomTag.ImageLaterality, DicomTag.AnatomicRegionSequence, DicomTag.PatientOrientation, DicomTag.LossyImageCompression } },
                 { "US", new[] { DicomTag.BodyPartExamined, DicomTag.PatientOrientation, DicomTag.TransducerData, DicomTag.TransducerType, DicomTag.SequenceOfUltrasoundRegions, DicomTag.LossyImageCompression } },
+                { "XA", new[] { DicomTag.BodyPartExamined, DicomTag.PatientOrientation, DicomTag.PixelIntensityRelationship, DicomTag.RadiationSetting, DicomTag.KVP, DicomTag.XRayTubeCurrent, DicomTag.ExposureTime, DicomTag.Exposure, DicomTag.PositionerPrimaryAngle, DicomTag.PositionerSecondaryAngle, DicomTag.LossyImageCompression } },
+                { "RF", new[] { DicomTag.BodyPartExamined, DicomTag.PatientOrientation, DicomTag.PixelIntensityRelationship, DicomTag.RadiationSetting, DicomTag.KVP, DicomTag.XRayTubeCurrent, DicomTag.ExposureTime, DicomTag.Exposure, DicomTag.LossyImageCompression } },
+                { "MG", new[] { DicomTag.PresentationIntentType, DicomTag.PresentationLUTShape, DicomTag.PixelIntensityRelationship, DicomTag.PixelIntensityRelationshipSign, DicomTag.RescaleIntercept, DicomTag.RescaleSlope, DicomTag.RescaleType, DicomTag.DetectorType, DicomTag.ImagerPixelSpacing, DicomTag.ImageLaterality, DicomTag.AnatomicRegionSequence, DicomTag.PatientOrientation, DicomTag.LossyImageCompression, DicomTag.PositionerType, DicomTag.OrganExposed, DicomTag.ViewCodeSequence, DicomTag.ViewPosition } },
+                { "PT", new[] { DicomTag.FrameOfReferenceUID, DicomTag.PatientPosition, DicomTag.ImagePositionPatient, DicomTag.ImageOrientationPatient, DicomTag.PixelSpacing, DicomTag.SliceThickness, DicomTag.SeriesDate, DicomTag.SeriesTime, DicomTag.Units, DicomTag.CountsSource, DicomTag.SeriesType, DicomTag.CorrectedImage, DicomTag.DecayCorrection, DicomTag.DecayFactor, DicomTag.CollimatorType, DicomTag.NumberOfSlices, DicomTag.ImageIndex, DicomTag.FrameReferenceTime, DicomTag.ActualFrameDuration, DicomTag.AcquisitionDate, DicomTag.AcquisitionTime, DicomTag.RescaleIntercept, DicomTag.RescaleSlope, DicomTag.RadiopharmaceuticalInformationSequence, DicomTag.PatientOrientationCodeSequence, DicomTag.PatientGantryRelationshipCodeSequence, DicomTag.LossyImageCompression } },
+                { "NM", new[] { DicomTag.PatientOrientation, DicomTag.PixelSpacing, DicomTag.NumberOfFrames, DicomTag.FrameIncrementPointer, DicomTag.EnergyWindowVector, DicomTag.NumberOfEnergyWindows, DicomTag.EnergyWindowInformationSequence, DicomTag.DetectorVector, DicomTag.NumberOfDetectors, DicomTag.DetectorInformationSequence, DicomTag.RadiopharmaceuticalInformationSequence, DicomTag.PatientOrientationCodeSequence, DicomTag.PatientGantryRelationshipCodeSequence, DicomTag.CountsAccumulated, DicomTag.ActualFrameDuration, DicomTag.LossyImageCompression } },
             };
 
             foreach (var modality in ModalityCatalog.All)
@@ -386,10 +429,11 @@ namespace DCST4.Tests
             }
 
             TestUltrasound();
+            TestNewModalities();
+            TestBurnedInText();
 
             var dataset = new ExamGenerator(MakeRequest("CT")).GetImages(CancellationToken.None).First().File.Dataset;
-            Check("BurnedInAnnotation is YES", Text(dataset, DicomTag.BurnedInAnnotation) == "YES");
-            Check("Image comment marks it as a test image", Text(dataset, DicomTag.ImageComments).Contains("TEST IMAGE"));
+            Check("Image Comments is only the project's address", Text(dataset, DicomTag.ImageComments) == "https://github.com/droidgren/DCST4", Text(dataset, DicomTag.ImageComments));
 
             var stack = new ExamGenerator(MakeRequest("CT", series: 2, images: 5)).GetImages(CancellationToken.None).Select(i => i.File.Dataset).ToList();
             Check("2 series x 5 images gives 10 images", stack.Count == 10, stack.Count.ToString());
@@ -471,6 +515,150 @@ namespace DCST4.Tests
             Check("US: default is valid", ExamValidator.Validate(MakeRequest("US")).Count == 0, string.Join("; ", ExamValidator.Validate(MakeRequest("US"))));
         }
 
+        private static DicomDataset FirstImage(ExamRequest request) => new ExamGenerator(request).GetImages(CancellationToken.None).First().File.Dataset;
+
+        private static void TestNewModalities()
+        {
+            var sopClasses = new Dictionary<string, string>
+            {
+                { "XA", "1.2.840.10008.5.1.4.1.1.12.1" },
+                { "RF", "1.2.840.10008.5.1.4.1.1.12.2" },
+                { "MG", "1.2.840.10008.5.1.4.1.1.1.2" },
+                { "PT", "1.2.840.10008.5.1.4.1.1.128" },
+                { "NM", "1.2.840.10008.5.1.4.1.1.20" },
+            };
+            foreach (var item in sopClasses)
+            {
+                var ds = FirstImage(MakeRequest(item.Key));
+                Check($"{item.Key}: exact SOP Class UID and Modality", Text(ds, DicomTag.SOPClassUID) == item.Value && Text(ds, DicomTag.Modality) == item.Key, Text(ds, DicomTag.SOPClassUID));
+                Check($"{item.Key}: default is valid", ExamValidator.Validate(MakeRequest(item.Key)).Count == 0, string.Join("; ", ExamValidator.Validate(MakeRequest(item.Key))));
+                Check($"{item.Key}: one sample per pixel, MONOCHROME2, unsigned", Text(ds, DicomTag.PhotometricInterpretation) == "MONOCHROME2" && ds.GetSingleValue<ushort>(DicomTag.SamplesPerPixel) == 1 && ds.GetSingleValue<ushort>(DicomTag.PixelRepresentation) == 0);
+            }
+
+            foreach (var code in new[] { "XA", "RF" })
+            {
+                var ds = FirstImage(MakeRequest(code));
+                Check($"{code}: Image Type is single plane", ds.GetValues<string>(DicomTag.ImageType).SequenceEqual(new[] { "ORIGINAL", "PRIMARY", "SINGLE PLANE" }), string.Join("\\", ds.GetValues<string>(DicomTag.ImageType)));
+                Check($"{code}: Patient Orientation is present and empty", ds.Contains(DicomTag.PatientOrientation) && ds.GetValueCount(DicomTag.PatientOrientation) == 0);
+                Check($"{code}: no CT or MR geometry", !ds.Contains(DicomTag.FrameOfReferenceUID) && !ds.Contains(DicomTag.ImagePositionPatient) && !ds.Contains(DicomTag.PatientPosition));
+                Check($"{code}: 14 bits is blocked", ExamValidator.Validate(MakeRequest(code, bits: 14)).Any(e => e.Contains("does not allow")));
+            }
+            var coronary = FirstImage(MakeRequest("XA"));
+            Check("XA: exposure in mAs follows current and time", Text(coronary, DicomTag.Exposure) == "4", Text(coronary, DicomTag.Exposure));
+            Check("XA: positioner angles from the exam type", coronary.GetSingleValue<decimal>(DicomTag.PositionerPrimaryAngle) == -30 && coronary.GetSingleValue<decimal>(DicomTag.PositionerSecondaryAngle) == 20);
+
+            var mg = Modality("MG");
+            var orientations = new Dictionary<string, string[]>
+            {
+                { "Left CC", new[] { "L", "CC", "A", "R", "399162004" } },
+                { "Right CC", new[] { "R", "CC", "P", "L", "399162004" } },
+                { "Left MLO", new[] { "L", "MLO", "A", "FR", "399368009" } },
+                { "Right MLO", new[] { "R", "MLO", "P", "FL", "399368009" } },
+            };
+            Check("MG: one exam type per view", mg.Presets.Select(p => p.Name).SequenceEqual(orientations.Keys));
+            Check("MG: 8 bits is blocked", ExamValidator.Validate(MakeRequest("MG", bits: 8)).Any(e => e.Contains("does not allow")));
+            foreach (var preset in mg.Presets)
+            {
+                var expected = orientations[preset.Name];
+                var request = MakeRequest("MG");
+                request.Preset = preset;
+                var ds = FirstImage(request);
+                var orientation = ds.GetValues<string>(DicomTag.PatientOrientation);
+                var view = ds.GetSequence(DicomTag.ViewCodeSequence).Items.Single();
+                var region = ds.GetSequence(DicomTag.AnatomicRegionSequence).Items.Single();
+                Check($"MG {preset.Name}: laterality, view and orientation",
+                    Text(ds, DicomTag.ImageLaterality) == expected[0] && Text(ds, DicomTag.ViewPosition) == expected[1] && orientation[0] == expected[2] && orientation[1] == expected[3],
+                    Text(ds, DicomTag.ImageLaterality) + " " + Text(ds, DicomTag.ViewPosition) + " " + string.Join("\\", orientation));
+                Check($"MG {preset.Name}: view code", Text(view, DicomTag.CodingSchemeDesignator) == "SCT" && Text(view, DicomTag.CodeValue) == expected[4] && Text(view, DicomTag.CodeMeaning).Length > 0, Text(view, DicomTag.CodeValue));
+                Check($"MG {preset.Name}: breast as anatomic region", Text(region, DicomTag.CodingSchemeDesignator) == "SCT" && Text(region, DicomTag.CodeValue) == "76752008" && Text(region, DicomTag.CodeMeaning) == "Breast");
+                Check($"MG {preset.Name}: mammographic positioner, For Presentation", Text(ds, DicomTag.PositionerType) == "MAMMOGRAPHIC" && Text(ds, DicomTag.OrganExposed) == "BREAST" && Text(ds, DicomTag.PresentationIntentType) == "FOR PRESENTATION" && Text(ds, DicomTag.BodyPartExamined) == "BREAST");
+            }
+
+            var dx = FirstImage(MakeRequest("DX"));
+            Check("DX: Anatomic Region Sequence stays empty", dx.GetSequence(DicomTag.AnatomicRegionSequence).Items.Count == 0);
+            Check("DX: no mammography tags", !dx.Contains(DicomTag.PositionerType) && !dx.Contains(DicomTag.ViewCodeSequence));
+
+            var pt = Modality("PT");
+            Check("PT: only 16 bits, as the PET Image module requires", pt.BitDepths.SequenceEqual(new[] { 16 }) && pt.DefaultBitDepth == 16);
+            var slices = new ExamGenerator(MakeRequest("PT", images: 3)).GetImages(CancellationToken.None).Select(i => i.File.Dataset).ToList();
+            Check("PT: Image Index counts the slices", slices.Select(d => d.GetSingleValue<ushort>(DicomTag.ImageIndex)).SequenceEqual(new ushort[] { 1, 2, 3 }));
+            Check("PT: Number of Slices is the stack size", slices.All(d => d.GetSingleValue<ushort>(DicomTag.NumberOfSlices) == 3));
+            Check("PT: slices share a Frame of Reference", slices.Select(d => Text(d, DicomTag.FrameOfReferenceUID)).Distinct().Count() == 1 && Text(slices[0], DicomTag.FrameOfReferenceUID).Length > 0);
+            Check("PT: slice positions move", slices.Select(d => d.GetValues<decimal>(DicomTag.ImagePositionPatient)[2]).Distinct().Count() == 3);
+            Check("PT: series type and units", slices[0].GetValues<string>(DicomTag.SeriesType).SequenceEqual(new[] { "STATIC", "IMAGE" }) && Text(slices[0], DicomTag.Units) == "BQML");
+            Check("PT: rescale in Bq/ml", Text(slices[0], DicomTag.RescaleType) == "BQML" && slices[0].GetSingleValue<decimal>(DicomTag.RescaleIntercept) == 0 && slices[0].GetSingleValue<decimal>(DicomTag.RescaleSlope) == 1);
+            var fdg = slices[0].GetSequence(DicomTag.RadiopharmaceuticalInformationSequence).Items.Single();
+            Check("PT: the tracer is described", Text(fdg, DicomTag.Radiopharmaceutical) == "Fluorodeoxyglucose" && fdg.GetSingleValue<decimal>(DicomTag.RadionuclideHalfLife) > 6000 && fdg.GetSingleValue<decimal>(DicomTag.RadionuclidePositronFraction) > 0 && fdg.Contains(DicomTag.RadionuclideCodeSequence));
+            var longStack = FirstImage(MakeRequest("PT", images: 70000));
+            Check("PT: Number of Slices stays within US for a very long stack", longStack.GetSingleValue<ushort>(DicomTag.NumberOfSlices) == ushort.MaxValue, longStack.GetSingleValue<ushort>(DicomTag.NumberOfSlices).ToString());
+
+            var nm = FirstImage(MakeRequest("NM"));
+            var pointer = nm.GetValues<DicomTag>(DicomTag.FrameIncrementPointer);
+            Check("NM: Image Type is static emission", nm.GetValues<string>(DicomTag.ImageType).SequenceEqual(new[] { "ORIGINAL", "PRIMARY", "STATIC", "EMISSION" }));
+            Check("NM: exactly one frame", nm.GetSingleValue<int>(DicomTag.NumberOfFrames) == 1 && DicomPixelData.Create(nm).NumberOfFrames == 1, nm.GetString(DicomTag.NumberOfFrames));
+            Check("NM: Frame Increment Pointer names the two vectors", pointer.Length == 2 && pointer[0] == DicomTag.EnergyWindowVector && pointer[1] == DicomTag.DetectorVector);
+            Check("NM: each vector has one value per frame", nm.GetValues<ushort>(DicomTag.EnergyWindowVector).SequenceEqual(new ushort[] { 1 }) && nm.GetValues<ushort>(DicomTag.DetectorVector).SequenceEqual(new ushort[] { 1 }));
+            Check("NM: one window and one detector", nm.GetSingleValue<ushort>(DicomTag.NumberOfEnergyWindows) == 1 && nm.GetSingleValue<ushort>(DicomTag.NumberOfDetectors) == 1 && nm.GetSequence(DicomTag.EnergyWindowInformationSequence).Items.Count == 1 && nm.GetSequence(DicomTag.DetectorInformationSequence).Items.Count == 1);
+            var window = nm.GetSequence(DicomTag.EnergyWindowInformationSequence).Items[0].GetSequence(DicomTag.EnergyWindowRangeSequence).Items.Single();
+            Check("NM: the window surrounds 140 keV", window.GetSingleValue<decimal>(DicomTag.EnergyWindowLowerLimit) < 140 && window.GetSingleValue<decimal>(DicomTag.EnergyWindowUpperLimit) > 140);
+            Check("NM: no Frame of Reference or top-level geometry", !nm.Contains(DicomTag.FrameOfReferenceUID) && !nm.Contains(DicomTag.ImagePositionPatient) && !nm.Contains(DicomTag.PatientPosition));
+            Check("NM: 12 bits is blocked", ExamValidator.Validate(MakeRequest("NM", bits: 12)).Any(e => e.Contains("does not allow")));
+        }
+
+        private static void TestBurnedInText()
+        {
+            Console.WriteLine("\nBurned-in text");
+            var anna = new IdentityOverrides { PatientName = "Andersson^Anna", PatientId = "189001019802", AccessionNumber = "ACC1" };
+            var bert = new IdentityOverrides { PatientName = "Berg^Bert", PatientId = "189001029819", AccessionNumber = "ACC2" };
+            Func<IdentityOverrides, IReadOnlyList<DicomTag>, DicomDataset> image = (overrides, tags) =>
+            {
+                var request = MakeRequest(rows: 256, columns: 256, overrides: overrides);
+                request.BurnedInTags = tags;
+                return FirstImage(request);
+            };
+            Func<DicomDataset, byte[]> pixels = ds => DicomPixelData.Create(ds).GetFrame(0).Data;
+
+            var defaultImage = FirstImage(MakeRequest(overrides: anna));
+            Check("Off by default: no burned-in annotation", MakeRequest().BurnedInTags == null && Text(defaultImage, DicomTag.BurnedInAnnotation) == "NO", Text(defaultImage, DicomTag.BurnedInAnnotation));
+
+            var offAnna = image(anna, null);
+            var offBert = image(bert, null);
+            Check("Off: two patients give identical pixels, so no patient data is in them", pixels(offAnna).SequenceEqual(pixels(offBert)));
+            Check("An empty selection is the same as off", pixels(image(anna, new DicomTag[0])).SequenceEqual(pixels(offAnna)) && Text(image(anna, new DicomTag[0]), DicomTag.BurnedInAnnotation) == "NO");
+
+            var onAnna = image(anna, BurnedInTagCatalog.Default);
+            var onBert = image(bert, BurnedInTagCatalog.Default);
+            Check("On: Burned In Annotation is YES", Text(onAnna, DicomTag.BurnedInAnnotation) == "YES", Text(onAnna, DicomTag.BurnedInAnnotation));
+            Check("On: the text changes the pixels", !pixels(onAnna).SequenceEqual(pixels(offAnna)));
+            Check("On: two patients give different pixels", !pixels(onAnna).SequenceEqual(pixels(onBert)));
+
+            var both = image(anna, new[] { DicomTag.PatientName });
+            var nameOnly = image(new IdentityOverrides { PatientName = "Andersson^Anna", PatientId = "189001029819", AccessionNumber = "ACC2" }, new[] { DicomTag.PatientName });
+            Check("A tag that is not selected does not reach the pixels", pixels(both).SequenceEqual(pixels(nameOnly)));
+
+            var lines = BurnedInText.Lines(offAnna, new[] { DicomTag.AccessionNumber, DicomTag.PatientName });
+            Check("Lines: one per selected tag, in catalog order", lines.Count == 2 && lines[0].StartsWith("Patient's Name:") && lines[0].EndsWith("Andersson^Anna") && lines[1].StartsWith("Accession Number:") && lines[1].EndsWith("ACC1"), string.Join(" | ", lines));
+            Check("Lines: values line up", lines[0].IndexOf("Andersson") == lines[1].IndexOf("ACC1"), string.Join(" | ", lines));
+            Check("Lines: nothing selected gives no lines", BurnedInText.Lines(offAnna, null).Count == 0 && BurnedInText.Lines(offAnna, new DicomTag[0]).Count == 0);
+
+            var withoutBody = new DicomDataset(DicomTransferSyntax.ExplicitVRLittleEndian);
+            withoutBody.Add(DicomTag.PatientID, "X");
+            Check("Lines: a tag not in the image is skipped", BurnedInText.Lines(withoutBody, new[] { DicomTag.PatientID, DicomTag.BodyPartExamined }).Count == 1);
+            withoutBody.Add(DicomTag.PatientSex, string.Empty);
+            var emptyLine = BurnedInText.Lines(withoutBody, new[] { DicomTag.PatientSex }).Single();
+            Check("Lines: a present but empty tag has a line with no value", emptyLine.TrimEnd() == "Patient's Sex:", emptyLine);
+
+            var replaced = MakeRequest(overrides: new IdentityOverrides { AccessionNumber = "TYPED" });
+            Check("Lines: values come from the tags", BurnedInText.Lines(FirstImage(replaced), new[] { DicomTag.AccessionNumber }).Single().EndsWith("TYPED"));
+
+            Check("Catalog: every tag is a text tag in every modality's image", ModalityCatalog.All.All(m => BurnedInText.Lines(FirstImage(MakeRequest(m.Code)), BurnedInTagCatalog.All).Count == BurnedInTagCatalog.All.Count));
+            Check("Catalog: the default selection is what used to be shown", BurnedInTagCatalog.Default.SequenceEqual(new[] { DicomTag.PatientName, DicomTag.PatientID, DicomTag.AccessionNumber, DicomTag.Modality, DicomTag.SeriesNumber, DicomTag.InstanceNumber, DicomTag.ContentDate, DicomTag.ContentTime }));
+            Check("Catalog: the selection survives saving", BurnedInTagCatalog.Parse(BurnedInTagCatalog.Format(BurnedInTagCatalog.All)).SequenceEqual(BurnedInTagCatalog.All));
+            Check("Catalog: the default keywords are the saved form", BurnedInTagCatalog.Format(BurnedInTagCatalog.Default) != null && BurnedInTagCatalog.Parse(BurnedInTagCatalog.DefaultKeywords).Count == 8);
+            Check("Catalog: unknown keywords are ignored", BurnedInTagCatalog.Parse("PatientID;Nonsense;Rows").SequenceEqual(new[] { DicomTag.PatientID }));
+            Check("Catalog: a blank setting selects nothing", BurnedInTagCatalog.Parse(string.Empty).Count == 0 && BurnedInTagCatalog.Parse(null).Count == 0);
+        }
+
         private static void TestPixelDataSizes(string temp)
         {
             Console.WriteLine("\nMatrix and bit depth");
@@ -512,7 +700,7 @@ namespace DCST4.Tests
             var cr = new ExamGenerator(MakeRequest("CR", bits: 8)).GetImages(CancellationToken.None).First().File.Dataset;
             Check("8-bit image window covers the full range", cr.GetSingleValue<double>(DicomTag.WindowWidth) >= 200, cr.GetSingleValue<double>(DicomTag.WindowWidth).ToString());
             var values = DicomPixelData.Create(cr).GetFrame(0).Data;
-            Check("Text is visible: image holds both black and white", values.Any(v => v >= 250) && values.Any(v => v <= 5));
+            Check("Image holds both black and white", values.Any(v => v >= 250) && values.Any(v => v <= 5));
         }
 
         private static void TestManualOverrides()
@@ -568,6 +756,18 @@ namespace DCST4.Tests
         private static void TestJpegRoundTrip()
         {
             Console.WriteLine("\nJPEG Lossless encoder (checked with a decoder written from the standard)");
+            foreach (var code in new[] { "XA", "RF", "MG", "PT", "NM" })
+            {
+                foreach (var modalityBits in Modality(code).BitDepths)
+                {
+                    var newImage = new ExamGenerator(MakeRequest(code, rows: 64, columns: 64, bits: modalityBits)).GetImages(CancellationToken.None).First();
+                    var expected = FrameValues(DicomPixelData.Create(newImage.File.Dataset).GetFrame(0).Data, modalityBits);
+                    var encodedImage = TransferSyntaxConverter.Convert(newImage.File, DicomTransferSyntax.JPEGProcess14SV1);
+                    var values = new LosslessJpegDecoder(DicomPixelData.Create(encodedImage.Dataset).GetFrame(0).Data).Decode();
+                    Check($"{code} {modalityBits} bits: exact pixels after JPEG Lossless", values.SequenceEqual(expected));
+                }
+            }
+
             foreach (var bits in new[] { 8, 12, 14, 16 })
             {
                 var modality = bits == 8 ? "CR" : "DX";
@@ -1000,6 +1200,33 @@ namespace DCST4.Tests
             Check("Two runs: ISO_IR 192 name is correct in the DICOMDIR", sharedEntries.Where(e => e.PatientId == "189001029819").All(e => e.PatientName == "Öberg^Åke" && e.CharacterSet == "ISO_IR 192"), string.Join(",", sharedEntries.Select(e => e.PatientName + "/" + e.CharacterSet)));
             Check("Two runs: both modalities listed", sharedEntries.Any(e => e.Modality == "US") && sharedEntries.Any(e => e.Modality == "CT"));
 
+            var emptySet = Path.Combine(temp, "emptyset");
+            var emptySummary = await Run(MakeRequest("CT", charset: DicomCharacterSets.Empty, overrides: new IdentityOverrides { PatientName = "Astrom^Marta" }), new StoreRunOptions { Send = false, Save = true, SaveFolder = emptySet });
+            var emptyEntries = ReadDicomDir(emptySet);
+            Check("Empty character set: saved with a DICOMDIR", emptySummary.DicomDirError == null && emptyEntries.Count == 1, emptySummary.DicomDirError);
+            Check("Empty character set: name is correct in the DICOMDIR, and the record leaves the tag out", emptyEntries.All(e => e.PatientName == "Astrom^Marta" && e.CharacterSet == string.Empty), string.Join(",", emptyEntries.Select(e => e.PatientName + "/" + e.CharacterSet)));
+
+            var newModalities = Path.Combine(temp, "newmodalities");
+            var newModalityOptions = new StoreRunOptions { Send = false, Save = true, SaveFolder = newModalities };
+            foreach (var code in new[] { "XA", "RF", "MG", "PT", "NM" })
+            {
+                await Run(MakeRequest(code, images: 2), newModalityOptions);
+            }
+            var newModalityEntries = ReadDicomDir(newModalities);
+            foreach (var code in new[] { "XA", "RF", "MG", "PT", "NM" })
+            {
+                var ofModality = newModalityEntries.Where(e => e.Modality == code).ToList();
+                Check($"{code}: both images are in the DICOMDIR with the right SOP class", ofModality.Count == 2 && ofModality.All(e => e.SopClassUid == Modality(code).SopClass.UID), ofModality.Count.ToString());
+            }
+
+            Scp.Reset();
+            foreach (var code in new[] { "XA", "RF", "MG", "PT", "NM" })
+            {
+                var sent = await Run(MakeRequest(code), SendOptions());
+                Check($"{code}: a real send reaches the SCP", sent.Success == 1, sent.ToString());
+            }
+            Check("The SCP received every new modality", Scp.Received.Select(r => r.Dataset.GetString(DicomTag.Modality)).OrderBy(m => m).SequenceEqual(new[] { "MG", "NM", "PT", "RF", "XA" }), string.Join(",", Scp.Received.Select(r => r.Dataset.GetString(DicomTag.Modality))));
+
             // ------------------------------------------------ Send and save
             Scp.Reset();
             var both = Path.Combine(temp, "both");
@@ -1273,7 +1500,7 @@ namespace DCST4.Tests
                 Check(prefix + ": private text in the character set", latin1.GetString(Bytes(ds, 0x0011, 0x1001)).TrimEnd(' ', '\0') == "åäö", latin1.GetString(Bytes(ds, 0x0011, 0x1001)));
                 Check(prefix + ": private number", BitConverter.ToUInt16(Bytes(ds, 0x0011, 0x1002), 0) == 1234);
                 Check(prefix + ": a private element keeps the block entered", latin1.GetString(Bytes(ds, 0x0013, 0x2001)).TrimEnd(' ', '\0') == "second");
-                Check(prefix + ": Image Comments has the marking and the project", Text(ds, DicomTag.ImageComments).Contains("TEST IMAGE") && Text(ds, DicomTag.ImageComments).Contains(ProductInfo.ProjectUrl), Text(ds, DicomTag.ImageComments));
+                Check(prefix + ": Image Comments is only the project's address", Text(ds, DicomTag.ImageComments) == ProductInfo.ProjectUrl, Text(ds, DicomTag.ImageComments));
             }
 
             var syntaxes = new[]
@@ -1580,11 +1807,18 @@ namespace DCST4.Tests
                 new { Name = "mr_12bit_256_utf8", Modality = "MR", Rows = 256, Columns = 256, Bits = 12, Images = 24, Charset = DicomCharacterSets.Utf8, Index = 5, Syntax = DicomTransferSyntax.ImplicitVRLittleEndian },
                 new { Name = "dx_8bit_1024_iso100", Modality = "DX", Rows = 1024, Columns = 1024, Bits = 8, Images = 1, Charset = DicomCharacterSets.Latin1, Index = 0, Syntax = DicomTransferSyntax.ExplicitVRLittleEndian },
                 new { Name = "cr_small_128x200", Modality = "CR", Rows = 128, Columns = 200, Bits = 12, Images = 1, Charset = DicomCharacterSets.Latin1, Index = 0, Syntax = DicomTransferSyntax.ExplicitVRLittleEndian },
+                new { Name = "xa_12bit_1024", Modality = "XA", Rows = 1024, Columns = 1024, Bits = 12, Images = 1, Charset = DicomCharacterSets.Latin1, Index = 0, Syntax = DicomTransferSyntax.ExplicitVRLittleEndian },
+                new { Name = "rf_8bit_1024", Modality = "RF", Rows = 1024, Columns = 1024, Bits = 8, Images = 1, Charset = DicomCharacterSets.Latin1, Index = 0, Syntax = DicomTransferSyntax.ExplicitVRLittleEndian },
+                new { Name = "mg_14bit_2294x1914", Modality = "MG", Rows = 2294, Columns = 1914, Bits = 14, Images = 1, Charset = DicomCharacterSets.Latin1, Index = 0, Syntax = DicomTransferSyntax.JPEGProcess14SV1 },
+                new { Name = "pt_16bit_256_slice_mid", Modality = "PT", Rows = 256, Columns = 256, Bits = 16, Images = 20, Charset = DicomCharacterSets.Latin1, Index = 10, Syntax = DicomTransferSyntax.ExplicitVRLittleEndian },
+                new { Name = "nm_16bit_256", Modality = "NM", Rows = 256, Columns = 256, Bits = 16, Images = 1, Charset = DicomCharacterSets.Latin1, Index = 0, Syntax = DicomTransferSyntax.ExplicitVRLittleEndian },
+                new { Name = "ct_16bit_512_notext", Modality = "CT", Rows = 512, Columns = 512, Bits = 16, Images = 20, Charset = DicomCharacterSets.Latin1, Index = 10, Syntax = DicomTransferSyntax.ExplicitVRLittleEndian },
             };
 
             foreach (var s in samples)
             {
                 var request = MakeRequest(s.Modality, images: s.Images, rows: s.Rows, columns: s.Columns, bits: s.Bits, charset: s.Charset, overrides: overrides);
+                request.BurnedInTags = s.Name.EndsWith("_notext") ? null : BurnedInTagCatalog.Default;
                 var image = new ExamGenerator(request).GetImages(CancellationToken.None).Skip(s.Index).First();
                 var dicomPath = Path.Combine(folder, s.Name + ".dcm");
                 TransferSyntaxConverter.Convert(image.File, s.Syntax).Save(dicomPath);

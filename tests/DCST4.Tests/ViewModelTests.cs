@@ -53,6 +53,9 @@ namespace DCST4.Tests
                 Vm.MinAge = 0;
                 Vm.MaxAge = 100;
                 Vm.NewValuesAfterRun = false;
+                Vm.CharacterSet = DicomCharacterSets.Latin1;
+                Vm.BurnInText = false;
+                Vm.BurnInTags = BurnedInTagCatalog.DefaultKeywords;
                 Vm.AdditionalTagSettings = new AdditionalTagSetting[0];
             }
 
@@ -186,6 +189,67 @@ namespace DCST4.Tests
             Scp.Reset();
             await h.Execute(vm.RunCommand);
             check("US: a real run reaches the SCP", Scp.StoreCount == 2 && Scp.Received.All(r => r.Dataset.GetString(DicomTag.Modality) == "US"), vm.LastRunText);
+
+            foreach (var code in new[] { "XA", "RF", "MG", "PT", "NM" })
+            {
+                var modality = Core.Generation.Modalities.ModalityCatalog.Find(code);
+                vm.SelectedModality = modality;
+                check($"{code}: is offered, with its own lists and defaults",
+                    vm.Modalities.Contains(modality) && vm.Presets.SequenceEqual(modality.Presets) && vm.BitDepths.SequenceEqual(modality.BitDepths) && vm.BitsStored == modality.DefaultBitDepth && vm.Rows == modality.DefaultRows && vm.Columns == modality.DefaultColumns,
+                    vm.Rows + "x" + vm.Columns + " " + vm.BitsStored);
+                check($"{code}: station name follows", vm.StationField.Value == "DCST4-" + code, vm.StationField.Value);
+                vm.Rows = 64;
+                vm.Columns = 64;
+                vm.ImagesPerSeries = 1;
+                Scp.Reset();
+                await h.Execute(vm.RunCommand);
+                check($"{code}: a real run reaches the SCP", Scp.StoreCount == 1 && Scp.Received.Single().Dataset.GetString(DicomTag.Modality) == code, vm.LastRunText);
+            }
+
+            // ------------------------------------------------ Burned-in text
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
+            vm.Rows = 64;
+            vm.Columns = 64;
+            vm.ImagesPerSeries = 1;
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            check("Burned-in text is off when set off", Scp.Received.Single().Dataset.GetString(DicomTag.BurnedInAnnotation) == "NO", Scp.Received.Single().Dataset.GetString(DicomTag.BurnedInAnnotation));
+            vm.BurnInText = true;
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            check("Burned-in text on: the run says so", Scp.Received.Single().Dataset.GetString(DicomTag.BurnedInAnnotation) == "YES", Scp.Received.Single().Dataset.GetString(DicomTag.BurnedInAnnotation));
+            vm.BurnInTags = string.Empty;
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            check("Burned-in text on with no tags ticked: no text", Scp.Received.Single().Dataset.GetString(DicomTag.BurnedInAnnotation) == "NO", Scp.Received.Single().Dataset.GetString(DicomTag.BurnedInAnnotation));
+            vm.BurnInText = false;
+            vm.BurnInTags = BurnedInTagCatalog.DefaultKeywords;
+
+            // ------------------------------------------------ Empty character set
+            check("Empty value is on the list, but ISO_IR 100 comes first", vm.CharacterSets.Contains(DicomCharacterSets.EmptyDisplayName) && vm.CharacterSets[0] == DicomCharacterSets.Latin1, null);
+            vm.CharacterSet = DicomCharacterSets.EmptyDisplayName;
+            Scp.Reset();
+            h.Messages.Clear();
+            await h.Execute(vm.RunCommand);
+            var emptyRun = Scp.Received.Single().Dataset;
+            check("Empty value: a run goes through with Auto names", h.Messages.Count == 0 && emptyRun.Contains(DicomTag.SpecificCharacterSet), string.Join("; ", h.Messages));
+            check("Empty value: the tag is sent with zero length", emptyRun.GetDicomItem<DicomElement>(DicomTag.SpecificCharacterSet).Length == 0, null);
+            check("Empty value: the preview shows what is sent", vm.PatientNameField.Value == emptyRun.GetString(DicomTag.PatientName) && vm.PatientNameField.Value.All(c => c < 0x80), vm.PatientNameField.Value);
+
+            vm.PatientNameField.IsAuto = false;
+            vm.PatientNameField.Value = "Åström^Märta";
+            Scp.Reset();
+            h.Messages.Clear();
+            await h.Execute(vm.RunCommand);
+            check("Empty value: a manual å is blocked with a message", h.Messages.Count == 1 && h.Messages[0].Contains("Patient Name") && h.Messages[0].Contains("Basic ASCII") && Scp.AssociationCount == 0, string.Join("; ", h.Messages));
+            vm.PatientNameField.IsAuto = true;
+            h.Messages.Clear();
+
+            check("The saved form of Empty value is not an empty setting", vm.CharacterSet == DicomCharacterSets.EmptyDisplayName, vm.CharacterSet);
+            check("A saved Empty value is selected at program start", new MainViewModel().CharacterSet == DicomCharacterSets.EmptyDisplayName, null);
+            vm.CharacterSet = string.Empty;
+            check("A blank saved setting still starts as ISO_IR 100", new MainViewModel().CharacterSet == DicomCharacterSets.Latin1, null);
+            vm.CharacterSet = DicomCharacterSets.Latin1;
 
             // ------------------------------------------------ A full run
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");

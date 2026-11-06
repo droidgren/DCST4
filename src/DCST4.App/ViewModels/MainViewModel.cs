@@ -92,7 +92,7 @@ namespace DCST4.ViewModels
 
         #region Properties - Exam
         public IReadOnlyList<ModalityProfile> Modalities => ModalityCatalog.All;
-        public IReadOnlyList<string> CharacterSets { get; } = new[] { DicomCharacterSets.Latin1, DicomCharacterSets.Utf8 };
+        public IReadOnlyList<string> CharacterSets { get; } = new[] { DicomCharacterSets.Latin1, DicomCharacterSets.Utf8, DicomCharacterSets.EmptyDisplayName };
         public IReadOnlyList<TransferSyntaxOption> TransferSyntaxes => TransferSyntaxOption.All;
         public ObservableCollection<ExamPreset> Presets { get; } = new ObservableCollection<ExamPreset>();
         public ObservableCollection<int> BitDepths { get; } = new ObservableCollection<int>();
@@ -154,7 +154,10 @@ namespace DCST4.ViewModels
         public int BitsStored { get => _bitsStored; set { _bitsStored = value; OnPropertyChanged(); Settings.Default.BitsStored = value; } }
 
         private string _characterSet;
+        /// <summary>As shown in the list and saved in the settings. <see cref="CharacterSetTagValue"/> is what goes in the image.</summary>
         public string CharacterSet { get => _characterSet; set { _characterSet = value; OnPropertyChanged(); Settings.Default.CharacterSet = value; RefreshPreview(); } }
+
+        private string CharacterSetTagValue => DicomCharacterSets.FromDisplayName(_characterSet);
 
         private TransferSyntaxOption _selectedTransferSyntax;
         public TransferSyntaxOption SelectedTransferSyntax
@@ -204,6 +207,12 @@ namespace DCST4.ViewModels
 
         /// <summary>Read from the settings each time, so a change in the Settings dialog applies to the next run.</summary>
         public bool NewValuesAfterRun { get => Settings.Default.NewValuesAfterRun; set => Settings.Default.NewValuesAfterRun = value; }
+
+        /// <summary>Read from the settings at each run, like <see cref="NewValuesAfterRun"/>.</summary>
+        public bool BurnInText { get => Settings.Default.BurnInText; set => Settings.Default.BurnInText = value; }
+
+        /// <summary>The saved selection of tags to burn in, as <see cref="BurnedInTagCatalog.Format"/> writes it.</summary>
+        public string BurnInTags { get => Settings.Default.BurnInTags; set => Settings.Default.BurnInTags = value; }
 
         /// <summary>The tags added in Settings, and the row each has on the Identifiers tab.</summary>
         private readonly List<AdditionalField> _additionalFields = new List<AdditionalField>();
@@ -548,7 +557,7 @@ namespace DCST4.ViewModels
                 _additionalFields[i].Field.ShowGenerated(value.Length == 0 ? "(sent empty)" : value);
             }
 
-            problems.AddRange(AdditionalTagRules.CheckAll(_identity.AdditionalTags, _characterSet));
+            problems.AddRange(AdditionalTagRules.CheckAll(_identity.AdditionalTags, CharacterSetTagValue));
             if (problems.Count == 0)
             {
                 problems.AddRange(ExamValidator.Warnings(new ExamRequest { Identity = _identity }));
@@ -576,6 +585,7 @@ namespace DCST4.ViewModels
                 InstitutionName = InstitutionField.ManualValue?.Trim(),
                 StationName = StationField.ManualValue?.Trim(),
                 AdditionalTags = _additionalFields.Select(f => new AdditionalTagValue(f.Tag, f.Field.ManualValue?.Trim())).ToList(),
+                AutoValuesInBasicAscii = CharacterSetTagValue == DicomCharacterSets.Empty,
             };
 
             var manualDate = StudyDateTimeField.ManualValue?.Trim();
@@ -672,7 +682,7 @@ namespace DCST4.ViewModels
 
             var id = request.Identity;
             _logger.Information("Exam: {modality} {preset}, {series} series x {images} images, {rows}x{columns}, {bits} bits, {charset}. Patient {name}, ID {id}, born {born}, sex {sex}. Accession {accession}, Study ID {studyId}, Study UID {studyUid}",
-                request.Modality.Code, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, request.CharacterSet,
+                request.Modality.Code, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, _characterSet,
                 id.PatientName, id.PatientId, id.PatientBirthDate, id.PatientSex, id.AccessionNumber, id.StudyId, id.StudyInstanceUid);
             if (id.AdditionalTags.Count > 0)
             {
@@ -728,7 +738,8 @@ namespace DCST4.ViewModels
             Rows = _rows,
             Columns = _columns,
             BitsStored = _bitsStored,
-            CharacterSet = _characterSet,
+            CharacterSet = CharacterSetTagValue,
+            BurnedInTags = Settings.Default.BurnInText ? BurnedInTagCatalog.Parse(Settings.Default.BurnInTags) : null,
         };
 
         private StoreRunOptions BuildRunOptions() => new StoreRunOptions

@@ -11,6 +11,7 @@ namespace DCST4.Core.Generation.Modalities
         public static IReadOnlyList<ModalityProfile> All { get; } = new ModalityProfile[]
         {
             new CtProfile(), new MrProfile(), new CrProfile(), new DxProfile(), new UsProfile(),
+            new XaProfile(), new RfProfile(), new MgProfile(), new PtProfile(), new NmProfile(),
         };
 
         public static ModalityProfile Find(string code) =>
@@ -28,6 +29,7 @@ namespace DCST4.Core.Generation.Modalities
         public override TimeSpan InstanceInterval => TimeSpan.FromMilliseconds(100);
         public override double? RescaleIntercept => -1024;
         public override string RescaleType => "HU";
+        public override bool UsesFrameOfReference => true;
 
         /// <summary>Real scanners store Hounsfield values, so the range stays at -1024..3071 HU whatever Bits Stored is.</summary>
         public override int MaxStoredValue(int bitsStored) => Math.Min((1 << bitsStored) - 1, 4095);
@@ -66,6 +68,7 @@ namespace DCST4.Core.Generation.Modalities
         public override int DefaultRows => 256;
         public override int DefaultColumns => 256;
         public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(1);
+        public override bool UsesFrameOfReference => true;
 
         public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
         {
@@ -198,15 +201,205 @@ namespace DCST4.Core.Generation.Modalities
 
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
-            AddProjectionTags(dataset, preset, context);
-            dataset.AddOrUpdate(DicomTag.PresentationIntentType, "FOR PRESENTATION");
-            dataset.AddOrUpdate(DicomTag.PresentationLUTShape, "IDENTITY");
-            dataset.AddOrUpdate(DicomTag.PixelIntensityRelationship, "LIN");
-            dataset.AddOrUpdate(DicomTag.PixelIntensityRelationshipSign, (short)1);
-            dataset.AddOrUpdate(DicomTag.DetectorType, "DIRECT");
-            dataset.AddOrUpdate(DicomTag.ImageLaterality, preset.ImageLaterality);
+            AddDigitalXRayTags(dataset, preset, context);
             dataset.AddOrUpdate(new DicomSequence(DicomTag.AnatomicRegionSequence));
-            dataset.AddOrUpdate(new DicomSequence(DicomTag.AcquisitionContextSequence));
+        }
+    }
+
+    /// <summary>X-Ray Angiographic Image IOD, single frame. Bits Stored in the X-Ray Image module is 8, 10, 12 or 16.</summary>
+    public sealed class XaProfile : ModalityProfile
+    {
+        public override string Code => "XA";
+        public override string DisplayName => "XA";
+        public override DicomUID SopClass => DicomUID.XRayAngiographicImageStorage;
+        public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
+        public override int DefaultBitDepth => 12;
+        public override int DefaultRows => 1024;
+        public override int DefaultColumns => 1024;
+        public override TimeSpan InstanceInterval => TimeSpan.FromMilliseconds(67);
+
+        public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
+        {
+            new ExamPreset { Name = "Coronary", StudyDescription = "XA Coronary", SeriesDescription = "Coronary LCA", ProtocolName = "Coronary", BodyPart = "HEART", FieldOfViewMm = 200, DefaultImages = 30, RadiationSetting = "GR", Kvp = 80, TubeCurrentMa = 600, ExposureTimeMs = 7, PositionerPrimaryAngle = -30, PositionerSecondaryAngle = 20 },
+            new ExamPreset { Name = "Cerebral", StudyDescription = "XA Cerebral", SeriesDescription = "Cerebral ICA", ProtocolName = "Cerebral", BodyPart = "HEAD", FieldOfViewMm = 250, DefaultImages = 20, RadiationSetting = "GR", Kvp = 90, TubeCurrentMa = 300, ExposureTimeMs = 100 },
+            new ExamPreset { Name = "Peripheral", StudyDescription = "XA Peripheral", SeriesDescription = "Peripheral Leg", ProtocolName = "Peripheral", BodyPart = "LEG", FieldOfViewMm = 400, DefaultImages = 15, RadiationSetting = "GR", Kvp = 70, TubeCurrentMa = 400, ExposureTimeMs = 50 },
+        };
+
+        public override string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY", "SINGLE PLANE" };
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            AddFluoroscopyTags(dataset, preset, context);
+        }
+    }
+
+    /// <summary>X-Ray Radiofluoroscopic Image IOD, single frame. The same X-Ray Image module as XA.</summary>
+    public sealed class RfProfile : ModalityProfile
+    {
+        public override string Code => "RF";
+        public override string DisplayName => "RF";
+        public override DicomUID SopClass => DicomUID.XRayRadiofluoroscopicImageStorage;
+        public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
+        public override int DefaultBitDepth => 12;
+        public override int DefaultRows => 1024;
+        public override int DefaultColumns => 1024;
+        public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(1);
+
+        public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
+        {
+            new ExamPreset { Name = "Upper GI", StudyDescription = "RF Upper GI", SeriesDescription = "Upper GI Spot", ProtocolName = "Upper GI", BodyPart = "STOMACH", FieldOfViewMm = 400, DefaultImages = 10, RadiationSetting = "SC", Kvp = 90, TubeCurrentMa = 400, ExposureTimeMs = 100 },
+            new ExamPreset { Name = "Voiding Cystogram", StudyDescription = "RF Voiding Cystogram", SeriesDescription = "VCUG Spot", ProtocolName = "VCUG", BodyPart = "BLADDER", FieldOfViewMm = 300, DefaultImages = 8, RadiationSetting = "SC", Kvp = 75, TubeCurrentMa = 200, ExposureTimeMs = 100 },
+        };
+
+        public override string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY", "SINGLE PLANE" };
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            AddFluoroscopyTags(dataset, preset, context);
+        }
+    }
+
+    /// <summary>Digital Mammography X-Ray Image IOD, For Presentation. Built on the DX modules. Codes are from PS3.16 CID 4014 and CID 4031.</summary>
+    public sealed class MgProfile : ModalityProfile
+    {
+        public override string Code => "MG";
+        public override string DisplayName => "MG";
+        public override DicomUID SopClass => DicomUID.DigitalMammographyXRayImageStorageForPresentation;
+        public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
+        public override int DefaultBitDepth => 14;
+        public override int DefaultRows => 2294;
+        public override int DefaultColumns => 1914;
+        public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(30);
+        public override double? RescaleIntercept => 0;
+        public override string RescaleType => "US";
+
+        public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
+        {
+            new ExamPreset { Name = "Left CC", StudyDescription = "Mammography", SeriesDescription = "L CC", ProtocolName = "Screening", BodyPart = "BREAST", FieldOfViewMm = 240, Kvp = 28, TubeCurrentMa = 100, ExposureTimeMs = 1000, ViewPosition = "CC", ImageLaterality = "L", PatientOrientation = "A\\R" },
+            new ExamPreset { Name = "Right CC", StudyDescription = "Mammography", SeriesDescription = "R CC", ProtocolName = "Screening", BodyPart = "BREAST", FieldOfViewMm = 240, Kvp = 28, TubeCurrentMa = 100, ExposureTimeMs = 1000, ViewPosition = "CC", ImageLaterality = "R", PatientOrientation = "P\\L" },
+            new ExamPreset { Name = "Left MLO", StudyDescription = "Mammography", SeriesDescription = "L MLO", ProtocolName = "Screening", BodyPart = "BREAST", FieldOfViewMm = 240, Kvp = 29, TubeCurrentMa = 100, ExposureTimeMs = 1200, ViewPosition = "MLO", ImageLaterality = "L", PatientOrientation = "A\\FR", PositionerPrimaryAngle = -45 },
+            new ExamPreset { Name = "Right MLO", StudyDescription = "Mammography", SeriesDescription = "R MLO", ProtocolName = "Screening", BodyPart = "BREAST", FieldOfViewMm = 240, Kvp = 29, TubeCurrentMa = 100, ExposureTimeMs = 1200, ViewPosition = "MLO", ImageLaterality = "R", PatientOrientation = "P\\FL", PositionerPrimaryAngle = 45 },
+        };
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            AddDigitalXRayTags(dataset, preset, context);
+            dataset.AddOrUpdate(DicomTag.PositionerType, "MAMMOGRAPHIC");
+            dataset.AddOrUpdate(DicomTag.PositionerPrimaryAngle, Ds(preset.PositionerPrimaryAngle));
+            dataset.AddOrUpdate(DicomTag.OrganExposed, "BREAST");
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.AnatomicRegionSequence, CodeItem("SCT", "76752008", "Breast")));
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.ViewCodeSequence, preset.ViewPosition == "CC"
+                ? CodeItem("SCT", "399162004", "cranio-caudal")
+                : CodeItem("SCT", "399368009", "medio-lateral oblique")));
+        }
+    }
+
+    /// <summary>Positron Emission Tomography Image IOD: a static stack of slices. The PET Image module requires 16 bits allocated and stored.</summary>
+    public sealed class PtProfile : ModalityProfile
+    {
+        private const double F18PositronFraction = 0.9673;
+
+        public override string Code => "PT";
+        public override string DisplayName => "PT";
+        public override DicomUID SopClass => DicomUID.PositronEmissionTomographyImageStorage;
+        public override IReadOnlyList<int> BitDepths { get; } = new[] { 16 };
+        public override int DefaultBitDepth => 16;
+        public override int DefaultRows => 256;
+        public override int DefaultColumns => 256;
+        public override TimeSpan InstanceInterval => TimeSpan.FromMilliseconds(100);
+        public override double? RescaleIntercept => 0;
+        public override string RescaleType => "BQML";
+        public override bool UsesFrameOfReference => true;
+
+        public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
+        {
+            new ExamPreset { Name = "Whole Body", StudyDescription = "PT Whole Body", SeriesDescription = "WB FDG AC", ProtocolName = "Whole Body FDG", BodyPart = "WHOLEBODY", PatientPosition = "FFS", FieldOfViewMm = 700, SliceThicknessMm = 3, DefaultImages = 80, Radiopharmaceutical = "Fluorodeoxyglucose", RadionuclideHalfLifeSeconds = 6586.2, RadionuclideDoseBq = 370000000, FrameDurationMs = 120000 },
+            new ExamPreset { Name = "Brain", StudyDescription = "PT Brain", SeriesDescription = "Brain FDG AC", ProtocolName = "Brain FDG", BodyPart = "BRAIN", FieldOfViewMm = 300, SliceThicknessMm = 2, DefaultImages = 60, Radiopharmaceutical = "Fluorodeoxyglucose", RadionuclideHalfLifeSeconds = 6586.2, RadionuclideDoseBq = 185000000, FrameDurationMs = 600000 },
+        };
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            AddSliceGeometry(dataset, preset, context);
+            AddIsotopeTags(dataset, preset, F18PositronFraction);
+            dataset.AddOrUpdate(DicomTag.Units, "BQML");
+            dataset.AddOrUpdate(DicomTag.CountsSource, "EMISSION");
+            dataset.AddOrUpdate(DicomTag.SeriesType, "STATIC", "IMAGE");
+            dataset.AddOrUpdate(DicomTag.CorrectedImage, "DECY", "ATTN", "SCAT", "DTIM", "NORM");
+            dataset.AddOrUpdate(DicomTag.DecayCorrection, "START");
+            dataset.AddOrUpdate(DicomTag.DecayFactor, "1");
+            dataset.AddOrUpdate(DicomTag.CollimatorType, "NONE");
+            dataset.AddOrUpdate(DicomTag.ReconstructionDiameter, Ds(preset.FieldOfViewMm));
+            dataset.AddOrUpdate(DicomTag.ReconstructionMethod, "OSEM");
+            dataset.AddOrUpdate(DicomTag.FrameReferenceTime, "0");
+            // These are US, and a run can have more images in a series than that holds.
+            dataset.AddOrUpdate(DicomTag.NumberOfSlices, (ushort)Math.Min(context.ImagesInSeries, ushort.MaxValue));
+            dataset.AddOrUpdate(DicomTag.ImageIndex, (ushort)Math.Min(context.ImageIndex + 1, ushort.MaxValue));
+        }
+    }
+
+    /// <summary>
+    /// Nuclear Medicine Image IOD: a static image with one energy window and one detector. The IOD is always multi-frame,
+    /// so each image is one frame with the vectors that describe it. Bits Stored is 8 or 16.
+    /// </summary>
+    public sealed class NmProfile : ModalityProfile
+    {
+        private const ushort OnlyWindowOrDetector = 1;
+        private const string Tc99mWindowName = "TC99M";
+
+        public override string Code => "NM";
+        public override string DisplayName => "NM";
+        public override DicomUID SopClass => DicomUID.NuclearMedicineImageStorage;
+        public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 16 };
+        public override int DefaultBitDepth => 16;
+        public override int DefaultRows => 256;
+        public override int DefaultColumns => 256;
+        public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(30);
+
+        public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
+        {
+            new ExamPreset { Name = "Bone", StudyDescription = "NM Bone", SeriesDescription = "Bone Static", ProtocolName = "Bone Static", BodyPart = "SPINE", FieldOfViewMm = 400, Radiopharmaceutical = "Tc-99m MDP", RadionuclideHalfLifeSeconds = 21624, RadionuclideDoseBq = 740000000, FrameDurationMs = 300000, EnergyWindowName = Tc99mWindowName, EnergyWindowLowerKev = 126, EnergyWindowUpperKev = 154 },
+            new ExamPreset { Name = "Thyroid", StudyDescription = "NM Thyroid", SeriesDescription = "Thyroid Static", ProtocolName = "Thyroid Static", BodyPart = "THYROID", FieldOfViewMm = 200, Radiopharmaceutical = "Tc-99m Pertechnetate", RadionuclideHalfLifeSeconds = 21624, RadionuclideDoseBq = 185000000, FrameDurationMs = 300000, EnergyWindowName = Tc99mWindowName, EnergyWindowLowerKev = 126, EnergyWindowUpperKev = 154 },
+            new ExamPreset { Name = "Lung Perfusion", StudyDescription = "NM Lung Perfusion", SeriesDescription = "Lung Perfusion Static", ProtocolName = "Lung Perfusion", BodyPart = "LUNG", FieldOfViewMm = 400, Radiopharmaceutical = "Tc-99m MAA", RadionuclideHalfLifeSeconds = 21624, RadionuclideDoseBq = 185000000, FrameDurationMs = 180000, EnergyWindowName = Tc99mWindowName, EnergyWindowLowerKev = 126, EnergyWindowUpperKev = 154 },
+        };
+
+        public override string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY", "STATIC", "EMISSION" };
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            var spacing = preset.FieldOfViewMm / Math.Max(context.Rows, context.Columns);
+            dataset.AddOrUpdate(DicomTag.PatientOrientation, new string[0]);
+            dataset.AddOrUpdate(DicomTag.PixelSpacing, Ds(spacing), Ds(spacing));
+            dataset.AddOrUpdate(DicomTag.CountsAccumulated, "1000000");
+            AddIsotopeTags(dataset, preset);
+
+            dataset.AddOrUpdate(DicomTag.NumberOfFrames, "1");
+            dataset.AddOrUpdate(DicomTag.FrameIncrementPointer, DicomTag.EnergyWindowVector, DicomTag.DetectorVector);
+
+            dataset.AddOrUpdate(DicomTag.EnergyWindowVector, OnlyWindowOrDetector);
+            dataset.AddOrUpdate(DicomTag.NumberOfEnergyWindows, OnlyWindowOrDetector);
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.EnergyWindowInformationSequence, new DicomDataset
+            {
+                new DicomSequence(DicomTag.EnergyWindowRangeSequence, new DicomDataset
+                {
+                    { DicomTag.EnergyWindowLowerLimit, Ds(preset.EnergyWindowLowerKev) },
+                    { DicomTag.EnergyWindowUpperLimit, Ds(preset.EnergyWindowUpperKev) },
+                }),
+                new DicomShortString(DicomTag.EnergyWindowName, preset.EnergyWindowName),
+            }));
+
+            dataset.AddOrUpdate(DicomTag.DetectorVector, OnlyWindowOrDetector);
+            dataset.AddOrUpdate(DicomTag.NumberOfDetectors, OnlyWindowOrDetector);
+            var detector = new DicomDataset
+            {
+                { DicomTag.CollimatorType, "PARA" },
+                { DicomTag.ZoomFactor, Ds(1), Ds(1) },
+            };
+            // Type 2 with no meaningful value on a planar image.
+            detector.Add(DicomTag.FocalDistance, new string[0]);
+            detector.Add(DicomTag.ZoomCenter, new string[0]);
+            detector.Add(DicomTag.ImagePositionPatient, new string[0]);
+            detector.Add(DicomTag.ImageOrientationPatient, new string[0]);
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.DetectorInformationSequence, detector));
         }
     }
 }
