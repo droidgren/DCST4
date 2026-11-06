@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.1.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -14,6 +14,7 @@ Querying a Modality Worklist is out of scope: that is what [DMWLT4](https://gith
 
 - **Realistic exams:** CT and MR stacks, CR, DX and US images, with the tags their IODs require, consistent slice geometry and believable timestamps.
 - **Everything is automatic, and everything can be overridden:** patient, accession number, study ID, UIDs, date and time. The fields show what the next run will use.
+- **Additional tags:** add common tags with generated values, or any custom tag, including private ones, under **File > Settings**.
 - **Official test patients:** random Patient IDs come only from Skatteverket's list of test personnummer. Birth date and sex follow from the number.
 - **Swedish names:** about 40% contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192.
 - **Visible verification:** patient name, patient ID, accession number, modality, series and instance number and timestamp are burned into the pixels, so you can compare them with the tags in the viewer.
@@ -23,9 +24,29 @@ Querying a Modality Worklist is out of scope: that is what [DMWLT4](https://gith
 - **Save to disk:** instead of, or in addition to, sending, as a DICOM File-set with a DICOMDIR that viewers can open.
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
 
-## Install and build
+## Install
 
-Requires Windows with .NET Framework 4.8.
+Requires Windows with .NET Framework 4.8. You can choose between the installer and the portable version, and neither needs administrator rights.
+
+### Installer
+
+1. Download `DCST4.msi` from the [latest release](../../releases/latest).
+2. Double-click the file to install the program.
+3. Start **DICOM C-Store Tester** from the Start menu.
+
+The installer installs for the current user only, by default to `%LOCALAPPDATA%\DICOM C-Store Tester`. Uninstalling leaves your settings and logs in `%LOCALAPPDATA%\DCST4`.
+
+### Portable
+
+1. Download the ZIP file from the [latest release](../../releases/latest).
+2. Extract the files to a folder of your choice.
+3. Run `DCST4.exe`.
+
+### Microsoft SmartScreen warning
+
+The program is not digitally signed, so you may see a **Windows protected your PC** warning the first time you run it. To continue, click **More info** and then **Run anyway**.
+
+## Build from source
 
 Open `DCST4.sln` in Visual Studio, or build from the command line:
 
@@ -44,6 +65,32 @@ The program is `src\DCST4.App\bin\Release\net48\`: `DCST4.exe`, `DCST4.exe.confi
 5. Compare the burned-in text with the tags in the PACS viewer.
 
 F1 in the program opens the help.
+
+### When Auto values change
+
+Auto values are drawn when the program starts and when you click **New values**. They stay on screen after a run, so the exam can be looked up in PACS.
+
+Running again without **New values** uses the same patient, accession number and Study UID, so the images arrive as a new series in the same study, also if you changed modality or exam type. Series numbers start at 1 again, and an Auto Study Date/Time is the time of each run. To draw new values after every run instead, tick **Draw new Auto values after each run** under **File > Settings**, on the **Identifiers** tab.
+
+### Additional tags
+
+Under **File > Settings**, on the **Additional tags** tab, you can add tags on top of the fixed fields. Each one gets a row on the **Identifiers** tab, where unticking **Auto** lets you type a value for the current session.
+
+![The Additional tags tab in Settings](screenshots/settings-tags.png)
+
+The same tags as rows on the **Identifiers** tab, below the fixed fields. Here Accession No has a typed value and the rest are on Auto:
+
+![The Identifiers tab with added tags](screenshots/identifiers.png)
+
+- **Common tags:** tick any of Operators' Name, Performing Physician's Name, Name of Physician(s) Reading Study, Institutional Department Name, Issuer of Patient ID, Patient Comments, Additional Patient History, Admission ID, Performed Procedure Step ID and Performed Procedure Step Description. Auto generates the value.
+- **Custom tags:** enter a tag as `(0008,1070)`, `00081070` or a keyword such as `OperatorsName`. The name and VR fill in from the DICOM dictionary. Auto uses the default value you enter, and an empty default sends the tag empty. Separate several values with a backslash where the tag allows it.
+- **Private tags:** a tag with an odd group needs a private creator and a VR. The creator is written to the block of the number you entered, so `(0011,2001)` puts the creator in `(0011,0020)`. A receiver using Implicit VR sees these values as UN unless it knows the creator.
+
+A custom tag is written after the program's own tags, so it can replace a generated value such as Manufacturer. Some tags cannot be added, because they would break the image or remove its marking as a test image: groups 0000 to 0007, group lengths, groups 0028 and 7FE0, SOP Class, Modality, Specific Character Set and Image Comments. Tags that already have a field on the **Identifiers** tab are set there. Sequences, binary VRs and AT are not supported, since their values cannot be typed.
+
+### Version check
+
+Opening **Help > About** asks GitHub for the latest release (`api.github.com`) and shows the result in the window, with a link if there is a new version. Nothing is sent except an ordinary web request with the program's version as its User-Agent, and nothing is downloaded or installed. If GitHub cannot be reached, for example on a closed network, the window says so and the program carries on.
 
 ### Transfer syntax behaviour
 
@@ -85,6 +132,8 @@ Each run gets a new `EX` folder, so nothing is overwritten. Saving again to the 
 | US | Single-frame grayscale B-mode (MONOCHROME2, 8 bits): Image Type with application and `0001`, Transducer Data and Type, Depth of Scan Field, Mechanical and Thermal Index, Sequence of Ultrasound Regions with calibration in cm |
 
 Window Center and Width are calculated from the stored pixel values, so the burned-in text is readable when the image opens.
+
+Image Comments is `DCST4 TEST IMAGE - NOT FOR DIAGNOSTIC USE - https://github.com/droidgren/DCST4`. No standard tag means "project URL". Image Comments is free text that viewers often show, and unlike Retrieve URL (0008,1190) it does not tell any system to fetch something from the address.
 
 ## Test personnummer
 
@@ -185,6 +234,18 @@ DCMTK has no IOD validator, so this does not prove that every attribute an IOD r
 | Log, kept for 7 days | `%LocalAppData%\DCST4\Logs\` |
 
 ## Changelog
+
+### 1.1.0
+
+New:
+- Additional tags under File > Settings: a checklist of common tags with generated values, and custom tags by number or keyword, including private tags. Each gets a row on the Identifiers tab
+- Version check in the About window, which runs when the window opens
+- Setting to draw new Auto values after each run
+
+Changed:
+- Auto values now stay on screen after a run, so the exam can be looked up in PACS. Running again adds a new series to the same study
+- Image Comments now also holds the project's address
+- The About box links to the project, and the Help menu uses the short labels Help and About
 
 ### 1.0.0
 

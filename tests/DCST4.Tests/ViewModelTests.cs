@@ -2,6 +2,7 @@ using DCST4.Core.Generation;
 using DCST4.Core.Network;
 using DCST4.Core.Pipeline;
 using DCST4.Core.TestData;
+using DCST4.Models;
 using DCST4.ViewModels;
 using FellowOakDicom;
 using FellowOakDicom.Network;
@@ -51,6 +52,8 @@ namespace DCST4.Tests
                 Vm.Columns = 64;
                 Vm.MinAge = 0;
                 Vm.MaxAge = 100;
+                Vm.NewValuesAfterRun = false;
+                Vm.AdditionalTagSettings = new AdditionalTagSetting[0];
             }
 
             /// <summary>Executes a command and waits until the view model is idle again.</summary>
@@ -212,12 +215,121 @@ namespace DCST4.Tests
             check("Run: the previewed Patient ID is what is sent", first.GetString(DicomTag.PatientID) == previewId, first.GetString(DicomTag.PatientID));
             var studyDate = first.GetString(DicomTag.StudyDate);
             check("Run: Auto study date is today", studyDate == DateTime.Now.ToString("yyyyMMdd"), studyDate);
-            check("Run: Auto values are new afterwards", vm.PatientIdField.Value != previewId, vm.PatientIdField.Value);
+            check("Run: Auto values stay afterwards", vm.PatientIdField.Value == previewId, vm.PatientIdField.Value);
             check("Run: manual values stay", vm.AccessionField.Value == "ACC-VM-1", vm.AccessionField.Value);
 
             vm.AccessionField.IsAuto = true;
             vm.PatientNameField.IsAuto = true;
             vm.CharacterSet = DicomCharacterSets.Latin1;
+
+            // ------------------------------------------------ Values between runs
+            vm.ImagesPerSeries = 1;
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            var firstRun = Scp.Received.Single().Dataset;
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            var secondRun = Scp.Received.Single().Dataset;
+            check("Second run: same patient, accession and study",
+                secondRun.GetString(DicomTag.PatientID) == firstRun.GetString(DicomTag.PatientID)
+                && secondRun.GetString(DicomTag.AccessionNumber) == firstRun.GetString(DicomTag.AccessionNumber)
+                && secondRun.GetString(DicomTag.StudyInstanceUID) == firstRun.GetString(DicomTag.StudyInstanceUID),
+                secondRun.GetString(DicomTag.StudyInstanceUID));
+            check("Second run: new series and image UIDs",
+                secondRun.GetString(DicomTag.SeriesInstanceUID) != firstRun.GetString(DicomTag.SeriesInstanceUID)
+                && secondRun.GetString(DicomTag.SOPInstanceUID) != firstRun.GetString(DicomTag.SOPInstanceUID),
+                secondRun.GetString(DicomTag.SOPInstanceUID));
+
+            var studyAfterRuns = vm.StudyUidField.Value;
+            check("Screen shows the study that was sent", studyAfterRuns == secondRun.GetString(DicomTag.StudyInstanceUID), studyAfterRuns);
+            vm.NewValuesCommand.Execute(null);
+            check("New values after a run: new study", vm.StudyUidField.Value != studyAfterRuns, vm.StudyUidField.Value);
+
+            vm.NewValuesAfterRun = true;
+            var studyBeforeRun = vm.StudyUidField.Value;
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            check("Setting on: the run used the values on screen", Scp.Received.Single().Dataset.GetString(DicomTag.StudyInstanceUID) == studyBeforeRun, studyBeforeRun);
+            check("Setting on: new values after the run", vm.StudyUidField.Value != studyBeforeRun, vm.StudyUidField.Value);
+            vm.NewValuesAfterRun = false;
+
+            check("Program start: draws its own values", new Harness(port).Vm.StudyUidField.Value != vm.StudyUidField.Value, null);
+
+            // ------------------------------------------------ Tags added in Settings
+            var fixedRows = vm.IdentityFields.Count;
+            check("No additional rows by default", fixedRows == 15, fixedRows.ToString());
+            var operatorsSetting = AdditionalTagSetting.From(CommonTagCatalog.All.First(c => c.Tag.Element == 0x1070).Tag);
+            var customSetting = AdditionalTagSetting.From(new AdditionalTag(0x0011, 0x1001, "LO", "DCST4", "Default text"));
+            var emptySetting = AdditionalTagSetting.From(new AdditionalTag(0x0010, 0x2180, "SH"));
+            var admissionSetting = AdditionalTagSetting.From(CommonTagCatalog.All.First(c => c.Tag.Group == 0x0038).Tag);
+            var patientBefore = vm.PatientIdField.Value;
+
+            vm.AdditionalTagSettings = new[] { operatorsSetting, customSetting, emptySetting, admissionSetting };
+            check("Added tags get rows", vm.IdentityFields.Count == fixedRows + 4, vm.IdentityFields.Count.ToString());
+            var operatorsRow = vm.IdentityFields[fixedRows];
+            var customRow = vm.IdentityFields[fixedRows + 1];
+            var emptyRow = vm.IdentityFields[fixedRows + 2];
+            var admissionRow = vm.IdentityFields[fixedRows + 3];
+            check("Rows start on Auto", operatorsRow.IsAuto && customRow.IsAuto && emptyRow.IsAuto, null);
+            check("Common tag: named and generated", operatorsRow.Label == "Operators' Name" && operatorsRow.Value.Contains("^"), operatorsRow.Label + " " + operatorsRow.Value);
+            check("Custom tag: Auto shows its default", customRow.Value == "Default text" && customRow.Label == "(0011,1001)", customRow.Label + " " + customRow.Value);
+            check("Custom tag without a default says so", emptyRow.Value == "(sent empty)", emptyRow.Value);
+            check("The tooltip gives number and VR", operatorsRow.Hint.Contains("(0008,1070) PN") && customRow.Hint.Contains("private creator DCST4"), customRow.Hint);
+            check("Adding tags leaves the patient alone", vm.PatientIdField.Value == patientBefore, vm.PatientIdField.Value);
+
+            vm.ImagesPerSeries = 1;
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            var added = Scp.Received.Single().Dataset;
+            var customTag = new DicomTag(0x0011, 0x1001, "DCST4");
+            check("Run sends what the rows show",
+                added.GetString(DicomTag.OperatorsName) == operatorsRow.Value
+                && added.GetString(DicomTag.AdmissionID) == admissionRow.Value
+                && added.GetString(customTag) == "Default text"
+                && added.Contains(DicomTag.Occupation) && added.GetDicomItem<DicomElement>(DicomTag.Occupation).Length == 0,
+                added.GetString(DicomTag.OperatorsName));
+            check("Run: additional tags are in the log",
+                Program.LogSink.Lines.Any(l => l.Contains("Additional tags:") && l.Contains("(0011,1001) = 'Default text'")), null);
+
+            var generatedAdmission = admissionRow.Value;
+            vm.NewValuesCommand.Execute(null);
+            check("New values draws new values for added tags", admissionRow.Value != generatedAdmission, admissionRow.Value);
+            check("New values keeps a custom tag's default", customRow.Value == "Default text", customRow.Value);
+
+            customRow.IsAuto = false;
+            customRow.Value = "Typed text";
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            check("A typed value is sent", Scp.Received.Single().Dataset.GetString(customTag) == "Typed text", null);
+
+            var operatorsValue = operatorsRow.Value;
+            vm.AdditionalTagSettings = new[] { customSetting };
+            check("Removed tags lose their rows", vm.IdentityFields.Count == fixedRows + 1 && !vm.IdentityFields.Contains(operatorsRow) && !vm.IdentityFields.Contains(emptyRow), vm.IdentityFields.Count.ToString());
+            check("A tag that stays keeps its typed value", ReferenceEquals(vm.IdentityFields[fixedRows], customRow) && customRow.Value == "Typed text" && !customRow.IsAuto, customRow.Value);
+
+            vm.AdditionalTagSettings = new[] { customSetting, operatorsSetting };
+            check("A tag added again has the same generated value", vm.IdentityFields[fixedRows + 1].Value == operatorsValue, vm.IdentityFields[fixedRows + 1].Value);
+
+            vm.AdditionalTagSettings = new[] { emptySetting };
+            var departmentRow = vm.IdentityFields[fixedRows];
+            departmentRow.IsAuto = false;
+            departmentRow.Value = new string('x', 65);
+            check("A bad value is explained at once", (vm.IdentityMessage ?? string.Empty).Contains("(0010,2180)"), vm.IdentityMessage);
+            Scp.Reset();
+            h.Messages.Clear();
+            await h.Execute(vm.RunCommand);
+            check("A bad value blocks the run", h.Messages.Count == 1 && h.Messages[0].Contains("(0010,2180)") && Scp.AssociationCount == 0, string.Join("; ", h.Messages));
+
+            departmentRow.Value = "Ωmega";
+            check("A value ISO_IR 100 cannot hold is explained", (vm.IdentityMessage ?? string.Empty).Contains("ISO_IR 100"), vm.IdentityMessage);
+            vm.CharacterSet = Core.Generation.DicomCharacterSets.Utf8;
+            check("Changing the character set clears the message", vm.IdentityMessage == null, vm.IdentityMessage);
+            vm.CharacterSet = Core.Generation.DicomCharacterSets.Latin1;
+
+            vm.AdditionalTagSettings = new[] { new AdditionalTagSetting { Tag = "nonsense" }, new AdditionalTagSetting { Tag = "(0010,0020)", Vr = "LO" }, emptySetting };
+            check("A saved tag that is not allowed is left out", vm.IdentityFields.Count == fixedRows + 1, vm.IdentityFields.Count.ToString());
+            vm.AdditionalTagSettings = new AdditionalTagSetting[0];
+            check("Back to the fixed rows, with no message", vm.IdentityFields.Count == fixedRows && vm.IdentityMessage == null, vm.IdentityMessage);
 
             // ------------------------------------------------ A failing run reports without interrupting
             Scp.Reset();
@@ -284,6 +396,17 @@ namespace DCST4.Tests
                 check("Save only: files written, nothing sent", Directory.GetFiles(Path.Combine(folder, "DICOM"), "*", SearchOption.AllDirectories).Length == 2 && Scp.AssociationCount == 0, vm.StatusText);
                 check("Save only: DICOMDIR is written and named in the status", File.Exists(Path.Combine(folder, "DICOMDIR")) && vm.StatusText.Contains("DICOMDIR"), vm.StatusText);
                 check("Save only: rows show the state", vm.Results.All(r => r.State == StoreState.Saved && r.SavedPath != null), vm.LastRunText);
+
+                await h.Execute(vm.RunCommand);
+                check("Saved twice with the same values: all files kept", Directory.GetFiles(Path.Combine(folder, "DICOM"), "*", SearchOption.AllDirectories).Length == 4, vm.StatusText);
+                check("Saved twice with the same values: DICOMDIR written", !vm.StatusText.Contains("could not be written"), vm.StatusText);
+                var patients = FellowOakDicom.Media.DicomDirectory.Open(Path.Combine(folder, "DICOMDIR")).RootDirectoryRecordCollection.ToList();
+                var studies = patients.SelectMany(p => p.LowerLevelDirectoryRecordCollection).ToList();
+                var series = studies.SelectMany(s => s.LowerLevelDirectoryRecordCollection).ToList();
+                var images = series.SelectMany(s => s.LowerLevelDirectoryRecordCollection).ToList();
+                check("Saved twice with the same values: one study with two series and four images",
+                    patients.Count == 1 && studies.Count == 1 && series.Count == 2 && images.Count == 4,
+                    $"{patients.Count} patients, {studies.Count} studies, {series.Count} series, {images.Count} images");
             }
             finally
             {

@@ -89,6 +89,14 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("100")]
         public int MaxAge { get => (int)this[nameof(MaxAge)]; set => this[nameof(MaxAge)] = value; }
 
+        /// <summary>Draw new Auto values after each run. Off: they stay until New values is clicked or the program restarts.</summary>
+        [UserScopedSetting, DefaultSettingValue("False")]
+        public bool NewValuesAfterRun { get => (bool)this[nameof(NewValuesAfterRun)]; set => this[nameof(NewValuesAfterRun)] = value; }
+
+        /// <summary>Tags added on top of the fixed identifier fields, serialized as XML.</summary>
+        [UserScopedSetting, DefaultSettingValue("")]
+        public string AdditionalTags { get => (string)this[nameof(AdditionalTags)]; set => this[nameof(AdditionalTags)] = value; }
+
         // ------------------------------------------------------------ Output
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool SendImages { get => (bool)this[nameof(SendImages)]; set => this[nameof(SendImages)] = value; }

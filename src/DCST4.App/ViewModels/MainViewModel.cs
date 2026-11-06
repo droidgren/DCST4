@@ -154,7 +154,7 @@ namespace DCST4.ViewModels
         public int BitsStored { get => _bitsStored; set { _bitsStored = value; OnPropertyChanged(); Settings.Default.BitsStored = value; } }
 
         private string _characterSet;
-        public string CharacterSet { get => _characterSet; set { _characterSet = value; OnPropertyChanged(); Settings.Default.CharacterSet = value; } }
+        public string CharacterSet { get => _characterSet; set { _characterSet = value; OnPropertyChanged(); Settings.Default.CharacterSet = value; RefreshPreview(); } }
 
         private TransferSyntaxOption _selectedTransferSyntax;
         public TransferSyntaxOption SelectedTransferSyntax
@@ -201,6 +201,29 @@ namespace DCST4.ViewModels
         public IdentityFieldViewModel SeriesDescriptionField { get; }
         public IdentityFieldViewModel InstitutionField { get; }
         public IdentityFieldViewModel StationField { get; }
+
+        /// <summary>Read from the settings each time, so a change in the Settings dialog applies to the next run.</summary>
+        public bool NewValuesAfterRun { get => Settings.Default.NewValuesAfterRun; set => Settings.Default.NewValuesAfterRun = value; }
+
+        /// <summary>The tags added in Settings, and the row each has on the Identifiers tab.</summary>
+        private readonly List<AdditionalField> _additionalFields = new List<AdditionalField>();
+
+        private sealed class AdditionalField
+        {
+            public AdditionalTag Tag;
+            public IdentityFieldViewModel Field;
+        }
+
+        /// <summary>The saved list of added tags. Setting it updates the rows on the Identifiers tab.</summary>
+        public IReadOnlyList<AdditionalTagSetting> AdditionalTagSettings
+        {
+            get => ReadAdditionalTagSettings();
+            set
+            {
+                Settings.Default.AdditionalTags = AdditionalTagSetting.Serialize(value);
+                ReloadAdditionalTags();
+            }
+        }
 
         private string _identityMessage;
         /// <summary>Warning or problem shown under the identifiers, or null.</summary>
@@ -319,6 +342,7 @@ namespace DCST4.ViewModels
 
             LoadSettings();
             LoadProfiles();
+            ReloadAdditionalTags();
             _loading = false;
             UpdateManualUidRules();
             GenerateNewValues();
@@ -518,7 +542,13 @@ namespace DCST4.ViewModels
             SeriesDescriptionField.ShowGenerated(_identity.SeriesDescription);
             InstitutionField.ShowGenerated(_identity.InstitutionName);
             StationField.ShowGenerated(_identity.StationName);
+            for (var i = 0; i < _additionalFields.Count; i++)
+            {
+                var value = _identity.AdditionalTags[i].Value;
+                _additionalFields[i].Field.ShowGenerated(value.Length == 0 ? "(sent empty)" : value);
+            }
 
+            problems.AddRange(AdditionalTagRules.CheckAll(_identity.AdditionalTags, _characterSet));
             if (problems.Count == 0)
             {
                 problems.AddRange(ExamValidator.Warnings(new ExamRequest { Identity = _identity }));
@@ -545,6 +575,7 @@ namespace DCST4.ViewModels
                 SeriesDescription = SeriesDescriptionField.ManualValue?.Trim(),
                 InstitutionName = InstitutionField.ManualValue?.Trim(),
                 StationName = StationField.ManualValue?.Trim(),
+                AdditionalTags = _additionalFields.Select(f => new AdditionalTagValue(f.Tag, f.Field.ManualValue?.Trim())).ToList(),
             };
 
             var manualDate = StudyDateTimeField.ManualValue?.Trim();
@@ -571,6 +602,47 @@ namespace DCST4.ViewModels
             SeriesUidField.SetManualAllowed(seriesRule, "A manual Series UID requires exactly one series.");
             SopUidField.SetManualAllowed(sopRule, "A manual SOP Instance UID requires exactly one image.");
             RefreshPreview();
+        }
+
+        /// <summary>Brings the rows on the Identifiers tab in line with the saved list. A tag that stays keeps what the user typed.</summary>
+        public void ReloadAdditionalTags()
+        {
+            var previous = _additionalFields.ToList();
+            foreach (var item in previous) IdentityFields.Remove(item.Field);
+            _additionalFields.Clear();
+
+            foreach (var setting in ReadAdditionalTagSettings())
+            {
+                var tag = setting.ToTag();
+                var problem = tag == null ? $"'{setting.Tag}' is not a tag number." : AdditionalTagRules.CheckTag(tag);
+                if (problem != null)
+                {
+                    _logger.Warning("Saved additional tag ignored: {problem}", problem);
+                    continue;
+                }
+
+                var kept = previous.FirstOrDefault(p => p.Tag.Key == tag.Key && p.Tag.VrCode == tag.VrCode);
+                var hint = $"{tag.Label} {tag.VrCode}" + (tag.PrivateCreator != null ? $", private creator {tag.PrivateCreator}" : string.Empty)
+                    + (CommonTagCatalog.Find(tag) != null ? ". Auto: generated." : ". Auto: the default value from Settings.");
+                var field = kept?.Field ?? new IdentityFieldViewModel(tag.Name, hint, RefreshPreview);
+                _additionalFields.Add(new AdditionalField { Tag = tag, Field = field });
+                IdentityFields.Add(field);
+            }
+
+            RefreshPreview();
+        }
+
+        private List<AdditionalTagSetting> ReadAdditionalTagSettings()
+        {
+            try
+            {
+                return AdditionalTagSetting.Deserialize(Settings.Default.AdditionalTags);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.Warning(ex, "Could not read the saved additional tags, they are ignored");
+                return new List<AdditionalTagSetting>();
+            }
         }
         #endregion
 
@@ -602,6 +674,10 @@ namespace DCST4.ViewModels
             _logger.Information("Exam: {modality} {preset}, {series} series x {images} images, {rows}x{columns}, {bits} bits, {charset}. Patient {name}, ID {id}, born {born}, sex {sex}. Accession {accession}, Study ID {studyId}, Study UID {studyUid}",
                 request.Modality.Code, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, request.CharacterSet,
                 id.PatientName, id.PatientId, id.PatientBirthDate, id.PatientSex, id.AccessionNumber, id.StudyId, id.StudyInstanceUid);
+            if (id.AdditionalTags.Count > 0)
+            {
+                _logger.Information("Additional tags: {tags}", string.Join(", ", id.AdditionalTags.Select(t => $"{t.Tag.Label} = '{t.Value}'")));
+            }
 
             Results.Clear();
             ProgressValue = 0;
@@ -620,7 +696,8 @@ namespace DCST4.ViewModels
             LastRunText = summary.ToString();
             StatusText = DescribeEnd(summary);
 
-            GenerateNewValues();
+            // By default the values stay on screen, so the exam can be looked up in PACS afterwards.
+            if (NewValuesAfterRun) GenerateNewValues();
         }
 
         private void AddResult(StoreResult result, int total)

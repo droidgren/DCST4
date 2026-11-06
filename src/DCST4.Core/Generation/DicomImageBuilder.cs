@@ -12,7 +12,7 @@ namespace DCST4.Core.Generation
     /// <summary>Builds one complete DICOM image from an exam and its position in that exam.</summary>
     public static class DicomImageBuilder
     {
-        public const string TestImageComment = "DCST4 TEST IMAGE - NOT FOR DIAGNOSTIC USE";
+        public const string TestImageComment = "DCST4 TEST IMAGE - NOT FOR DIAGNOSTIC USE - " + ProductInfo.ProjectUrl;
         private const string Manufacturer = "DCST4";
         private const string ManufacturerModel = "DCST4 Test Image Generator";
 
@@ -98,6 +98,9 @@ namespace DCST4.Core.Generation
                 BitsStored = request.BitsStored,
             };
             modality.AddModalityTags(dataset, preset, context);
+
+            // After the program's own tags, so that a custom tag can replace one such as Manufacturer. The rules keep it from the pixel description.
+            foreach (var additional in id.AdditionalTags) AdditionalTagWriter.Write(dataset, additional);
 
             AddPixels(dataset, request, series, imageIndex, contentTime);
             return dataset;

@@ -11,6 +11,12 @@
         <TextBlock Text="A tool for testing a PACS or any DICOM Storage SCP" Margin="0,5,0,0" HorizontalAlignment="Center"/>
         <TextBlock Text="{Binding Version}" Margin="0,5,0,0" HorizontalAlignment="Center"/>
         <TextBlock Margin="0,5,0,0" HorizontalAlignment="Center">
+            <Run Text="{Binding UpdateStatus, Mode=OneWay}"/>
+            <Hyperlink NavigateUri="{Binding ReleaseUri, Mode=OneWay}" RequestNavigate="Hyperlink_RequestNavigate">
+                <Run Text="{Binding ReleaseLinkText, Mode=OneWay}"/>
+            </Hyperlink>
+        </TextBlock>
+        <TextBlock Margin="0,5,0,0" HorizontalAlignment="Center">
             <Hyperlink x:Name="ProjectLink" RequestNavigate="Hyperlink_RequestNavigate">
                 <Run x:Name="ProjectLinkText"/>
             </Hyperlink>

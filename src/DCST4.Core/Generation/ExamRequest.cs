@@ -95,6 +95,8 @@ namespace DCST4.Core.Generation
                 errors.Add("Patient Sex must be M, F or O.");
             }
 
+            errors.AddRange(AdditionalTagRules.CheckAll(id.AdditionalTags, request.CharacterSet));
+
             return errors;
         }
 
@@ -134,9 +136,9 @@ namespace DCST4.Core.Generation
             CheckCharacters(errors, field, value, characterSet);
         }
 
-        private static void CheckCharacters(List<string> errors, string field, string value, string characterSet)
+        internal static void CheckCharacters(List<string> errors, string field, string value, string characterSet, bool allowBackslash = false)
         {
-            if (value.IndexOf('\\') >= 0) errors.Add($"{field} must not contain a backslash: DICOM uses it to separate values.");
+            if (!allowBackslash && value.IndexOf('\\') >= 0) errors.Add($"{field} must not contain a backslash: DICOM uses it to separate values.");
             if (value.Any(char.IsControl)) errors.Add($"{field} must not contain control characters.");
             if (characterSet == DicomCharacterSets.Latin1 && value.Any(c => c > 0xFF))
             {
