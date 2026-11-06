@@ -12,6 +12,7 @@ Querying a Modality Worklist is out of scope: that is what [DMWLT4](https://gith
 
 ## Features
 
+- **Zero Dependencies:** Built on .NET 4.8 (included natively in Windows 10 and 11). No external runtime installation is required.
 - **Realistic exams:** CT and MR stacks, CR, DX and US images, with the tags their IODs require, consistent slice geometry and believable timestamps.
 - **Everything is automatic, and everything can be overridden:** patient, accession number, study ID, UIDs, date and time. The fields show what the next run will use.
 - **Additional tags:** add common tags with generated values, or any custom tag, including private ones, under **File > Settings**.
@@ -24,9 +25,11 @@ Querying a Modality Worklist is out of scope: that is what [DMWLT4](https://gith
 - **Save to disk:** instead of, or in addition to, sending, as a DICOM File-set with a DICOMDIR that viewers can open.
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
 
+
+
 ## Install
 
-Requires Windows with .NET Framework 4.8. You can choose between the installer and the portable version, and neither needs administrator rights.
+You can choose between the installer and the portable version, and neither needs administrator rights.
 
 ### Installer
 
@@ -46,15 +49,7 @@ The installer installs for the current user only, by default to `%LOCALAPPDATA%\
 
 The program is not digitally signed, so you may see a **Windows protected your PC** warning the first time you run it. To continue, click **More info** and then **Run anyway**.
 
-## Build from source
 
-Open `DCST4.sln` in Visual Studio, or build from the command line:
-
-```powershell
-dotnet build DCST4.sln -c Release
-```
-
-The program is `src\DCST4.App\bin\Release\net48\`: `DCST4.exe`, `DCST4.exe.config` and the `libs\` folder, which can be copied anywhere together.
 
 ## Usage
 
@@ -100,12 +95,12 @@ So by default, **the run stops with an error and sends nothing if the server doe
 
 ### Reading the results
 
-| State | Meaning | Examples |
-|---|---|---|
-| Success | Stored | `0x0000` |
-| Warning | Stored, but the server changed or dropped something | `0xB000`, `0xB006`, `0xB007` |
-| Failure | Not stored. The run continues with the next image | `0xA7xx`, `0xA9xx`, `0xCxxx` |
-| NotSent | No response, for example association rejected or timed out | |
+| State   | Meaning                                                    | Examples                     |
+| ------- | ---------------------------------------------------------- | ---------------------------- |
+| Success | Stored                                                     | `0x0000`                     |
+| Warning | Stored, but the server changed or dropped something        | `0xB000`, `0xB006`, `0xB007` |
+| Failure | Not stored. The run continues with the next image          | `0xA7xx`, `0xA9xx`, `0xCxxx` |
+| NotSent | No response, for example association rejected or timed out |                              |
 
 ### Saving to disk
 
@@ -122,14 +117,14 @@ Each run gets a new `EX` folder, so nothing is overwritten. Saving again to the 
 
 ## Generated tags
 
-| Group | Values |
-|---|---|
+| Group      | Values                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | All images | Specific Character Set, SOP Class and Instance UID, Patient (Name, ID, Birth Date, Sex, Age), Study (UID, Date, Time, ID, Accession Number, Referring Physician, Description), Series (Modality, UID, Number, Date, Time, Description, Body Part, Protocol), Equipment (Manufacturer `DCST4`, Model, Institution, Station, Serial Number, Software Version), Image (Instance Number, Content and Acquisition Date and Time, Image Type, Image Comments, Burned In Annotation `YES`, Lossy Image Compression `00`, Window Center and Width) |
-| CT | Frame of Reference, Patient Position, slice geometry, KVP, Tube Current, Exposure Time, Convolution Kernel, Rescale −1024 HU |
-| MR | Frame of Reference, Patient Position, slice geometry, Scanning Sequence, Sequence Variant, Scan Options, TR, TE, Echo Train Length, Flip Angle, Field Strength, Imaging Frequency |
-| CR | View Position, Imager Pixel Spacing, Patient Orientation, KVP, Exposure Time, Tube Current |
-| DX | As CR, plus Presentation Intent, Presentation LUT Shape, Pixel Intensity Relationship, Rescale, Detector Type, Image Laterality |
-| US | Single-frame grayscale B-mode (MONOCHROME2, 8 bits): Image Type with application and `0001`, Transducer Data and Type, Depth of Scan Field, Mechanical and Thermal Index, Sequence of Ultrasound Regions with calibration in cm |
+| CT         | Frame of Reference, Patient Position, slice geometry, KVP, Tube Current, Exposure Time, Convolution Kernel, Rescale −1024 HU                                                                                                                                                                                                                                                                                                                                                                                                               |
+| MR         | Frame of Reference, Patient Position, slice geometry, Scanning Sequence, Sequence Variant, Scan Options, TR, TE, Echo Train Length, Flip Angle, Field Strength, Imaging Frequency                                                                                                                                                                                                                                                                                                                                                          |
+| CR         | View Position, Imager Pixel Spacing, Patient Orientation, KVP, Exposure Time, Tube Current                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| DX         | As CR, plus Presentation Intent, Presentation LUT Shape, Pixel Intensity Relationship, Rescale, Detector Type, Image Laterality                                                                                                                                                                                                                                                                                                                                                                                                            |
+| US         | Single-frame grayscale B-mode (MONOCHROME2, 8 bits): Image Type with application and `0001`, Transducer Data and Type, Depth of Scan Field, Mechanical and Thermal Index, Sequence of Ultrasound Regions with calibration in cm                                                                                                                                                                                                                                                                                                            |
 
 Window Center and Width are calculated from the stored pixel values, so the burned-in text is readable when the image opens.
 
@@ -164,14 +159,23 @@ tools\              List refresh script
 
 Generation knows nothing about sending. The two meet at `IImageSource`, which supplies images lazily so that a long stack does not sit in memory. That leaves room for:
 
-| Possible addition | Where it plugs in |
-|---|---|
-| Sending existing files from a folder, with optional new UIDs | A new `IImageSource`. Sending does not change. |
-| Load testing (send N times, measure throughput) | Repeat `StoreRun` with a new source. `RunSummary` already has timing, bytes and images per second. |
-| Storage Commitment | `RunSummary.Results` keeps each image's SOP Class and Instance UID. |
-| MPPS | `ExamRequest` holds the study and series identity. `Network\` gets a new service. |
+| Possible addition                                            | Where it plugs in                                                                                  |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Sending existing files from a folder, with optional new UIDs | A new `IImageSource`. Sending does not change.                                                     |
+| Load testing (send N times, measure throughput)              | Repeat `StoreRun` with a new source. `RunSummary` already has timing, bytes and images per second. |
+| Storage Commitment                                           | `RunSummary.Results` keeps each image's SOP Class and Instance UID.                                |
+| MPPS                                                         | `ExamRequest` holds the study and series identity. `Network\` gets a new service.                  |
 
 To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog`.
+
+
+## Reporting Bugs & Feature Requests
+
+If you encounter any bugs or have an idea for a new feature, please open an issue in the [Issues](../../issues) section of this repository.
+
+- **Bugs:** Please provide steps to reproduce the issue and attach relevant logs if possible.
+- **Features:** Describe the desired functionality and how it would improve the tool.
+  
 
 ## Tests
 
@@ -220,29 +224,31 @@ DCMTK has no IOD validator, so this does not prove that every attribute an IOD r
 
 ## Dependencies
 
-| Package | Use | Licence |
-|---|---|---|
-| fo-dicom 5.2.6 | DICOM | MS-PL |
-| FoDicom.PureCodecs 0.5.1 | JPEG Lossless encoder. Managed code, no native DLL. Pre-1.0. | MS-PL |
-| Serilog | Logging | Apache-2.0 |
+| Package                  | Use                                                          | Licence    |
+| ------------------------ | ------------------------------------------------------------ | ---------- |
+| fo-dicom 5.2.6           | DICOM                                                        | MS-PL      |
+| FoDicom.PureCodecs 0.5.1 | JPEG Lossless encoder. Managed code, no native DLL. Pre-1.0. | MS-PL      |
+| Serilog                  | Logging                                                      | Apache-2.0 |
 
 ## Files
 
-| What | Where |
-|---|---|
-| Settings | `%LocalAppData%\DCST4\user.config` |
-| Log, kept for 7 days | `%LocalAppData%\DCST4\Logs\` |
+| What                 | Where                              |
+| -------------------- | ---------------------------------- |
+| Settings             | `%LocalAppData%\DCST4\user.config` |
+| Log, kept for 7 days | `%LocalAppData%\DCST4\Logs\`       |
 
 ## Changelog
 
 ### 1.1.0
 
 New:
+
 - Additional tags under File > Settings: a checklist of common tags with generated values, and custom tags by number or keyword, including private tags. Each gets a row on the Identifiers tab
 - Version check in the About window, which runs when the window opens
 - Setting to draw new Auto values after each run
 
 Changed:
+
 - Auto values now stay on screen after a run, so the exam can be looked up in PACS. Running again adds a new series to the same study
 - Image Comments now also holds the project's address
 - The About box links to the project, and the Help menu uses the short labels Help and About
@@ -250,6 +256,7 @@ Changed:
 ### 1.0.0
 
 New:
+
 - First version: generated CT, MR, CR, DX and US images with burned-in text, sent with C-STORE or saved to disk as a File-set with a DICOMDIR
 - Auto or manual values for all identifiers, with test personnummer from Skatteverket
 - Implicit VR LE, Explicit VR LE and JPEG Lossless, with optional fallback
