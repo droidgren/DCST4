@@ -17,7 +17,7 @@ namespace DCST4.Core.Generation
         public int BitsAllocated { get; set; }
         /// <summary>White in the image maps to this stored value.</summary>
         public int MaxStoredValue { get; set; }
-        /// <summary>Text burned into the top left corner, one entry per line. The first line is emphasised.</summary>
+        /// <summary>Text burned into the top left corner, one entry per line. Null or empty draws no text box.</summary>
         public IReadOnlyList<string> Lines { get; set; }
         /// <summary>Position in the stack, 0 for the first image.</summary>
         public int ImageIndex { get; set; }
@@ -34,7 +34,7 @@ namespace DCST4.Core.Generation
 
     /// <summary>
     /// Draws the visible test image. It is deliberately not image-like: it must be obvious at a glance that this is
-    /// a test image, and the burned-in text must be easy to compare with the tags in a PACS viewer.
+    /// a test image, and any burned-in text must be easy to compare with the tags in a PACS viewer.
     /// </summary>
     public static class PixelRenderer
     {

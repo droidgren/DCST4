@@ -27,6 +27,8 @@ namespace DCST4.Core.Generation
         public string StationName { get; set; }
         /// <summary>Tags added in Settings. A null value means Auto.</summary>
         public IList<AdditionalTagValue> AdditionalTags { get; set; }
+        /// <summary>Generated names lose their å, ä and ö, for a character set that cannot hold them. Manual values are not changed.</summary>
+        public bool AutoValuesInBasicAscii { get; set; }
     }
 
     /// <summary>The final values of one exam, Auto or manual. Series and SOP Instance UIDs stay null when each series or image gets its own.</summary>
@@ -107,7 +109,7 @@ namespace DCST4.Core.Generation
                 PatientId = patientId,
                 PatientSex = sex,
                 PatientBirthDate = manual.PatientBirthDate ?? number?.BirthDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? string.Empty,
-                PatientName = manual.PatientName ?? SwedishNames.Pick(nameRandom, sex),
+                PatientName = manual.PatientName ?? AutoText(manual, SwedishNames.Pick(nameRandom, sex)),
                 AccessionNumber = manual.AccessionNumber ?? IdentifierGenerator.AccessionNumber(accessionRandom, studyDate),
                 StudyId = manual.StudyId ?? IdentifierGenerator.StudyId(studyIdRandom),
                 StudyInstanceUid = manual.StudyInstanceUid ?? IdentifierGenerator.Uid(),
@@ -115,7 +117,7 @@ namespace DCST4.Core.Generation
                 SopInstanceUid = manual.SopInstanceUid,
                 StudyDateTime = studyDate,
                 StudyDateTimeIsAuto = manual.StudyDateTime == null,
-                ReferringPhysicianName = manual.ReferringPhysicianName ?? SwedishNames.Pick(referringRandom, null),
+                ReferringPhysicianName = manual.ReferringPhysicianName ?? AutoText(manual, SwedishNames.Pick(referringRandom, null)),
                 StudyDescription = manual.StudyDescription ?? preset.StudyDescription,
                 SeriesDescription = manual.SeriesDescription ?? preset.SeriesDescription,
                 InstitutionName = manual.InstitutionName ?? DefaultInstitution,
@@ -134,12 +136,17 @@ namespace DCST4.Core.Generation
             {
                 var tag = item.Tag;
                 var common = CommonTagCatalog.Find(tag);
+                var generated = common?.Generate(new Random(seed ^ ((tag.Group << 16) | tag.Element)), preset);
                 var value = item.Value
-                    ?? common?.Generate(new Random(seed ^ ((tag.Group << 16) | tag.Element)), preset)
+                    ?? (generated == null ? null : AutoText(manual, generated))
                     ?? tag.DefaultValue;
                 resolved.Add(new AdditionalTagValue(tag, value));
             }
             return resolved;
         }
+
+        /// <summary>Applied after the draw, so that the character set changes the letters of a name and not who it is.</summary>
+        private static string AutoText(IdentityOverrides manual, string generated) =>
+            manual.AutoValuesInBasicAscii ? SwedishNames.ToAscii(generated) : generated;
     }
 }

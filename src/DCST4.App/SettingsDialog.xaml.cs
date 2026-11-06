@@ -1,6 +1,7 @@
 using DCST4.Core.Generation;
 using DCST4.Models;
 using DCST4.Properties;
+using FellowOakDicom;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -23,7 +24,17 @@ namespace DCST4
             public string Number => Common.Tag.Number + " " + Common.Tag.VrCode;
         }
 
+        /// <summary>A row in the checklist of tags to burn in.</summary>
+        private sealed class BurnInTagChoice
+        {
+            public DicomTag Tag { get; set; }
+            public bool IsChecked { get; set; }
+            public string Name => Tag.DictionaryEntry.Name;
+            public string Number => Tag.ToString();
+        }
+
         private readonly List<CommonTagChoice> _commonTags;
+        private readonly List<BurnInTagChoice> _burnInTags;
         private readonly ObservableCollection<AdditionalTag> _customTags = new ObservableCollection<AdditionalTag>();
 
         public SettingsDialog()
@@ -36,6 +47,11 @@ namespace DCST4
             LogDimseDatasets.IsChecked = s.Client_LogDimseDatasets;
             LogDataPDUs.IsChecked = s.Client_LogDataPDUs;
             NewValuesAfterRun.IsChecked = s.NewValuesAfterRun;
+            BurnInText.IsChecked = s.BurnInText;
+
+            var burnedIn = BurnedInTagCatalog.Parse(s.BurnInTags);
+            _burnInTags = BurnedInTagCatalog.All.Select(t => new BurnInTagChoice { Tag = t, IsChecked = burnedIn.Contains(t) }).ToList();
+            BurnInTagsList.ItemsSource = _burnInTags;
 
             var saved = ReadSavedTags(s.AdditionalTags);
             _commonTags = CommonTagCatalog.All
@@ -75,6 +91,8 @@ namespace DCST4
             s.Client_LogDimseDatasets = LogDimseDatasets.IsChecked == true;
             s.Client_LogDataPDUs = LogDataPDUs.IsChecked == true;
             s.NewValuesAfterRun = NewValuesAfterRun.IsChecked == true;
+            s.BurnInText = BurnInText.IsChecked == true;
+            s.BurnInTags = BurnedInTagCatalog.Format(_burnInTags.Where(c => c.IsChecked).Select(c => c.Tag));
             s.AdditionalTags = AdditionalTagSetting.Serialize(
                 _commonTags.Where(c => c.IsChecked).Select(c => c.Common.Tag).Concat(_customTags).Select(AdditionalTagSetting.From));
             s.Save();

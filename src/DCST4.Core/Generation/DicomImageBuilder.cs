@@ -12,7 +12,7 @@ namespace DCST4.Core.Generation
     /// <summary>Builds one complete DICOM image from an exam and its position in that exam.</summary>
     public static class DicomImageBuilder
     {
-        public const string TestImageComment = "DCST4 TEST IMAGE - NOT FOR DIAGNOSTIC USE - " + ProductInfo.ProjectUrl;
+        public const string TestImageComment = ProductInfo.ProjectUrl;
         private const string Manufacturer = "DCST4";
         private const string ManufacturerModel = "DCST4 Test Image Generator";
 
@@ -61,7 +61,7 @@ namespace DCST4.Core.Generation
             dataset.Add(DicomTag.SeriesDescription, series.SeriesDescription ?? string.Empty);
             dataset.Add(DicomTag.BodyPartExamined, preset.BodyPart ?? string.Empty);
             dataset.Add(DicomTag.ProtocolName, preset.ProtocolName ?? string.Empty);
-            if (modality is CtProfile || modality is MrProfile)
+            if (modality.UsesFrameOfReference)
             {
                 dataset.Add(DicomTag.PatientPosition, preset.PatientPosition);
                 dataset.Add(DicomTag.FrameOfReferenceUID, series.FrameOfReferenceUid);
@@ -84,8 +84,6 @@ namespace DCST4.Core.Generation
             dataset.Add(DicomTag.AcquisitionTime, Tm(contentTime));
             dataset.Add(DicomTag.ImageType, modality.ImageType(preset));
             dataset.Add(DicomTag.ImageComments, TestImageComment);
-            // The pixel data contains readable patient details, so this must say YES.
-            dataset.Add(DicomTag.BurnedInAnnotation, "YES");
             dataset.Add(DicomTag.LossyImageCompression, "00");
 
             var context = new ImageContext
@@ -102,14 +100,19 @@ namespace DCST4.Core.Generation
             // After the program's own tags, so that a custom tag can replace one such as Manufacturer. The rules keep it from the pixel description.
             foreach (var additional in id.AdditionalTags) AdditionalTagWriter.Write(dataset, additional);
 
-            AddPixels(dataset, request, series, imageIndex, contentTime);
+            AddPixels(dataset, request, imageIndex);
             return dataset;
         }
 
-        private static void AddPixels(DicomDataset dataset, ExamRequest request, SeriesContext series, int imageIndex, DateTime contentTime)
+        private static void AddPixels(DicomDataset dataset, ExamRequest request, int imageIndex)
         {
-            var id = request.Identity;
             var modality = request.Modality;
+
+            // Read here, after the additional tags, since one of those can replace a value that is shown.
+            var lines = BurnedInText.Lines(dataset, request.BurnedInTags);
+
+            // Only the text can say who the patient is: the watermark and the other graphics are the same for everybody.
+            dataset.Add(DicomTag.BurnedInAnnotation, lines.Count > 0 ? "YES" : "NO");
 
             var pixels = PixelRenderer.Render(new PixelRenderSpec
             {
@@ -119,19 +122,10 @@ namespace DCST4.Core.Generation
                 MaxStoredValue = modality.MaxStoredValue(request.BitsStored),
                 ImageIndex = imageIndex,
                 ImagesInSeries = request.ImagesPerSeries,
-                Lines = new[]
-                {
-                    "TEST IMAGE - NOT FOR DIAGNOSTIC USE",
-                    "Patient:   " + id.PatientName,
-                    "ID:        " + id.PatientId,
-                    "Accession: " + id.AccessionNumber,
-                    "Modality:  " + modality.Code + " " + request.Preset.Name,
-                    "Series:    " + (series.SeriesIndex + 1) + "  Instance: " + (imageIndex + 1) + "/" + request.ImagesPerSeries,
-                    "Time:      " + contentTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
-                },
+                Lines = lines,
             });
 
-            // The window comes from the pixels actually stored, or a viewer could open the image too dark to read the text.
+            // The window comes from the pixels actually stored, or a viewer could open the image too dark to see it.
             var intercept = modality.RescaleIntercept ?? 0;
             var low = pixels.MinValue + intercept;
             var high = pixels.MaxValue + intercept;

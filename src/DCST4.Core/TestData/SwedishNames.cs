@@ -1,5 +1,7 @@
 using System;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 
 namespace DCST4.Core.TestData
 {
@@ -40,6 +42,17 @@ namespace DCST4.Core.TestData
         }
 
         public static bool ContainsSwedishCharacter(string text) => text.Any(c => "åäöÅÄÖ".IndexOf(c) >= 0);
+
+        /// <summary>The same name without diacritics: Åström^Märta becomes Astrom^Marta.</summary>
+        public static string ToAscii(string name)
+        {
+            var result = new StringBuilder(name.Length);
+            foreach (var c in name.Normalize(NormalizationForm.FormD))
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark) result.Append(c);
+            }
+            return result.ToString();
+        }
 
         private static string Combine(Random random, string[] surnames, string[] firstNames) =>
             surnames[random.Next(surnames.Length)] + "^" + firstNames[random.Next(firstNames.Length)];

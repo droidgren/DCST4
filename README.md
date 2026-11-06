@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.2.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -12,12 +12,12 @@ Querying a Modality Worklist is out of scope: that is what [DMWLT4](https://gith
 ## Features
 
 - **Zero Dependencies:** Built on .NET 4.8 (included natively in Windows 10 and 11). No external runtime installation is required.
-- **Realistic exams:** CT and MR stacks, CR, DX and US images, with the tags their IODs require, consistent slice geometry and believable timestamps.
+- **Realistic exams:** CT, MR and PT stacks, CR, DX, US, XA, RF, MG and NM images, with the tags their IODs require, consistent slice geometry and believable timestamps.
 - **Everything is automatic, and everything can be overridden:** patient, accession number, study ID, UIDs, date and time. The fields show what the next run will use.
 - **Additional tags:** add common tags with generated values, or any custom tag, including private ones, under **File > Settings**.
 - **Official test patients:** random Patient IDs come only from Skatteverket's list of test personnummer. Birth date and sex follow from the number.
-- **Swedish names:** about 40% contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192.
-- **Visible verification:** patient name, patient ID, accession number, modality, series and instance number and timestamp are burned into the pixels, so you can compare them with the tags in the viewer.
+- **Swedish names:** about 40% contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192. An empty Specific Character Set (Basic ASCII) is also available, and random names then lose their diacritics.
+- **Optional burned-in text:** turn on a text box in the pixels and choose which tags it shows, so you can compare them with the tags in the viewer. It is off by default.
 - **Configurable images:** number of series and images, matrix from 64 to 4096, and 8 to 16 bits stored as the modality allows.
 - **Transfer syntaxes:** Implicit VR LE, Explicit VR LE, JPEG Lossless (Process 14 SV1).
 - **Full response logging:** status code, state, description, Error Comment, Offending Element and time for every image, including warnings and vendor-specific codes.
@@ -55,7 +55,7 @@ The program is not digitally signed, so you may see a **Windows protected your P
 2. On the **Exam** tab, select modality and exam type, and how many images you want. 1 series with 1 image gives a single test image.
 3. Optionally, enter your own values on the **Identifiers** tab by unticking **Auto**.
 4. Click **Generate & Send** and follow each image in **Results**.
-5. Compare the burned-in text with the tags in the PACS viewer.
+5. Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text first.
 
 F1 in the program opens the help.
 
@@ -64,6 +64,16 @@ F1 in the program opens the help.
 Auto values are drawn when the program starts and when you click **New values**. They stay on screen after a run, so the exam can be looked up in PACS.
 
 Running again without **New values** uses the same patient, accession number and Study UID, so the images arrive as a new series in the same study, also if you changed modality or exam type. Series numbers start at 1 again, and an Auto Study Date/Time is the time of each run. To draw new values after every run instead, tick **Draw new Auto values after each run** under **File > Settings**, on the **Identifiers** tab.
+
+### Burned-in text
+
+By default the images have no burned-in patient details. Under **File > Settings**, on the **Burned-in text** tab, you can turn on a black text box in the upper left corner of each image and tick which tags it shows: Patient's Name, Patient ID, Patient's Birth Date, Patient's Sex, Accession Number, Study ID, Study Date, Study Time, Study Description, Series Description, Body Part Examined, Modality, Series Number, Instance Number, Content Date, Content Time, Institution Name, Station Name and Referring Physician's Name.
+
+The values are read from the image's own tags and shown as they are stored, so a date reads `20261106`. Burned In Annotation is `YES` when text is drawn and `NO` otherwise. The diagonal TEST IMAGE watermark is always there.
+
+### Character sets
+
+The **Character set** list under **Exam** offers ISO_IR 100 (the default), ISO_IR 192 and **Empty value (Basic ASCII / ISO 646)**. Empty value writes Specific Character Set with zero length, which means the default repertoire. Random names and common additional tags then lose their diacritics, so `Åström` becomes `Astrom`, and a manual value with any other character than Basic ASCII stops the run with a message. A strict validator may object to the empty tag, since this Type 1C attribute should have a value when it is present.
 
 ### Additional tags
 
@@ -111,22 +121,26 @@ The selected folder becomes a DICOM File-set:
 
 DICOM limits each part of a file name to 8 upper-case characters with no extension, so the folders do not show patient details. The **Saved to** column shows where each image went.
 
-Each run gets a new `EX` folder, so nothing is overwritten. Saving again to the same folder adds to the same DICOMDIR, which is rebuilt from all files in the File-set when each run ends, also if the run was cancelled or sending failed. Each record states its own Specific Character Set, so exams in ISO_IR 100 and ISO_IR 192 can share a DICOMDIR.
+Each run gets a new `EX` folder, so nothing is overwritten. Saving again to the same folder adds to the same DICOMDIR, which is rebuilt from all files in the File-set when each run ends, also if the run was cancelled or sending failed. Each record states its own Specific Character Set, so exams in ISO_IR 100 and ISO_IR 192 can share a DICOMDIR. A record for an exam with an empty Specific Character Set leaves the tag out.
 
 ## Generated tags
 
 | Group      | Values                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| All images | Specific Character Set, SOP Class and Instance UID, Patient (Name, ID, Birth Date, Sex, Age), Study (UID, Date, Time, ID, Accession Number, Referring Physician, Description), Series (Modality, UID, Number, Date, Time, Description, Body Part, Protocol), Equipment (Manufacturer `DCST4`, Model, Institution, Station, Serial Number, Software Version), Image (Instance Number, Content and Acquisition Date and Time, Image Type, Image Comments, Burned In Annotation `YES`, Lossy Image Compression `00`, Window Center and Width) |
+| All images | Specific Character Set, SOP Class and Instance UID, Patient (Name, ID, Birth Date, Sex, Age), Study (UID, Date, Time, ID, Accession Number, Referring Physician, Description), Series (Modality, UID, Number, Date, Time, Description, Body Part, Protocol), Equipment (Manufacturer `DCST4`, Model, Institution, Station, Serial Number, Software Version), Image (Instance Number, Content and Acquisition Date and Time, Image Type, Image Comments, Burned In Annotation `YES` or `NO`, Lossy Image Compression `00`, Window Center and Width) |
 | CT         | Frame of Reference, Patient Position, slice geometry, KVP, Tube Current, Exposure Time, Convolution Kernel, Rescale −1024 HU                                                                                                                                                                                                                                                                                                                                                                                                               |
 | MR         | Frame of Reference, Patient Position, slice geometry, Scanning Sequence, Sequence Variant, Scan Options, TR, TE, Echo Train Length, Flip Angle, Field Strength, Imaging Frequency                                                                                                                                                                                                                                                                                                                                                          |
 | CR         | View Position, Imager Pixel Spacing, Patient Orientation, KVP, Exposure Time, Tube Current                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | DX         | As CR, plus Presentation Intent, Presentation LUT Shape, Pixel Intensity Relationship, Rescale, Detector Type, Image Laterality                                                                                                                                                                                                                                                                                                                                                                                                            |
 | US         | Single-frame grayscale B-mode (MONOCHROME2, 8 bits): Image Type with application and `0001`, Transducer Data and Type, Depth of Scan Field, Mechanical and Thermal Index, Sequence of Ultrasound Regions with calibration in cm                                                                                                                                                                                                                                                                                                            |
+| XA, RF     | Single frame: Image Type with `SINGLE PLANE`, Imager Pixel Spacing, Pixel Intensity Relationship, Radiation Setting, KVP, Tube Current, Exposure Time, Exposure, Positioner Primary and Secondary Angle |
+| MG         | As DX, For Presentation, plus Positioner Type, Organ Exposed, left or right CC or MLO view with Patient Orientation, and Anatomic Region and View Code Sequences |
+| PT         | Static stack with Frame of Reference, Patient Position and slice geometry, 16 bits: Units `BQML`, Counts Source, Series Type, Corrected Image, Decay Correction, Number of Slices, Image Index, Frame Reference Time, Actual Frame Duration, F-18 FDG in Radiopharmaceutical Information Sequence, Rescale |
+| NM         | Static image, one frame: Image Type with `STATIC` and `EMISSION`, Number of Frames, Frame Increment Pointer, Energy Window and Detector vectors and sequences, Tc-99m in Radiopharmaceutical Information Sequence, Counts Accumulated, Actual Frame Duration, Pixel Spacing |
 
-Window Center and Width are calculated from the stored pixel values, so the burned-in text is readable when the image opens.
+Window Center and Width are calculated from the stored pixel values, so the image and any burned-in text are readable when it opens.
 
-Image Comments is `DCST4 TEST IMAGE - NOT FOR DIAGNOSTIC USE - https://github.com/droidgren/DCST4`. No standard tag means "project URL". Image Comments is free text that viewers often show, and unlike Retrieve URL (0008,1190) it does not tell any system to fetch something from the address.
+Image Comments is `https://github.com/droidgren/DCST4`. No standard tag means "project URL". Image Comments is free text that viewers often show, and unlike Retrieve URL (0008,1190) it does not tell any system to fetch something from the address.
 
 ## Test personnummer
 
@@ -236,6 +250,20 @@ DCMTK has no IOD validator, so this does not prove that every attribute an IOD r
 | Log, kept for 7 days | `%LocalAppData%\DCST4\Logs\`       |
 
 ## Changelog
+
+### 1.2.0
+
+New:
+
+- Modalities XA, RF, MG, PT and NM, with their own exam types and the tags their IODs require
+- Setting to choose which tags are burned into the image, from a checklist under File > Settings
+- Empty value (Basic ASCII / ISO 646) in the Character set list. Random names then lose their diacritics, and manual values outside Basic ASCII stop the run with a message
+
+Changed:
+
+- The burned-in text box is now off by default, and can be turned on under File > Settings. Its fixed "TEST IMAGE - NOT FOR DIAGNOSTIC USE" line is gone, and the diagonal watermark stays
+- Burned In Annotation is now `NO` when no text is drawn
+- Image Comments now holds only the project's address
 
 ### 1.1.0
 

@@ -97,6 +97,14 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("")]
         public string AdditionalTags { get => (string)this[nameof(AdditionalTags)]; set => this[nameof(AdditionalTags)] = value; }
 
+        /// <summary>Draw the black text box with the tags below in the upper left corner of each image.</summary>
+        [UserScopedSetting, DefaultSettingValue("False")]
+        public bool BurnInText { get => (bool)this[nameof(BurnInText)]; set => this[nameof(BurnInText)] = value; }
+
+        /// <summary>The tags in the text box, as keywords. See BurnedInTagCatalog.</summary>
+        [UserScopedSetting, DefaultSettingValue(Core.Generation.BurnedInTagCatalog.DefaultKeywords)]
+        public string BurnInTags { get => (string)this[nameof(BurnInTags)]; set => this[nameof(BurnInTags)] = value; }
+
         // ------------------------------------------------------------ Output
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool SendImages { get => (bool)this[nameof(SendImages)]; set => this[nameof(SendImages)] = value; }

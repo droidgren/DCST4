@@ -187,11 +187,11 @@
                             </Grid>
                             <Label Grid.Row="2" Grid.Column="3" Content="Bits stored:"/>
                             <ComboBox Grid.Row="2" Grid.Column="4" ItemsSource="{Binding BitDepths}" SelectedItem="{Binding BitsStored, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
-                                      ToolTip="CT and MR require 16 bits allocated, so they have no 8-bit option"/>
+                                      ToolTip="The list shows what the selected modality's IOD allows"/>
 
                             <Label Grid.Row="3" Content="Character set:"/>
                             <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding CharacterSets}" SelectedItem="{Binding CharacterSet, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
-                                      ToolTip="Specific Character Set (0008,0005): ISO_IR 100 is Latin-1, ISO_IR 192 is UTF-8"/>
+                                      ToolTip="Specific Character Set (0008,0005): ISO_IR 100 is Latin-1, ISO_IR 192 is UTF-8. Empty value sends the tag with zero length, which means Basic ASCII, so Auto names lose their å, ä and ö"/>
                             <Label Grid.Row="3" Grid.Column="3" Content="Transfer syntax:"/>
                             <ComboBox Grid.Row="3" Grid.Column="4" ItemsSource="{Binding TransferSyntaxes}" SelectedItem="{Binding SelectedTransferSyntax, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"/>
 
