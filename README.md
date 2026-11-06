@@ -4,7 +4,7 @@
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
-Querying a Modality Worklist is out of scope: that is what [DMWLT4](https://github.com/droidgren/DMWLT4) is for.
+For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren/DMWLT4) .
 
 ![Main window after a run](screenshots/main.png)
 
