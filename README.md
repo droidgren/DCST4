@@ -25,7 +25,6 @@ Querying a Modality Worklist is out of scope: that is what [DMWLT4](https://gith
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
 
 
-
 ## Install
 
 You can choose between the installer and the portable version, and neither needs administrator rights.
