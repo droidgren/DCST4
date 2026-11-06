@@ -1,0 +1,366 @@
+using DCST4.Core.Generation;
+using DCST4.Core.Network;
+using DCST4.Core.Pipeline;
+using DCST4.Core.TestData;
+using DCST4.ViewModels;
+using FellowOakDicom;
+using FellowOakDicom.Network;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Threading;
+
+namespace DCST4.Tests
+{
+    /// <summary>Drives the real MainViewModel against the mock SCP. Settings stay in memory: SaveSettings is replaced.</summary>
+    internal static class ViewModelTests
+    {
+        private sealed class Harness
+        {
+            public readonly MainViewModel Vm;
+            public readonly List<string> Messages = new List<string>();
+            public int Saves;
+            public bool ConfirmAnswer = true;
+
+            public Harness(int port)
+            {
+                Vm = new MainViewModel
+                {
+                    ShowMessage = (message, icon, title) => Messages.Add(message),
+                    SaveSettings = () => Saves++,
+                };
+                Vm.Confirm = _ => ConfirmAnswer;
+                Vm.ServerHost = "127.0.0.1";
+                Vm.ServerPort = port;
+                Vm.ServerAET = "MOCKSCP";
+                Vm.CallingAET = "DCST4";
+                Vm.SendImages = true;
+                Vm.SaveImages = false;
+                Vm.AllowFallback = false;
+                Vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
+                Vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("MR");
+                Vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
+                Vm.SeriesCount = 1;
+                Vm.ImagesPerSeries = 1;
+                Vm.Rows = 64;
+                Vm.Columns = 64;
+                Vm.MinAge = 0;
+                Vm.MaxAge = 100;
+            }
+
+            /// <summary>Executes a command and waits until the view model is idle again.</summary>
+            public async Task Execute(System.Windows.Input.ICommand command, Action duringRun = null)
+            {
+                command.Execute(null);
+                var sw = Stopwatch.StartNew();
+                while (Vm.IsBusy && sw.Elapsed < TimeSpan.FromSeconds(60))
+                {
+                    duringRun?.Invoke();
+                    await Task.Delay(10);
+                }
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            }
+        }
+
+        public static void Run(int port, Action<string, bool, string> check)
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                var dispatcher = Dispatcher.CurrentDispatcher;
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
+                dispatcher.InvokeAsync(async () =>
+                {
+                    try { await RunAll(port, check); }
+                    catch (Exception ex) { failure = ex; }
+                    finally { dispatcher.InvokeShutdown(); }
+                });
+                Dispatcher.Run();
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw new InvalidOperationException("View model tests failed: " + failure, failure);
+        }
+
+        private static async Task RunAll(int port, Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nMain window view model");
+            var h = new Harness(port);
+            var vm = h.Vm;
+
+            // ------------------------------------------------ Auto by default
+            check("All identifier fields start on Auto", vm.IdentityFields.All(f => f.IsAuto), null);
+            check("Auto Patient ID is on the test list", TestPersonnummerRegistry.Default.Contains(vm.PatientIdField.Value), vm.PatientIdField.Value);
+            check("Preview shows the birth date of that number", vm.BirthDateField.Value == vm.PatientIdField.Value.Substring(0, 8), vm.BirthDateField.Value);
+            check("Preview has no warning", vm.IdentityMessage == null, vm.IdentityMessage);
+
+            // ------------------------------------------------ Manual values do not disturb the others
+            var id = vm.PatientIdField.Value;
+            var accession = vm.AccessionField.Value;
+            var studyUid = vm.StudyUidField.Value;
+            var name = vm.PatientNameField.Value;
+            var referring = vm.ReferringField.Value;
+            vm.StudyDescriptionField.IsAuto = false;
+            vm.StudyDescriptionField.Value = "Typing a description";
+            vm.PatientNameField.IsAuto = false;
+            vm.PatientNameField.Value = "Åström^Örjan";
+            check("A manual value leaves the Auto values alone",
+                vm.PatientIdField.Value == id && vm.AccessionField.Value == accession && vm.StudyUidField.Value == studyUid && vm.ReferringField.Value == referring,
+                $"{id}->{vm.PatientIdField.Value} {accession}->{vm.AccessionField.Value}");
+
+            vm.PatientNameField.IsAuto = true;
+            check("Back to Auto restores the generated name", vm.PatientNameField.Value == name, vm.PatientNameField.Value);
+            vm.PatientNameField.IsAuto = false;
+            check("Manual again restores what was typed", vm.PatientNameField.Value == "Åström^Örjan", vm.PatientNameField.Value);
+            vm.StudyDescriptionField.IsAuto = true;
+
+            vm.NewValuesCommand.Execute(null);
+            check("New values draws a new patient", vm.AccessionField.Value != accession && vm.StudyUidField.Value != studyUid, vm.AccessionField.Value);
+            check("New values keeps the manual value", vm.PatientNameField.Value == "Åström^Örjan" && !vm.PatientNameField.IsAuto, vm.PatientNameField.Value);
+            vm.PatientNameField.IsAuto = true;
+
+            // ------------------------------------------------ Personnummer follow-through and warnings
+            vm.PatientIdField.IsAuto = false;
+            vm.PatientIdField.Value = "189001019802";
+            check("Listed manual ID: no warning", vm.IdentityMessage == null, vm.IdentityMessage);
+            check("Manual personnummer fills birth date", vm.BirthDateField.Value == "18900101", vm.BirthDateField.Value);
+            check("Manual personnummer fills sex", vm.SexField.Value == "F", vm.SexField.Value);
+            vm.PatientIdField.Value = "NOT-ON-THE-LIST";
+            check("Unlisted manual ID: warning shown", (vm.IdentityMessage ?? string.Empty).Contains("Skatteverket"), vm.IdentityMessage);
+            check("Unreadable manual ID: birth date empty", vm.BirthDateField.Value == string.Empty, vm.BirthDateField.Value);
+            vm.PatientIdField.IsAuto = true;
+            check("Back to Auto clears the warning", vm.IdentityMessage == null, vm.IdentityMessage);
+
+            vm.MinAge = 500;
+            check("Impossible age range: explained", (vm.IdentityMessage ?? string.Empty).Contains("500"), vm.IdentityMessage);
+            h.Messages.Clear();
+            await h.Execute(vm.RunCommand);
+            check("Impossible age range: run does not start", h.Messages.Count == 1 && vm.Results.Count == 0, string.Join("; ", h.Messages));
+            vm.MinAge = 0;
+            check("Possible age range again: no message", vm.IdentityMessage == null, vm.IdentityMessage);
+
+            // ------------------------------------------------ Manual UID rules
+            vm.SeriesUidField.IsAuto = false;
+            check("Unticking Auto does not keep the explanatory text as a value", vm.SeriesUidField.Value == string.Empty, vm.SeriesUidField.Value);
+            vm.SeriesUidField.Value = DicomUID.Generate().UID;
+            vm.SeriesCount = 2;
+            check("Two series: Series UID forced back to Auto", vm.SeriesUidField.IsAuto && !vm.SeriesUidField.ManualAllowed, null);
+            check("Two series: tooltip explains why", vm.SeriesUidField.ToolTip.Contains("one series"), vm.SeriesUidField.ToolTip);
+            check("Two images: SOP UID not manual", !vm.SopUidField.ManualAllowed, null);
+            vm.SeriesCount = 1;
+            check("One series: Series UID can be manual again", vm.SeriesUidField.ManualAllowed && vm.SeriesUidField.ToolTip == vm.SeriesUidField.Hint, null);
+            check("One image: SOP UID can be manual", vm.SopUidField.ManualAllowed, null);
+            vm.ImagesPerSeries = 3;
+            check("Three images: SOP UID not manual", !vm.SopUidField.ManualAllowed, null);
+            vm.ImagesPerSeries = 1;
+
+            // ------------------------------------------------ Modality switching
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("MR");
+            check("MR: exam types follow", vm.Presets.Any(p => p.Name == "Knee") && vm.SelectedPreset.Name == "Brain T1", vm.SelectedPreset?.Name);
+            check("MR: no 8-bit option", !vm.BitDepths.Contains(8) && vm.BitsStored == 12, vm.BitsStored.ToString());
+            check("MR: matrix default", vm.Rows == 256 && vm.Columns == 256, vm.Rows.ToString());
+            check("MR: image count from the exam type", vm.ImagesPerSeries == 24, vm.ImagesPerSeries.ToString());
+            check("MR: station name follows", vm.StationField.Value == "DCST4-MR", vm.StationField.Value);
+            check("MR: description follows", vm.StudyDescriptionField.Value == "MR Brain", vm.StudyDescriptionField.Value);
+            vm.SelectedPreset = vm.Presets.First(p => p.Name == "Knee");
+            check("Knee: description follows", vm.StudyDescriptionField.Value == "MR Knee", vm.StudyDescriptionField.Value);
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("DX");
+            check("DX: 8-bit option", vm.BitDepths.Contains(8), null);
+            check("DX: one image by default", vm.ImagesPerSeries == 1, vm.ImagesPerSeries.ToString());
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
+            check("US: is offered", vm.Modalities.Any(m => m.Code == "US"), null);
+            check("US: only 8 bits", vm.BitDepths.SequenceEqual(new[] { 8 }) && vm.BitsStored == 8, vm.BitsStored.ToString());
+            check("US: exam types follow", vm.Presets.Any(p => p.Name == "Thyroid") && vm.SelectedPreset.Name == "Abdomen", vm.SelectedPreset?.Name);
+            check("US: matrix default", vm.Rows == 600 && vm.Columns == 800, vm.Rows + "x" + vm.Columns);
+            check("US: station name follows", vm.StationField.Value == "DCST4-US", vm.StationField.Value);
+            vm.ImagesPerSeries = 2;
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            check("US: a real run reaches the SCP", Scp.StoreCount == 2 && Scp.Received.All(r => r.Dataset.GetString(DicomTag.Modality) == "US"), vm.LastRunText);
+
+            // ------------------------------------------------ A full run
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
+            vm.Rows = 64;
+            vm.Columns = 64;
+            vm.ImagesPerSeries = 12;
+            vm.PatientNameField.IsAuto = false;
+            vm.PatientNameField.Value = "Åström^Örjan";
+            vm.AccessionField.IsAuto = false;
+            vm.AccessionField.Value = "ACC-VM-1";
+            vm.CharacterSet = DicomCharacterSets.Utf8;
+            var previewId = vm.PatientIdField.Value;
+
+            Scp.Reset();
+            h.Messages.Clear();
+            await h.Execute(vm.RunCommand);
+            check("Run: all images get a row", vm.Results.Count == 12, vm.Results.Count.ToString());
+            check("Run: SCP received them", Scp.StoreCount == 12, Scp.StoreCount.ToString());
+            check("Run: progress reaches the end", vm.ProgressValue == 12 && vm.ProgressMaximum == 12, vm.ProgressValue + "/" + vm.ProgressMaximum);
+            check("Run: no dialog", h.Messages.Count == 0, string.Join("; ", h.Messages));
+            check("Run: finished status", vm.StatusText == "Run finished.", vm.StatusText);
+            check("Run: summary shown", vm.LastRunText.Contains("12 ok"), vm.LastRunText);
+            var first = Scp.Received.First().Dataset;
+            check("Run: manual name arrives unchanged", first.GetString(DicomTag.PatientName) == "Åström^Örjan", first.GetString(DicomTag.PatientName));
+            check("Run: selected character set used", first.GetString(DicomTag.SpecificCharacterSet) == DicomCharacterSets.Utf8, first.GetString(DicomTag.SpecificCharacterSet));
+            check("Run: manual accession arrives", first.GetString(DicomTag.AccessionNumber) == "ACC-VM-1", first.GetString(DicomTag.AccessionNumber));
+            check("Run: the previewed Patient ID is what is sent", first.GetString(DicomTag.PatientID) == previewId, first.GetString(DicomTag.PatientID));
+            var studyDate = first.GetString(DicomTag.StudyDate);
+            check("Run: Auto study date is today", studyDate == DateTime.Now.ToString("yyyyMMdd"), studyDate);
+            check("Run: Auto values are new afterwards", vm.PatientIdField.Value != previewId, vm.PatientIdField.Value);
+            check("Run: manual values stay", vm.AccessionField.Value == "ACC-VM-1", vm.AccessionField.Value);
+
+            vm.AccessionField.IsAuto = true;
+            vm.PatientNameField.IsAuto = true;
+            vm.CharacterSet = DicomCharacterSets.Latin1;
+
+            // ------------------------------------------------ A failing run reports without interrupting
+            Scp.Reset();
+            Scp.StatusFor = i => i % 2 == 0 ? DicomStatus.StorageStorageOutOfResources : DicomStatus.Success;
+            h.Messages.Clear();
+            vm.ImagesPerSeries = 4;
+            await h.Execute(vm.RunCommand);
+            check("Failure statuses: no dialog", h.Messages.Count == 0, string.Join("; ", h.Messages));
+            check("Failure statuses: rows show them", vm.Results.Count(r => r.State == StoreState.Failure) == 2, vm.LastRunText);
+
+            Scp.Reset();
+            Scp.RejectAssociation = true;
+            h.Messages.Clear();
+            await h.Execute(vm.RunCommand);
+            check("Rejected association: no dialog", h.Messages.Count == 0, string.Join("; ", h.Messages));
+            check("Rejected association: status says why", vm.StatusText.StartsWith("Run stopped") && vm.StatusText.IndexOf("reject", StringComparison.OrdinalIgnoreCase) >= 0, vm.StatusText);
+
+            // ------------------------------------------------ Input that blocks a run
+            Scp.Reset();
+            h.Messages.Clear();
+            vm.PatientNameField.IsAuto = false;
+            vm.PatientNameField.Value = "Łukasz^Żak";
+            await h.Execute(vm.RunCommand);
+            check("Name ISO_IR 100 cannot hold: blocked with a message", h.Messages.Count == 1 && h.Messages[0].Contains("ISO_IR 100") && Scp.AssociationCount == 0, string.Join("; ", h.Messages));
+            vm.PatientNameField.IsAuto = true;
+
+            h.Messages.Clear();
+            vm.StudyDateTimeField.IsAuto = false;
+            vm.StudyDateTimeField.Value = "yesterday";
+            check("Bad study time: explained at once", (vm.IdentityMessage ?? string.Empty).Contains("yyyy-MM-dd"), vm.IdentityMessage);
+            await h.Execute(vm.RunCommand);
+            check("Bad study time: blocked", h.Messages.Count == 1 && Scp.AssociationCount == 0, string.Join("; ", h.Messages));
+            vm.StudyDateTimeField.Value = "2024-03-05 08:09:10";
+            Scp.Reset();
+            vm.ImagesPerSeries = 1;
+            await h.Execute(vm.RunCommand);
+            check("Manual study time arrives", Scp.Received.Single().Dataset.GetString(DicomTag.StudyDate) == "20240305" && Scp.Received.Single().Dataset.GetString(DicomTag.StudyTime).StartsWith("080910"), Scp.Received.Single().Dataset.GetString(DicomTag.StudyTime));
+            vm.StudyDateTimeField.IsAuto = true;
+
+            h.Messages.Clear();
+            vm.CallingAET = new string('A', 17);
+            await h.Execute(vm.DicomEchoCommand);
+            check("Over-long AE title: echo blocked", h.Messages.Count == 1 && h.Messages[0].Contains("16"), string.Join("; ", h.Messages));
+            vm.CallingAET = "DCST4";
+
+            vm.SendImages = false;
+            vm.SaveImages = false;
+            h.Messages.Clear();
+            Scp.Reset();
+            await h.Execute(vm.RunCommand);
+            check("Neither send nor save: blocked", h.Messages.Count == 1 && Scp.AssociationCount == 0, string.Join("; ", h.Messages));
+
+            // ------------------------------------------------ Save only
+            var folder = Path.Combine(Path.GetTempPath(), "DCST4VmTest_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                vm.SaveImages = true;
+                vm.SaveFolder = folder;
+                check("Run button says what it does", vm.RunButtonText == "Generate & Save", vm.RunButtonText);
+                h.Messages.Clear();
+                Scp.Reset();
+                vm.ImagesPerSeries = 2;
+                await h.Execute(vm.RunCommand);
+                check("Save only: files written, nothing sent", Directory.GetFiles(Path.Combine(folder, "DICOM"), "*", SearchOption.AllDirectories).Length == 2 && Scp.AssociationCount == 0, vm.StatusText);
+                check("Save only: DICOMDIR is written and named in the status", File.Exists(Path.Combine(folder, "DICOMDIR")) && vm.StatusText.Contains("DICOMDIR"), vm.StatusText);
+                check("Save only: rows show the state", vm.Results.All(r => r.State == StoreState.Saved && r.SavedPath != null), vm.LastRunText);
+            }
+            finally
+            {
+                if (Directory.Exists(folder)) Directory.Delete(folder, true);
+            }
+            vm.SaveImages = false;
+            vm.SendImages = true;
+            check("Run button returns to sending", vm.RunButtonText == "Generate & Send", vm.RunButtonText);
+
+            // ------------------------------------------------ Echo and cancel
+            h.Messages.Clear();
+            Scp.Reset();
+            await h.Execute(vm.DicomEchoCommand);
+            check("Echo: result shown to the user", h.Messages.Count == 1 && h.Messages[0].Contains("successful"), string.Join("; ", h.Messages));
+            check("Echo: status has no worklist prefix", vm.StatusText.StartsWith("Echo successful"), vm.StatusText);
+
+            h.Messages.Clear();
+            Scp.Reset();
+            Scp.ResponseDelayMs = 100;
+            vm.ImagesPerSeries = 100;
+            var cancelled = false;
+            await h.Execute(vm.RunCommand, () =>
+            {
+                if (!cancelled && vm.Results.Count >= 2 && vm.CancelCommand.CanExecute(null))
+                {
+                    cancelled = true;
+                    vm.CancelCommand.Execute(null);
+                }
+            });
+            check("Cancel: run stops early", cancelled && Scp.StoreCount < 100, Scp.StoreCount.ToString());
+            check("Cancel: status says so", vm.StatusText.StartsWith("Run cancelled"), vm.StatusText);
+            check("Cancel: no dialog", h.Messages.Count == 0, string.Join("; ", h.Messages));
+            check("Cancel: idle again", !vm.IsBusy && vm.RunCommand.CanExecute(null), null);
+            vm.ImagesPerSeries = 1;
+            Scp.ResponseDelayMs = 0;
+
+            // ------------------------------------------------ Profiles
+            foreach (var existing in vm.Profiles.ToList())
+            {
+                vm.SelectedProfile = existing;
+                vm.ProfileName = existing.Name;
+                vm.DeleteProfileCommand.Execute(null);
+            }
+            h.Saves = 0;
+            h.Messages.Clear();
+            vm.ProfileName = string.Empty;
+            vm.SaveProfileCommand.Execute(null);
+            check("Profile without a name: asks for one", h.Messages.Count == 1 && vm.Profiles.Count == 0, string.Join("; ", h.Messages));
+
+            vm.CallingAET = "CALLER1";
+            vm.ServerAET = "PACS1";
+            vm.ServerHost = "host-one";
+            vm.ServerPort = 11112;
+            vm.ProfileName = "Test PACS";
+            vm.SaveProfileCommand.Execute(null);
+            check("Profile saved", vm.Profiles.Count == 1 && vm.Profiles[0].Name == "Test PACS", vm.Profiles.Count.ToString());
+            check("Profile saved to disk at once", h.Saves == 1, h.Saves.ToString());
+
+            vm.CallingAET = "CALLER2";
+            vm.ServerAET = "PACS2";
+            vm.ServerHost = "host-two";
+            vm.ServerPort = 104;
+            vm.ProfileName = "Another";
+            vm.SaveProfileCommand.Execute(null);
+            check("Profiles are sorted", vm.Profiles.Select(p => p.Name).SequenceEqual(new[] { "Another", "Test PACS" }), string.Join(",", vm.Profiles.Select(p => p.Name)));
+
+            vm.SelectedProfile = vm.Profiles.First(p => p.Name == "Test PACS");
+            check("Selecting a profile fills the destination", vm.CallingAET == "CALLER1" && vm.ServerAET == "PACS1" && vm.ServerHost == "host-one" && vm.ServerPort == 11112, vm.ServerHost);
+
+            vm.ProfileName = "Test PACS";
+            h.ConfirmAnswer = false;
+            vm.DeleteProfileCommand.Execute(null);
+            check("Delete needs confirmation", vm.Profiles.Count == 2, vm.Profiles.Count.ToString());
+            h.ConfirmAnswer = true;
+            vm.DeleteProfileCommand.Execute(null);
+            check("Confirmed delete removes it", vm.Profiles.Count == 1 && vm.Profiles[0].Name == "Another", vm.Profiles.Count.ToString());
+            check("Delete saved to disk at once", h.Saves == 3, h.Saves.ToString());
+        }
+    }
+}

@@ -1,0 +1,28 @@
+<Window x:Class="DCST4.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="518"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <StackPanel Margin="15">
+        <TextBlock x:Name="NameText" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
+        <TextBlock Text="A tool for testing a PACS or any DICOM Storage SCP" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+        <TextBlock Text="{Binding Version}" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+
+        <Grid Margin="0,20,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Image Source="/VGR.png" Width="162" Height="47" Opacity="0.75" HorizontalAlignment="Center"/>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Company}" HorizontalAlignment="Center"/>
+                <TextBlock Text="{Binding Copyright}" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+        <Button Content="OK" Width="75" Height="23" HorizontalAlignment="Center" Click="Ok_Click" IsDefault="True" IsCancel="True" Margin="0,20,0,0"/>
+    </StackPanel>
+</Window>

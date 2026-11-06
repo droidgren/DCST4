@@ -1,0 +1,775 @@
+using DCST4.Core.Generation;
+using DCST4.Core.Generation.Modalities;
+using DCST4.Core.Network;
+using DCST4.Core.Pipeline;
+using DCST4.Infrastructure;
+using DCST4.Models;
+using DCST4.Properties;
+using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Globalization;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Threading;
+
+namespace DCST4.ViewModels
+{
+    /// <summary>The main window. Generating and sending live in DCST4.Core; this class only connects them to the screen.</summary>
+    public sealed class MainViewModel : INotifyPropertyChanged
+    {
+        private const int MaxLogLines = 5000;
+        private const string StudyDateTimeFormat = "yyyy-MM-dd HH:mm:ss";
+
+        private readonly ILogger _logger = Log.ForContext<MainViewModel>();
+        private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
+        private readonly DispatcherTimer _logTimer;
+        private CancellationTokenSource _cts;
+        private int _previewSeed = Environment.TickCount;
+        private string _previewStudyUid;
+        private ExamIdentity _identity;
+        private bool _loading = true;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+
+        #region Properties - Connection
+        private string _callingAET;
+        public string CallingAET { get => _callingAET; set { _callingAET = value; OnPropertyChanged(); Settings.Default.CallingAET = value; } }
+
+        private string _serverAET;
+        public string ServerAET { get => _serverAET; set { _serverAET = value; OnPropertyChanged(); Settings.Default.ServerAET = value; } }
+
+        private string _serverHost;
+        public string ServerHost { get => _serverHost; set { _serverHost = value; OnPropertyChanged(); Settings.Default.ServerHost = value; } }
+
+        private int _serverPort;
+        public int ServerPort { get => _serverPort; set { _serverPort = value; OnPropertyChanged(); Settings.Default.ServerPort = value; } }
+
+        private bool _useTLS;
+        public bool UseTLS { get => _useTLS; set { _useTLS = value; OnPropertyChanged(); Settings.Default.UseTLS = value; } }
+
+        private bool _tlsIgnoreCertErrors;
+        /// <summary>Accept self-signed or otherwise invalid server certificates.</summary>
+        public bool TlsIgnoreCertErrors { get => _tlsIgnoreCertErrors; set { _tlsIgnoreCertErrors = value; OnPropertyChanged(); Settings.Default.TlsIgnoreCertErrors = value; } }
+
+        private string _tlsClientCertThumbprint;
+        /// <summary>Thumbprint of the client certificate in CurrentUser\My, or empty for none.</summary>
+        public string TlsClientCertThumbprint
+        {
+            get => _tlsClientCertThumbprint;
+            set { _tlsClientCertThumbprint = value ?? string.Empty; OnPropertyChanged(); Settings.Default.TlsClientCertThumbprint = _tlsClientCertThumbprint; }
+        }
+        #endregion
+
+        #region Properties - Profiles
+        public ObservableCollection<ConnectionProfile> Profiles { get; } = new ObservableCollection<ConnectionProfile>();
+
+        private string _profileName = string.Empty;
+        /// <summary>Text of the editable profile combo box: the name used by Save.</summary>
+        public string ProfileName { get => _profileName; set { _profileName = value ?? string.Empty; OnPropertyChanged(); } }
+
+        private ConnectionProfile _selectedProfile;
+        /// <summary>Selecting a profile copies its values into the connection fields.</summary>
+        public ConnectionProfile SelectedProfile
+        {
+            get => _selectedProfile;
+            set
+            {
+                if (ReferenceEquals(_selectedProfile, value)) return;
+                _selectedProfile = value;
+                OnPropertyChanged();
+                if (value != null) ApplyProfile(value);
+            }
+        }
+        #endregion
+
+        #region Properties - Exam
+        public IReadOnlyList<ModalityProfile> Modalities => ModalityCatalog.All;
+        public IReadOnlyList<string> CharacterSets { get; } = new[] { DicomCharacterSets.Latin1, DicomCharacterSets.Utf8 };
+        public IReadOnlyList<TransferSyntaxOption> TransferSyntaxes => TransferSyntaxOption.All;
+        public ObservableCollection<ExamPreset> Presets { get; } = new ObservableCollection<ExamPreset>();
+        public ObservableCollection<int> BitDepths { get; } = new ObservableCollection<int>();
+
+        private ModalityProfile _selectedModality;
+        public ModalityProfile SelectedModality
+        {
+            get => _selectedModality;
+            set
+            {
+                if (value == null || ReferenceEquals(_selectedModality, value)) return;
+                _selectedModality = value;
+                OnPropertyChanged();
+                Settings.Default.Modality = value.Code;
+                FillModalityLists();
+                if (!_loading)
+                {
+                    Rows = value.DefaultRows;
+                    Columns = value.DefaultColumns;
+                    BitsStored = value.DefaultBitDepth;
+                    SelectedPreset = value.Presets[0];
+                }
+            }
+        }
+
+        private ExamPreset _selectedPreset;
+        public ExamPreset SelectedPreset
+        {
+            get => _selectedPreset;
+            set
+            {
+                if (value == null || ReferenceEquals(_selectedPreset, value)) return;
+                _selectedPreset = value;
+                OnPropertyChanged();
+                Settings.Default.ExamType = value.Name;
+                if (!_loading)
+                {
+                    ImagesPerSeries = value.DefaultImages;
+                    RefreshPreview();
+                }
+            }
+        }
+
+        private int _seriesCount;
+        public int SeriesCount { get => _seriesCount; set { _seriesCount = value; OnPropertyChanged(); OnPropertyChanged(nameof(TotalImagesText)); Settings.Default.SeriesCount = value; UpdateManualUidRules(); } }
+
+        private int _imagesPerSeries;
+        public int ImagesPerSeries { get => _imagesPerSeries; set { _imagesPerSeries = value; OnPropertyChanged(); OnPropertyChanged(nameof(TotalImagesText)); Settings.Default.ImagesPerSeries = value; UpdateManualUidRules(); } }
+
+        public string TotalImagesText => $"{Math.Max(0, (long)_seriesCount * _imagesPerSeries)} images in total";
+
+        private int _rows;
+        public int Rows { get => _rows; set { _rows = value; OnPropertyChanged(); Settings.Default.Rows = value; } }
+
+        private int _columns;
+        public int Columns { get => _columns; set { _columns = value; OnPropertyChanged(); Settings.Default.Columns = value; } }
+
+        private int _bitsStored;
+        public int BitsStored { get => _bitsStored; set { _bitsStored = value; OnPropertyChanged(); Settings.Default.BitsStored = value; } }
+
+        private string _characterSet;
+        public string CharacterSet { get => _characterSet; set { _characterSet = value; OnPropertyChanged(); Settings.Default.CharacterSet = value; } }
+
+        private TransferSyntaxOption _selectedTransferSyntax;
+        public TransferSyntaxOption SelectedTransferSyntax
+        {
+            get => _selectedTransferSyntax;
+            set
+            {
+                if (value == null) return;
+                _selectedTransferSyntax = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(FallbackIsRelevant));
+                Settings.Default.TransferSyntax = value.Syntax.UID.UID;
+            }
+        }
+
+        private bool _allowFallback;
+        public bool AllowFallback { get => _allowFallback; set { _allowFallback = value; OnPropertyChanged(); Settings.Default.AllowFallback = value; } }
+
+        /// <summary>With Implicit VR selected there is nothing to fall back to.</summary>
+        public bool FallbackIsRelevant => !ReferenceEquals(_selectedTransferSyntax, TransferSyntaxOption.ImplicitVrLe);
+
+        private int _minAge;
+        public int MinAge { get => _minAge; set { _minAge = value; OnPropertyChanged(); Settings.Default.MinAge = value; RefreshPreview(); } }
+
+        private int _maxAge;
+        public int MaxAge { get => _maxAge; set { _maxAge = value; OnPropertyChanged(); Settings.Default.MaxAge = value; RefreshPreview(); } }
+        #endregion
+
+        #region Properties - Identifiers
+        public ObservableCollection<IdentityFieldViewModel> IdentityFields { get; } = new ObservableCollection<IdentityFieldViewModel>();
+
+        public IdentityFieldViewModel PatientNameField { get; }
+        public IdentityFieldViewModel PatientIdField { get; }
+        public IdentityFieldViewModel BirthDateField { get; }
+        public IdentityFieldViewModel SexField { get; }
+        public IdentityFieldViewModel AccessionField { get; }
+        public IdentityFieldViewModel StudyIdField { get; }
+        public IdentityFieldViewModel StudyUidField { get; }
+        public IdentityFieldViewModel SeriesUidField { get; }
+        public IdentityFieldViewModel SopUidField { get; }
+        public IdentityFieldViewModel StudyDateTimeField { get; }
+        public IdentityFieldViewModel ReferringField { get; }
+        public IdentityFieldViewModel StudyDescriptionField { get; }
+        public IdentityFieldViewModel SeriesDescriptionField { get; }
+        public IdentityFieldViewModel InstitutionField { get; }
+        public IdentityFieldViewModel StationField { get; }
+
+        private string _identityMessage;
+        /// <summary>Warning or problem shown under the identifiers, or null.</summary>
+        public string IdentityMessage { get => _identityMessage; private set { _identityMessage = value; OnPropertyChanged(); } }
+        #endregion
+
+        #region Properties - Output and results
+        private bool _sendImages;
+        public bool SendImages { get => _sendImages; set { _sendImages = value; OnPropertyChanged(); OnPropertyChanged(nameof(RunButtonText)); Settings.Default.SendImages = value; } }
+
+        private bool _saveImages;
+        public bool SaveImages { get => _saveImages; set { _saveImages = value; OnPropertyChanged(); OnPropertyChanged(nameof(RunButtonText)); Settings.Default.SaveImages = value; } }
+
+        private string _saveFolder;
+        public string SaveFolder { get => _saveFolder; set { _saveFolder = value ?? string.Empty; OnPropertyChanged(); Settings.Default.SaveFolder = _saveFolder; } }
+
+        public string RunButtonText => _saveImages && !_sendImages ? "Generate & Save" : "Generate & Send";
+
+        public ObservableCollection<StoreResult> Results { get; } = new ObservableCollection<StoreResult>();
+        public ObservableCollection<string> LogLines { get; } = new ObservableCollection<string>();
+
+        private string _statusText = "Ready.";
+        public string StatusText { get => _statusText; private set { _statusText = value; OnPropertyChanged(); } }
+
+        private string _lastRunText = string.Empty;
+        public string LastRunText { get => _lastRunText; private set { _lastRunText = value; OnPropertyChanged(); } }
+
+        private int _progressMaximum = 1;
+        public int ProgressMaximum { get => _progressMaximum; private set { _progressMaximum = value; OnPropertyChanged(); } }
+
+        private int _progressValue;
+        public int ProgressValue { get => _progressValue; private set { _progressValue = value; OnPropertyChanged(); } }
+
+        private bool _isBusy;
+        public bool IsBusy
+        {
+            get => _isBusy;
+            private set
+            {
+                _isBusy = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsIdle));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+        public bool IsIdle => !_isBusy;
+        #endregion
+
+        #region Replaceable for tests
+        /// <summary>Shows a message. Message boxes are only used for things the user started directly and before a run, never during one.</summary>
+        public Action<string, MessageBoxImage, string> ShowMessage { get; set; } = (message, icon, title) =>
+            MessageBox.Show(message, title ?? DefaultTitle(icon), MessageBoxButton.OK, icon);
+
+        /// <summary>Asks the user a yes/no question.</summary>
+        public Func<string, bool> Confirm { get; set; } = message =>
+            MessageBox.Show(message, "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+        /// <summary>Writes the settings to disk.</summary>
+        public Action SaveSettings { get; set; } = () => Settings.Default.Save();
+
+        private static string DefaultTitle(MessageBoxImage icon)
+        {
+            switch (icon)
+            {
+                case MessageBoxImage.Error: return "Error";
+                case MessageBoxImage.Warning: return "Warning";
+                default: return "Information";
+            }
+        }
+        #endregion
+
+        public ICommand PingCommand { get; }
+        public ICommand DicomEchoCommand { get; }
+        public ICommand RunCommand { get; }
+        public ICommand CancelCommand { get; }
+        public ICommand NewValuesCommand { get; }
+        public ICommand SaveProfileCommand { get; }
+        public ICommand DeleteProfileCommand { get; }
+        public ICommand ClearLogCommand { get; }
+
+        public MainViewModel()
+        {
+            Action changed = RefreshPreview;
+            PatientNameField = new IdentityFieldViewModel("Patient Name", "Surname^Firstname. Auto: invented Swedish name, sometimes with å, ä or ö.", changed);
+            PatientIdField = new IdentityFieldViewModel("Patient ID", "Auto: from Skatteverket's official test personnummer.", changed);
+            BirthDateField = new IdentityFieldViewModel("Birth Date", "YYYYMMDD. Auto: from the personnummer.", changed);
+            SexField = new IdentityFieldViewModel("Sex", "M, F or O. Auto: from the personnummer.", changed);
+            AccessionField = new IdentityFieldViewModel("Accession No", "At most 16 characters.", changed);
+            StudyIdField = new IdentityFieldViewModel("Study ID", "At most 16 characters.", changed);
+            StudyUidField = new IdentityFieldViewModel("Study UID", "Digits and dots, at most 64 characters.", changed);
+            SeriesUidField = new IdentityFieldViewModel("Series UID", "Digits and dots, at most 64 characters. Auto: one per series.", changed);
+            SopUidField = new IdentityFieldViewModel("SOP Instance UID", "Digits and dots, at most 64 characters. Auto: one per image.", changed);
+            StudyDateTimeField = new IdentityFieldViewModel("Study Date/Time", StudyDateTimeFormat + ". Auto: the exam ends when the run starts.", changed);
+            ReferringField = new IdentityFieldViewModel("Referring Phys.", "Surname^Firstname.", changed);
+            StudyDescriptionField = new IdentityFieldViewModel("Study Descr.", "Auto: from the exam type.", changed);
+            SeriesDescriptionField = new IdentityFieldViewModel("Series Descr.", "Auto: from the exam type.", changed);
+            InstitutionField = new IdentityFieldViewModel("Institution", "At most 64 characters.", changed);
+            StationField = new IdentityFieldViewModel("Station Name", "At most 16 characters.", changed);
+            foreach (var field in new[]
+            {
+                PatientNameField, PatientIdField, BirthDateField, SexField, AccessionField, StudyIdField, StudyUidField, SeriesUidField,
+                SopUidField, StudyDateTimeField, ReferringField, StudyDescriptionField, SeriesDescriptionField, InstitutionField, StationField,
+            })
+            {
+                IdentityFields.Add(field);
+            }
+
+            DicomEchoCommand = new RelayCommand(async _ => await RunBusyAsync(DoEchoAsync), _ => !IsBusy);
+            PingCommand = new RelayCommand(async _ => await RunBusyAsync(ct => DoPingAsync(), cancellable: false), _ => !IsBusy);
+            RunCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunAsync), _ => !IsBusy);
+            CancelCommand = new RelayCommand(_ => CancelOperation(), _ => _cts != null && !_cts.IsCancellationRequested);
+            NewValuesCommand = new RelayCommand(_ => GenerateNewValues(), _ => !IsBusy);
+            SaveProfileCommand = new RelayCommand(_ => SaveProfile(), _ => !IsBusy);
+            DeleteProfileCommand = new RelayCommand(_ => DeleteProfile(), _ => !IsBusy && FindProfile(ProfileName) != null);
+            ClearLogCommand = new RelayCommand(_ => LogLines.Clear());
+
+            LoadSettings();
+            LoadProfiles();
+            _loading = false;
+            UpdateManualUidRules();
+            GenerateNewValues();
+
+            _logTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(200), DispatcherPriority.Background, (s, e) => DrainLog(), _dispatcher);
+            _logTimer.Start();
+            _logger.Information("DCST4 started. Test personnummer: {source}", Core.TestData.TestPersonnummerRegistry.Default.SourceDescription);
+        }
+
+        #region Settings
+        private void LoadSettings()
+        {
+            var s = Settings.Default;
+            _callingAET = s.CallingAET ?? string.Empty;
+            _serverAET = s.ServerAET ?? string.Empty;
+            _serverHost = s.ServerHost ?? string.Empty;
+            _serverPort = s.ServerPort;
+            _useTLS = s.UseTLS;
+            _tlsIgnoreCertErrors = s.TlsIgnoreCertErrors;
+            _tlsClientCertThumbprint = s.TlsClientCertThumbprint ?? string.Empty;
+
+            SelectedModality = ModalityCatalog.Find(s.Modality) ?? ModalityCatalog.All[0];
+            SelectedPreset = _selectedModality.Presets.FirstOrDefault(p => p.Name == s.ExamType) ?? _selectedModality.Presets[0];
+
+            _seriesCount = Math.Max(1, s.SeriesCount);
+            // 0 means never set: use the modality's and exam type's own defaults.
+            _imagesPerSeries = s.ImagesPerSeries > 0 ? s.ImagesPerSeries : _selectedPreset.DefaultImages;
+            _rows = s.Rows > 0 ? s.Rows : _selectedModality.DefaultRows;
+            _columns = s.Columns > 0 ? s.Columns : _selectedModality.DefaultColumns;
+            _bitsStored = _selectedModality.BitDepths.Contains(s.BitsStored) ? s.BitsStored : _selectedModality.DefaultBitDepth;
+
+            _characterSet = CharacterSets.Contains(s.CharacterSet) ? s.CharacterSet : DicomCharacterSets.Latin1;
+            _selectedTransferSyntax = TransferSyntaxOption.All.FirstOrDefault(o => o.Syntax.UID.UID == s.TransferSyntax) ?? TransferSyntaxOption.ExplicitVrLe;
+            _allowFallback = s.AllowFallback;
+            _minAge = s.MinAge;
+            _maxAge = s.MaxAge;
+            _sendImages = s.SendImages;
+            _saveImages = s.SaveImages;
+            _saveFolder = s.SaveFolder ?? string.Empty;
+        }
+
+        private void FillModalityLists()
+        {
+            Presets.Clear();
+            foreach (var preset in _selectedModality.Presets) Presets.Add(preset);
+            BitDepths.Clear();
+            foreach (var bits in _selectedModality.BitDepths) BitDepths.Add(bits);
+        }
+        #endregion
+
+        #region Busy handling
+        private async Task RunBusyAsync(Func<CancellationToken, Task> action, bool cancellable = true)
+        {
+            if (IsBusy) return;
+            var cts = cancellable ? new CancellationTokenSource() : null;
+            _cts = cts;
+            IsBusy = true;
+            try
+            {
+                await action(cts?.Token ?? CancellationToken.None);
+            }
+            finally
+            {
+                _cts = null;
+                cts?.Dispose();
+                IsBusy = false;
+            }
+        }
+
+        private void CancelOperation()
+        {
+            var cts = _cts;
+            if (cts == null || cts.IsCancellationRequested) return;
+            _logger.Information("Cancel requested by user");
+            StatusText = "Cancelling...";
+            cts.Cancel();
+            CommandManager.InvalidateRequerySuggested();
+        }
+        #endregion
+
+        #region Ping and echo
+        private DicomEndpoint BuildEndpoint() => new DicomEndpoint
+        {
+            Host = ServerHost,
+            Port = ServerPort,
+            CallingAe = CallingAET,
+            CalledAe = ServerAET,
+            UseTls = UseTLS,
+            TlsIgnoreCertErrors = TlsIgnoreCertErrors,
+            TlsClientCertThumbprint = TlsClientCertThumbprint,
+        }.Trimmed();
+
+        private static NetworkOptions BuildNetworkOptions()
+        {
+            var s = Settings.Default;
+            return new NetworkOptions
+            {
+                ConnectionTimeoutSeconds = s.ConnectionTimeoutSeconds,
+                AssociationTimeoutSeconds = s.AssociationTimeoutSeconds,
+                ResponseTimeoutSeconds = s.ResponseTimeoutSeconds,
+                LogDimseDatasets = s.Client_LogDimseDatasets,
+                LogDataPdus = s.Client_LogDataPDUs,
+            };
+        }
+
+        private async Task DoEchoAsync(CancellationToken token)
+        {
+            var endpoint = BuildEndpoint();
+            var problem = endpoint.Validate();
+            if (problem != null)
+            {
+                ShowMessage(problem, MessageBoxImage.Warning, null);
+                return;
+            }
+
+            StatusText = "Performing C-ECHO...";
+            var result = await EchoService.EchoAsync(endpoint, BuildNetworkOptions(), token);
+            StatusText = result.Message;
+            if (result.Outcome == ConnectivityOutcome.Success)
+            {
+                ShowMessage($"Connection to {endpoint.Host} successful.\nTime: {result.ElapsedMs} ms", MessageBoxImage.Information, null);
+            }
+            else if (result.Outcome == ConnectivityOutcome.Failed)
+            {
+                ShowMessage($"C-ECHO to {endpoint.Host}:\n{result.Message}", MessageBoxImage.Warning, null);
+            }
+        }
+
+        private async Task DoPingAsync()
+        {
+            var endpoint = BuildEndpoint();
+            var problem = endpoint.ValidateHost();
+            if (problem != null)
+            {
+                ShowMessage(problem, MessageBoxImage.Warning, null);
+                return;
+            }
+
+            StatusText = $"Pinging {endpoint.Host}...";
+            var result = await PingService.PingAsync(endpoint.Host);
+            StatusText = result.Message;
+            ShowMessage(result.Message, result.Outcome == ConnectivityOutcome.Success ? MessageBoxImage.Information : MessageBoxImage.Warning, "Ping Result");
+        }
+        #endregion
+
+        #region Identifiers
+        /// <summary>Draws a new set of Auto values: a new patient, new identifiers.</summary>
+        public void GenerateNewValues()
+        {
+            _previewSeed = Guid.NewGuid().GetHashCode();
+            _previewStudyUid = null;
+            RefreshPreview();
+        }
+
+        /// <summary>
+        /// Recalculates what the next run will use. The seed stays the same until new values are requested, so entering
+        /// one manual value does not change the others. Birth date and sex do follow a manually entered personnummer.
+        /// </summary>
+        private void RefreshPreview()
+        {
+            if (_loading || _selectedModality == null || _selectedPreset == null) return;
+
+            IdentityOverrides overrides;
+            var problems = ReadOverrides(out overrides);
+
+            try
+            {
+                var generator = new IdentityGenerator(random: new Random(_previewSeed));
+                _identity = generator.Generate(overrides, _selectedModality, _selectedPreset, _minAge, _maxAge);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // E.g. nobody on the list within the age range.
+                IdentityMessage = ex.Message;
+                _identity = null;
+                return;
+            }
+
+            if (StudyUidField.IsAuto)
+            {
+                _previewStudyUid = _previewStudyUid ?? _identity.StudyInstanceUid;
+                _identity.StudyInstanceUid = _previewStudyUid;
+            }
+
+            PatientNameField.ShowGenerated(_identity.PatientName);
+            PatientIdField.ShowGenerated(_identity.PatientId);
+            BirthDateField.ShowGenerated(_identity.PatientBirthDate);
+            SexField.ShowGenerated(_identity.PatientSex);
+            AccessionField.ShowGenerated(_identity.AccessionNumber);
+            StudyIdField.ShowGenerated(_identity.StudyId);
+            StudyUidField.ShowGenerated(_identity.StudyInstanceUid);
+            SeriesUidField.ShowGenerated("(generated for each series)");
+            SopUidField.ShowGenerated("(generated for each image)");
+            StudyDateTimeField.ShowGenerated("(now, when the run starts)");
+            ReferringField.ShowGenerated(_identity.ReferringPhysicianName);
+            StudyDescriptionField.ShowGenerated(_identity.StudyDescription);
+            SeriesDescriptionField.ShowGenerated(_identity.SeriesDescription);
+            InstitutionField.ShowGenerated(_identity.InstitutionName);
+            StationField.ShowGenerated(_identity.StationName);
+
+            if (problems.Count == 0)
+            {
+                problems.AddRange(ExamValidator.Warnings(new ExamRequest { Identity = _identity }));
+            }
+            IdentityMessage = problems.Count == 0 ? null : string.Join(" ", problems);
+        }
+
+        private List<string> ReadOverrides(out IdentityOverrides overrides)
+        {
+            var problems = new List<string>();
+            overrides = new IdentityOverrides
+            {
+                PatientName = PatientNameField.ManualValue?.Trim(),
+                PatientId = PatientIdField.ManualValue?.Trim(),
+                PatientBirthDate = BirthDateField.ManualValue?.Trim(),
+                PatientSex = SexField.ManualValue?.Trim().ToUpperInvariant(),
+                AccessionNumber = AccessionField.ManualValue?.Trim(),
+                StudyId = StudyIdField.ManualValue?.Trim(),
+                StudyInstanceUid = StudyUidField.ManualValue?.Trim(),
+                SeriesInstanceUid = SeriesUidField.ManualValue?.Trim(),
+                SopInstanceUid = SopUidField.ManualValue?.Trim(),
+                ReferringPhysicianName = ReferringField.ManualValue?.Trim(),
+                StudyDescription = StudyDescriptionField.ManualValue?.Trim(),
+                SeriesDescription = SeriesDescriptionField.ManualValue?.Trim(),
+                InstitutionName = InstitutionField.ManualValue?.Trim(),
+                StationName = StationField.ManualValue?.Trim(),
+            };
+
+            var manualDate = StudyDateTimeField.ManualValue?.Trim();
+            if (manualDate != null)
+            {
+                if (DateTime.TryParseExact(manualDate, StudyDateTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                {
+                    overrides.StudyDateTime = parsed;
+                }
+                else
+                {
+                    problems.Add($"Study Date/Time must have the form {StudyDateTimeFormat}.");
+                }
+            }
+            return problems;
+        }
+
+        /// <summary>One Series UID cannot be shared by several series, nor one SOP Instance UID by several images.</summary>
+        private void UpdateManualUidRules()
+        {
+            if (_loading) return;
+            var seriesRule = _seriesCount <= 1;
+            var sopRule = (long)_seriesCount * _imagesPerSeries <= 1;
+            SeriesUidField.SetManualAllowed(seriesRule, "A manual Series UID requires exactly one series.");
+            SopUidField.SetManualAllowed(sopRule, "A manual SOP Instance UID requires exactly one image.");
+            RefreshPreview();
+        }
+        #endregion
+
+        #region Run
+        private async Task DoRunAsync(CancellationToken token)
+        {
+            RefreshPreview();
+
+            var problems = ReadOverrides(out _);
+            var options = BuildRunOptions();
+            var request = BuildRequest();
+
+            if (request.Identity != null && request.Identity.StudyDateTimeIsAuto) request.Identity.StudyDateTime = DateTime.Now;
+            if (request.Identity == null && IdentityMessage != null) problems.Add(IdentityMessage);
+            else problems.AddRange(ExamValidator.Validate(request));
+            var optionsProblem = options.Validate();
+            if (optionsProblem != null) problems.Add(optionsProblem);
+            if (problems.Count > 0)
+            {
+                _logger.Warning("Run not started: {problems}", string.Join(" ", problems));
+                StatusText = "Run not started: correct the values first.";
+                ShowMessage(string.Join("\n", problems), MessageBoxImage.Warning, null);
+                return;
+            }
+
+            foreach (var warning in ExamValidator.Warnings(request)) _logger.Warning("{warning}", warning);
+
+            var id = request.Identity;
+            _logger.Information("Exam: {modality} {preset}, {series} series x {images} images, {rows}x{columns}, {bits} bits, {charset}. Patient {name}, ID {id}, born {born}, sex {sex}. Accession {accession}, Study ID {studyId}, Study UID {studyUid}",
+                request.Modality.Code, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, request.CharacterSet,
+                id.PatientName, id.PatientId, id.PatientBirthDate, id.PatientSex, id.AccessionNumber, id.StudyId, id.StudyInstanceUid);
+
+            Results.Clear();
+            ProgressValue = 0;
+            ProgressMaximum = Math.Max(1, request.TotalImages);
+            LastRunText = string.Empty;
+            StatusText = _sendImages ? $"Sending to {options.Endpoint.CalledAe}..." : "Saving...";
+
+            var run = new StoreRun(new ExamGenerator(request), options);
+            run.ImageCompleted += result => _dispatcher.BeginInvoke(new Action(() => AddResult(result, request.TotalImages)), DispatcherPriority.Background);
+
+            var summary = await run.ExecuteAsync(token);
+
+            // Let the result rows queued by the background thread land before the summary replaces the status.
+            await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+
+            LastRunText = summary.ToString();
+            StatusText = DescribeEnd(summary);
+
+            GenerateNewValues();
+        }
+
+        private void AddResult(StoreResult result, int total)
+        {
+            Results.Add(result);
+            ProgressValue = Results.Count;
+            StatusText = $"{(_sendImages ? "Sent" : "Saved")} {Results.Count} of {total}: series {result.SeriesNumber} instance {result.InstanceNumber}, {result.State}";
+        }
+
+        private static string DescribeEnd(RunSummary summary)
+        {
+            var dicomDir = summary.DicomDirError != null ? " The DICOMDIR could not be written: " + summary.DicomDirError
+                : summary.DicomDirPath != null ? " DICOMDIR: " + summary.DicomDirPath : string.Empty;
+
+            if (summary.WasCancelled) return "Run cancelled. " + summary + "." + dicomDir;
+            if (summary.FatalError != null) return "Run stopped: " + summary.FatalError + dicomDir;
+            if (summary.FallbackWarning != null) return "Run finished, but: " + summary.FallbackWarning + dicomDir;
+            return "Run finished." + dicomDir;
+        }
+
+        private ExamRequest BuildRequest() => new ExamRequest
+        {
+            Modality = _selectedModality,
+            Preset = _selectedPreset,
+            Identity = _identity,
+            SeriesCount = _seriesCount,
+            ImagesPerSeries = _imagesPerSeries,
+            Rows = _rows,
+            Columns = _columns,
+            BitsStored = _bitsStored,
+            CharacterSet = _characterSet,
+        };
+
+        private StoreRunOptions BuildRunOptions() => new StoreRunOptions
+        {
+            Send = _sendImages,
+            Save = _saveImages,
+            SaveFolder = _saveFolder?.Trim(),
+            TransferSyntax = _selectedTransferSyntax.Syntax,
+            AllowFallback = _allowFallback,
+            Endpoint = BuildEndpoint(),
+            Network = BuildNetworkOptions(),
+        };
+        #endregion
+
+        #region Log
+        private void DrainLog()
+        {
+            var lines = UiLogSink.Instance.Drain();
+            if (lines.Count == 0) return;
+            foreach (var line in lines) LogLines.Add(line);
+            while (LogLines.Count > MaxLogLines) LogLines.RemoveAt(0);
+        }
+        #endregion
+
+        #region Profiles
+        private void LoadProfiles()
+        {
+            Profiles.Clear();
+            try
+            {
+                foreach (var p in ConnectionProfile.Deserialize(Settings.Default.ConnectionProfiles)
+                                                   .Where(p => !string.IsNullOrWhiteSpace(p.Name))
+                                                   .OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase))
+                {
+                    Profiles.Add(p);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Could not read saved connection profiles, they are ignored");
+            }
+        }
+
+        /// <summary>Saved to disk at once, so a crash cannot lose a profile.</summary>
+        private void StoreProfiles()
+        {
+            Settings.Default.ConnectionProfiles = ConnectionProfile.Serialize(Profiles);
+            SaveSettings();
+        }
+
+        private ConnectionProfile FindProfile(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            return Profiles.FirstOrDefault(p => string.Equals(p.Name, name.Trim(), StringComparison.CurrentCultureIgnoreCase));
+        }
+
+        private void ApplyProfile(ConnectionProfile p)
+        {
+            CallingAET = p.CallingAET ?? string.Empty;
+            ServerAET = p.ServerAET ?? string.Empty;
+            ServerHost = p.ServerHost ?? string.Empty;
+            ServerPort = p.ServerPort;
+            UseTLS = p.UseTLS;
+            TlsIgnoreCertErrors = p.TlsIgnoreCertErrors;
+            TlsClientCertThumbprint = p.TlsClientCertThumbprint ?? string.Empty;
+            _logger.Information("Loaded destination profile {name}", p.Name);
+            StatusText = $"Profile '{p.Name}' loaded.";
+        }
+
+        private void SaveProfile()
+        {
+            var name = ProfileName?.Trim();
+            if (string.IsNullOrEmpty(name))
+            {
+                ShowMessage("Type a name for the profile in the Profile box first.", MessageBoxImage.Warning, null);
+                return;
+            }
+
+            var profile = FindProfile(name);
+            if (profile == null)
+            {
+                profile = new ConnectionProfile { Name = name };
+                // Keep the list sorted by name.
+                var index = 0;
+                while (index < Profiles.Count && StringComparer.CurrentCultureIgnoreCase.Compare(Profiles[index].Name, name) < 0) index++;
+                Profiles.Insert(index, profile);
+            }
+
+            profile.CallingAET = CallingAET;
+            profile.ServerAET = ServerAET;
+            profile.ServerHost = ServerHost;
+            profile.ServerPort = ServerPort;
+            profile.UseTLS = UseTLS;
+            profile.TlsIgnoreCertErrors = TlsIgnoreCertErrors;
+            profile.TlsClientCertThumbprint = TlsClientCertThumbprint;
+            StoreProfiles();
+
+            _selectedProfile = profile; // values are already current, so do not re-apply
+            OnPropertyChanged(nameof(SelectedProfile));
+            ProfileName = profile.Name;
+            _logger.Information("Saved destination profile {name}", profile.Name);
+            StatusText = $"Profile '{profile.Name}' saved.";
+        }
+
+        private void DeleteProfile()
+        {
+            var profile = FindProfile(ProfileName);
+            if (profile == null) return;
+            if (!Confirm($"Delete the destination profile '{profile.Name}'?")) return;
+
+            Profiles.Remove(profile);
+            StoreProfiles();
+            _selectedProfile = null;
+            OnPropertyChanged(nameof(SelectedProfile));
+            ProfileName = string.Empty;
+            _logger.Information("Deleted destination profile {name}", profile.Name);
+            StatusText = $"Profile '{profile.Name}' deleted.";
+        }
+        #endregion
+    }
+}
