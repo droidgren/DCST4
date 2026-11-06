@@ -15,9 +15,9 @@
                 <MenuItem Header="E_xit" Click="ExitMenuItem_Click"/>
             </MenuItem>
             <MenuItem Header="_Help">
-                <MenuItem x:Name="HelpMenuItem" InputGestureText="F1" Click="HelpMenuItem_Click"/>
+                <MenuItem Header="_Help" InputGestureText="F1" Click="HelpMenuItem_Click"/>
                 <Separator/>
-                <MenuItem x:Name="AboutMenuItem" Click="AboutMenuItem_Click"/>
+                <MenuItem Header="_About" Click="AboutMenuItem_Click"/>
             </MenuItem>
         </Menu>
 

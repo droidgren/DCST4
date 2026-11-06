@@ -29,8 +29,6 @@ namespace DCST4
 
             var version = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
             Title = $"{AppInfo.DisplayName} v{version}";
-            HelpMenuItem.Header = AppInfo.DisplayName + " _Help";
-            AboutMenuItem.Header = "_About " + AppInfo.DisplayName;
 
             // Keep the newest row and log line in view while a run is going.
             ((INotifyCollectionChanged)_viewModel.Results).CollectionChanged += (s, e) =>
