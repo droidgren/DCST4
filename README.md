@@ -8,7 +8,6 @@ Querying a Modality Worklist is out of scope: that is what [DMWLT4](https://gith
 
 ![Main window after a run](screenshots/main.png)
 
-> **Test images only.** Every image says `TEST IMAGE - NOT FOR DIAGNOSTIC USE` in its pixels and in Image Comments. Do not send them to a production system unless you know how to remove them again.
 
 ## Features
 
