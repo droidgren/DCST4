@@ -1,6 +1,8 @@
+using DCST4.ViewModels;
 using Serilog;
 using System;
 using System.Diagnostics;
+using System.Threading;
 using System.Windows;
 using System.Windows.Navigation;
 
@@ -8,6 +10,8 @@ namespace DCST4
 {
     public partial class AboutWindow : Window
     {
+        private readonly CancellationTokenSource _closing = new CancellationTokenSource();
+
         public AboutWindow()
         {
             InitializeComponent();
@@ -15,6 +19,16 @@ namespace DCST4
             NameText.Text = AppInfo.DisplayName;
             ProjectLink.NavigateUri = new Uri(AppInfo.ProjectUrl);
             ProjectLinkText.Text = AppInfo.ProjectUrl;
+            Loaded += async (s, e) =>
+            {
+                if (DataContext is AboutViewModel viewModel) await viewModel.CheckForUpdateAsync(_closing.Token);
+            };
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _closing.Cancel();
+            base.OnClosed(e);
         }
 
         private void Ok_Click(object sender, RoutedEventArgs e) => Close();

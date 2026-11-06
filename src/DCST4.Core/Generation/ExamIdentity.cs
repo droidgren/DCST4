@@ -1,6 +1,7 @@
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.TestData;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 
 namespace DCST4.Core.Generation
@@ -24,6 +25,8 @@ namespace DCST4.Core.Generation
         public string SeriesDescription { get; set; }
         public string InstitutionName { get; set; }
         public string StationName { get; set; }
+        /// <summary>Tags added in Settings. A null value means Auto.</summary>
+        public IList<AdditionalTagValue> AdditionalTags { get; set; }
     }
 
     /// <summary>The final values of one exam, Auto or manual. Series and SOP Instance UIDs stay null when each series or image gets its own.</summary>
@@ -48,6 +51,8 @@ namespace DCST4.Core.Generation
         public string SeriesDescription { get; set; }
         public string InstitutionName { get; set; }
         public string StationName { get; set; }
+        /// <summary>Tags added in Settings, with their final values.</summary>
+        public IList<AdditionalTagValue> AdditionalTags { get; set; } = new List<AdditionalTagValue>();
     }
 
     /// <summary>Fills in everything the user has not entered manually.</summary>
@@ -79,6 +84,7 @@ namespace DCST4.Core.Generation
             var accessionRandom = new Random(_random.Next());
             var studyIdRandom = new Random(_random.Next());
             var referringRandom = new Random(_random.Next());
+            var additionalSeed = _random.Next(); // Last, so that the values above are the same with or without additional tags.
 
             // Birth date and sex follow the personnummer whenever it can be read, so the tags agree with each other.
             Personnummer number = null;
@@ -114,7 +120,26 @@ namespace DCST4.Core.Generation
                 SeriesDescription = manual.SeriesDescription ?? preset.SeriesDescription,
                 InstitutionName = manual.InstitutionName ?? DefaultInstitution,
                 StationName = manual.StationName ?? "DCST4-" + modality.Code,
+                AdditionalTags = ResolveAdditionalTags(manual, preset, additionalSeed),
             };
+        }
+
+        /// <summary>Each tag draws from a sequence of its own, so adding or removing one leaves the others as they are.</summary>
+        private static List<AdditionalTagValue> ResolveAdditionalTags(IdentityOverrides manual, ExamPreset preset, int seed)
+        {
+            var resolved = new List<AdditionalTagValue>();
+            if (manual.AdditionalTags == null) return resolved;
+
+            foreach (var item in manual.AdditionalTags)
+            {
+                var tag = item.Tag;
+                var common = CommonTagCatalog.Find(tag);
+                var value = item.Value
+                    ?? common?.Generate(new Random(seed ^ ((tag.Group << 16) | tag.Element)), preset)
+                    ?? tag.DefaultValue;
+                resolved.Add(new AdditionalTagValue(tag, value));
+            }
+            return resolved;
         }
     }
 }

@@ -214,6 +214,8 @@
                                 </StackPanel>
                                 <TextBlock Text="{Binding IdentityMessage}" Foreground="#FFB03000" TextWrapping="Wrap" VerticalAlignment="Center" Margin="12,0,12,0"/>
                             </DockPanel>
+                            <!-- The row above this tab sizes to its content, so without MaxHeight added tags would never scroll and would squeeze Results instead. -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="240">
                             <ItemsControl ItemsSource="{Binding IdentityFields}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
@@ -223,7 +225,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <DockPanel Margin="4,1" ToolTip="{Binding ToolTip}" ToolTipService.ShowOnDisabled="True">
-                                            <TextBlock DockPanel.Dock="Left" Text="{Binding Label}" Width="104" VerticalAlignment="Center"/>
+                                            <TextBlock DockPanel.Dock="Left" Text="{Binding Label}" Width="104" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                             <CheckBox DockPanel.Dock="Left" Content="Auto" IsChecked="{Binding IsAuto, Mode=TwoWay}" IsEnabled="{Binding ManualAllowed}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                             <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center">
                                                 <TextBox.Style>
@@ -245,6 +247,7 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            </ScrollViewer>
                         </DockPanel>
                     </TabItem>
                 </TabControl>

@@ -4,6 +4,8 @@ using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Network;
 using DCST4.Core.Pipeline;
 using DCST4.Core.TestData;
+using DCST4.Infrastructure;
+using DCST4.ViewModels;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
@@ -20,6 +22,8 @@ using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -41,9 +45,9 @@ namespace DCST4.Tests
 
         private static int _pass;
         private static int _fail;
-        private static readonly CapturingSink LogSink = new CapturingSink();
+        internal static readonly CapturingSink LogSink = new CapturingSink();
 
-        private sealed class CapturingSink : ILogEventSink
+        internal sealed class CapturingSink : ILogEventSink
         {
             public readonly ConcurrentQueue<string> Lines = new ConcurrentQueue<string>();
             public void Emit(LogEvent logEvent) => Lines.Enqueue(logEvent.Level + " " + logEvent.RenderMessage());
@@ -104,6 +108,8 @@ namespace DCST4.Tests
                 TestPixelDataSizes(temp);
                 TestManualOverrides();
                 TestJpegRoundTrip();
+                TestAdditionalTags();
+                TestUpdateChecker().GetAwaiter().GetResult();
 
                 using (DicomServerFactory.Create<MockStorageScp>(Port))
                 {
@@ -113,6 +119,7 @@ namespace DCST4.Tests
                     TestAssociationBehaviour().GetAwaiter().GetResult();
                     TestFaults().GetAwaiter().GetResult();
                     TestSaving(temp).GetAwaiter().GetResult();
+                    TestAdditionalTagDelivery(temp).GetAwaiter().GetResult();
                     ViewModelTests.Run(Port, (name, ok, detail) => Check(name, ok, detail));
                 }
                 TestTls().GetAwaiter().GetResult();
@@ -1066,6 +1073,337 @@ namespace DCST4.Tests
                     // SChannel cannot use the ephemeral key of a freshly created certificate; re-import it from a PFX.
                     return new X509Certificate2(cert.Export(X509ContentType.Pfx, "x"), "x", X509KeyStorageFlags.Exportable);
                 }
+            }
+        }
+
+        // ---------------------------------------------------------------- additional tags
+
+        private static AdditionalTag CreateTag(string text, string vr, string creator, string value, out string problem) =>
+            AdditionalTagParser.Create(text, vr, creator, value, out problem);
+
+        private static void CheckRejected(string name, string text, string vr, string creator, string value, string expectedInMessage)
+        {
+            var tag = CreateTag(text, vr, creator, value, out var problem);
+            Check("Rejected: " + name, tag == null && problem != null && problem.Contains(expectedInMessage), problem ?? "accepted");
+        }
+
+        private static void CheckAccepted(string name, string text, string vr, string creator, string value)
+        {
+            var tag = CreateTag(text, vr, creator, value, out var problem);
+            Check("Accepted: " + name, tag != null && problem == null, problem);
+        }
+
+        private static void TestAdditionalTags()
+        {
+            Console.WriteLine("\nAdditional tags");
+
+            // ------------------------------------------------ The checklist
+            var random = new Random(7);
+            var preset = Modality("CT").Presets[0];
+            foreach (var common in CommonTagCatalog.All)
+            {
+                var value = common.Generate(random, preset);
+                Check($"Common tag {common.Name}: in the dictionary, usable, with a valid Auto value",
+                    AdditionalTagParser.DictionaryEntry(common.Tag.Group, common.Tag.Element) != null
+                    && AdditionalTagRules.CheckTag(common.Tag) == null
+                    && !string.IsNullOrEmpty(value)
+                    && AdditionalTagRules.CheckValue(common.Tag, value, DicomCharacterSets.Latin1) == null,
+                    value);
+            }
+            Check("Common tags: no patient ID among them", CommonTagCatalog.All.All(c => c.Tag.Group != 0x0010 || (c.Tag.Element != 0x0020 && c.Tag.Element != 0x1000)));
+
+            // ------------------------------------------------ What the user can type
+            foreach (var text in new[] { "(0008,1070)", "0008,1070", "00081070", " (0008,1070) ", "OperatorsName", "operatorsname", "Operators' Name" })
+            {
+                Check($"Tag can be entered as '{text}'", AdditionalTagParser.TryResolve(text, out var g, out var e) && g == 0x0008 && e == 0x1070, $"{g:X4},{e:X4}");
+            }
+            Check("Nonsense is not a tag", !AdditionalTagParser.TryResolve("not a tag", out _, out _) && !AdditionalTagParser.TryResolve(string.Empty, out _, out _));
+            CreateTag("Manufacturer", "US", null, "ACME", out var overridden);
+            Check("A tag with one possible VR ignores the VR box", overridden == null, overridden);
+
+            CheckRejected("not a tag", "not a tag", "LO", null, string.Empty, "is not a tag");
+            CheckRejected("file meta group", "(0002,0010)", "UI", null, string.Empty, "groups 0000 to 0007");
+            CheckRejected("command group", "(0000,0100)", "US", null, string.Empty, "groups 0000 to 0007");
+            CheckRejected("group length", "(0008,0000)", "UL", null, string.Empty, "group length");
+            CheckRejected("pixel description", "Rows", "US", null, "512", "pixel data");
+            CheckRejected("window in group 0028", "(0028,1050)", "DS", null, "100", "pixel data");
+            CheckRejected("pixel data", "PixelData", "OW", null, string.Empty, "pixel data");
+            CheckRejected("SOP Class", "SOPClassUID", "UI", null, "1.2.3", "cannot be changed");
+            CheckRejected("Modality", "Modality", "CS", null, "OT", "cannot be changed");
+            CheckRejected("Specific Character Set", "SpecificCharacterSet", "CS", null, "ISO_IR 6", "cannot be changed");
+            CheckRejected("Burned In Annotation", "BurnedInAnnotation", "CS", null, "NO", "pixel data");
+            CheckRejected("Image Comments, the test image marking", "ImageComments", "LT", null, "A real image", "cannot be changed");
+            foreach (var field in new[] { "PatientName", "PatientID", "PatientBirthDate", "PatientSex", "AccessionNumber", "StudyID", "StudyInstanceUID", "SeriesInstanceUID", "SOPInstanceUID", "StudyDate", "StudyTime", "ReferringPhysicianName", "StudyDescription", "SeriesDescription", "InstitutionName", "StationName" })
+            {
+                CheckRejected("has an Identifiers field: " + field, field, "LO", null, string.Empty, "Identifiers tab");
+            }
+            CheckRejected("sequence", "RequestAttributesSequence", "LO", null, string.Empty, "sequences");
+            CheckRejected("binary", "(0042,0011)", "LO", null, string.Empty, "sequences");
+            CheckRejected("private, no creator", "(0011,1001)", "LO", null, "x", "private creator");
+            CheckRejected("private creator element", "(0011,0010)", "LO", "DCST4", "x", "creator element");
+            CheckRejected("private below the data elements", "(0011,0FFF)", "LO", "DCST4", "x", "(gggg,1000)");
+            CheckRejected("private, creator too long", "(0011,1001)", "LO", new string('C', 65), "x", "longer than 64");
+            CheckRejected("private, binary VR", "(0011,1001)", "OB", "DCST4", "x", "sequences");
+            CheckRejected("unknown standard tag, no VR", "(0098,0099)", null, null, "x", "Select a VR");
+            Check("Rejected: a VR the tag does not have", (AdditionalTagRules.CheckTag(new AdditionalTag(0x0008, 0x0070, "US")) ?? string.Empty).Contains("must have VR"));
+
+            CheckAccepted("standard tag with a typed value", "(0008,1040)", null, null, "Radiology");
+            CheckAccepted("generated tag that may be replaced", "Manufacturer", null, null, "ACME");
+            CheckAccepted("empty default value", "(0008,1040)", null, null, string.Empty);
+            CheckAccepted("private tag", "(0011,1001)", "LO", "DCST4", "x");
+            CheckAccepted("Other Patient IDs with a typed value", "(0010,1000)", null, null, "OTHER-1");
+            CheckAccepted("several values where allowed", "OperatorsName", null, null, "Andersson^Anna\\Berg^Bo");
+
+            // ------------------------------------------------ Values
+            CheckRejected("value too long", "(0008,1040)", null, null, new string('x', 65), "(0008,1040)");
+            CheckRejected("backslash in a tag with one value", "(0008,1040)", null, null, "a\\b", "only one value");
+            CheckRejected("backslash in free text", "(0010,4000)", null, null, "a\\b", "only one value");
+            CheckRejected("backslash in a private free text", "(0011,1001)", "UT", "DCST4", "a\\b", "only one value");
+            CheckRejected("not a date", "(0008,0021)", null, null, "notadate", "(0008,0021)");
+            CheckRejected("not a number", "(0011,1001)", "US", "DCST4", "abc", "must be a number");
+            CheckRejected("number too large", "(0011,1001)", "US", "DCST4", "70000", "must be a number");
+            CheckRejected("control character", "(0008,1040)", null, null, "a\tb", "control characters");
+            CheckAccepted("a date", "(0008,0021)", null, null, "20260101");
+
+            var culture = Thread.CurrentThread.CurrentCulture;
+            try
+            {
+                Thread.CurrentThread.CurrentCulture = new CultureInfo("sv-SE");
+                var tag = CreateTag("(0011,1001)", "FD", "DCST4", "1.5", out var numberProblem);
+                var dataset = new DicomDataset();
+                if (tag != null) AdditionalTagWriter.Write(dataset, new AdditionalTagValue(tag, "1.5"));
+                Check("Numbers mean the same on Swedish Windows", tag != null && dataset.GetSingleValue<double>(new DicomTag(0x0011, 0x1001, "DCST4")) == 1.5, numberProblem);
+            }
+            finally
+            {
+                Thread.CurrentThread.CurrentCulture = culture;
+            }
+
+            var greek = new AdditionalTag(0x0008, 0x1040, "LO");
+            Check("A value ISO_IR 100 cannot hold is refused", (AdditionalTagRules.CheckValue(greek, "Ωmega", DicomCharacterSets.Latin1) ?? string.Empty).Contains("ISO_IR 100"));
+            Check("... and is fine in ISO_IR 192", AdditionalTagRules.CheckValue(greek, "Ωmega", DicomCharacterSets.Utf8) == null);
+
+            // ------------------------------------------------ Several tags together
+            AdditionalTag Private(ushort element, string creator) => new AdditionalTag(0x0011, element, "LO", creator);
+            Check("One creator in one block is fine", AdditionalTagRules.CheckCombination(new[] { Private(0x1001, "A"), Private(0x1002, "A"), Private(0x2001, "B") }) == null);
+            Check("A block has one creator", (AdditionalTagRules.CheckCombination(new[] { Private(0x1001, "A"), Private(0x1002, "B") }) ?? string.Empty).Contains("already belongs"));
+            Check("A creator has one block in a group", (AdditionalTagRules.CheckCombination(new[] { Private(0x1001, "A"), Private(0x2001, "A") }) ?? string.Empty).Contains("one block"));
+            Check("A tag can only be in the list once", (AdditionalTagRules.CheckCombination(new[] { greek, greek }) ?? string.Empty).Contains("twice"));
+
+            // ------------------------------------------------ Generated values
+            var operators = CommonTagCatalog.All.First(c => c.Tag.Element == 0x1070).Tag;
+            var performing = CommonTagCatalog.All.First(c => c.Tag.Element == 0x1050).Tag;
+            var custom = new AdditionalTag(0x0008, 0x0070, "LO", null, "ACME");
+            var blank = new AdditionalTag(0x0010, 0x2180, "SH");
+            ExamIdentity Identity(int seed, params AdditionalTagValue[] tags)
+            {
+                var m = Modality("CT");
+                return new IdentityGenerator(random: new Random(seed)).Generate(new IdentityOverrides { AdditionalTags = tags }, m, m.Presets[0]);
+            }
+            string ValueOf(ExamIdentity identity, AdditionalTag tag) => identity.AdditionalTags.Single(v => v.Tag == tag).Value;
+
+            var without = Identity(42);
+            var with = Identity(42, new AdditionalTagValue(operators, null), new AdditionalTagValue(custom, null));
+            Check("Adding tags leaves the other Auto values alone",
+                with.PatientId == without.PatientId && with.PatientName == without.PatientName && with.AccessionNumber == without.AccessionNumber
+                && with.StudyId == without.StudyId && with.ReferringPhysicianName == without.ReferringPhysicianName,
+                with.PatientId + " " + without.PatientId);
+            Check("Auto Patient ID still comes from the test list", TestPersonnummerRegistry.Default.Contains(with.PatientId), with.PatientId);
+
+            var both = Identity(42, new AdditionalTagValue(performing, null), new AdditionalTagValue(operators, null));
+            Check("Adding a tag leaves the other tags' values alone", ValueOf(both, operators) == ValueOf(with, operators), ValueOf(both, operators));
+            Check("Two name tags get their own names", ValueOf(both, operators) != ValueOf(both, performing), ValueOf(both, operators));
+            Check("New values give a new generated value", ValueOf(Identity(43, new AdditionalTagValue(operators, null)), operators) != ValueOf(with, operators));
+            Check("Auto on a custom tag is its default value", ValueOf(with, custom) == "ACME", ValueOf(with, custom));
+            Check("A manual value wins", ValueOf(Identity(42, new AdditionalTagValue(custom, "Typed")), custom) == "Typed");
+            Check("A custom tag without a default is empty", ValueOf(Identity(42, new AdditionalTagValue(blank, null)), blank) == string.Empty);
+            Check("No additional tags by default", new IdentityGenerator().Generate(null, Modality("CT"), Modality("CT").Presets[0]).AdditionalTags.Count == 0);
+
+            var invalid = MakeRequest(charset: DicomCharacterSets.Latin1, overrides: new IdentityOverrides { AdditionalTags = new[] { new AdditionalTagValue(greek, "Ωmega") } });
+            Check("A bad value blocks the run and names the tag", ExamValidator.Validate(invalid).Any(e => e.Contains("(0008,1040)") && e.Contains("ISO_IR 100")), string.Join(" ", ExamValidator.Validate(invalid)));
+
+            // ------------------------------------------------ The settings file
+            var settings = new[] { DCST4.Models.AdditionalTagSetting.From(operators), DCST4.Models.AdditionalTagSetting.From(new AdditionalTag(0x0011, 0x1001, "LO", "DCST4", "åäö <&>")) };
+            var read = DCST4.Models.AdditionalTagSetting.Deserialize(DCST4.Models.AdditionalTagSetting.Serialize(settings));
+            var privateRead = read[1].ToTag();
+            Check("Settings: tags are saved and read back", read.Count == 2 && read[0].ToTag().Key == operators.Key
+                && privateRead.Group == 0x0011 && privateRead.Element == 0x1001 && privateRead.VrCode == "LO" && privateRead.PrivateCreator == "DCST4" && privateRead.DefaultValue == "åäö <&>");
+            Check("Settings: empty means no tags", DCST4.Models.AdditionalTagSetting.Deserialize(string.Empty).Count == 0);
+            var corrupt = false;
+            try { DCST4.Models.AdditionalTagSetting.Deserialize("<not the right xml"); }
+            catch (InvalidOperationException) { corrupt = true; }
+            Check("Settings: corrupt XML gives the exception the program handles", corrupt);
+            Check("Settings: an unreadable number gives no tag", new DCST4.Models.AdditionalTagSetting { Tag = "nonsense" }.ToTag() == null);
+        }
+
+        private static async Task TestAdditionalTagDelivery(string temp)
+        {
+            Console.WriteLine("\nAdditional tags in sent and saved images");
+
+            var operators = new AdditionalTag(0x0008, 0x1070, "PN");
+            var manufacturer = new AdditionalTag(0x0008, 0x0070, "LO", null, "ACME");
+            var occupation = new AdditionalTag(0x0010, 0x2180, "SH");
+            var privateText = new AdditionalTag(0x0011, 0x1001, "LO", "DCST4", "åäö");
+            var privateNumber = new AdditionalTag(0x0011, 0x1002, "US", "DCST4", "1234");
+            var otherBlock = new AdditionalTag(0x0013, 0x2001, "LO", "OTHER", "second");
+            var overrides = new IdentityOverrides
+            {
+                AdditionalTags = new[]
+                {
+                    new AdditionalTagValue(operators, "Andersson^Anna\\Berg^Bo"),
+                    new AdditionalTagValue(manufacturer, null),
+                    new AdditionalTagValue(occupation, null),
+                    new AdditionalTagValue(privateText, null),
+                    new AdditionalTagValue(privateNumber, null),
+                    new AdditionalTagValue(otherBlock, null),
+                },
+            };
+
+            // By the real group and element, so this also shows that a private element kept the number it was given.
+            byte[] Bytes(DicomDataset ds, ushort group, ushort element) =>
+                ((DicomElement)ds.First(item => item.Tag.Group == group && item.Tag.Element == element)).Buffer.Data;
+            var latin1 = Encoding.GetEncoding("ISO-8859-1");
+
+            void CheckDataset(string prefix, DicomDataset ds)
+            {
+                Check(prefix + ": several values arrive as several values", ds.GetValues<string>(DicomTag.OperatorsName).SequenceEqual(new[] { "Andersson^Anna", "Berg^Bo" }), ds.GetString(DicomTag.OperatorsName));
+                Check(prefix + ": a custom tag replaces the generated Manufacturer", Text(ds, DicomTag.Manufacturer) == "ACME", Text(ds, DicomTag.Manufacturer));
+                Check(prefix + ": an empty tag arrives empty", ds.Contains(DicomTag.Occupation) && Bytes(ds, 0x0010, 0x2180).Length == 0);
+                Check(prefix + ": private creators", Text(ds, new DicomTag(0x0011, 0x0010)) == "DCST4" && Text(ds, new DicomTag(0x0013, 0x0020)) == "OTHER", Text(ds, new DicomTag(0x0013, 0x0020)));
+                Check(prefix + ": private text in the character set", latin1.GetString(Bytes(ds, 0x0011, 0x1001)).TrimEnd(' ', '\0') == "åäö", latin1.GetString(Bytes(ds, 0x0011, 0x1001)));
+                Check(prefix + ": private number", BitConverter.ToUInt16(Bytes(ds, 0x0011, 0x1002), 0) == 1234);
+                Check(prefix + ": a private element keeps the block entered", latin1.GetString(Bytes(ds, 0x0013, 0x2001)).TrimEnd(' ', '\0') == "second");
+                Check(prefix + ": Image Comments has the marking and the project", Text(ds, DicomTag.ImageComments).Contains("TEST IMAGE") && Text(ds, DicomTag.ImageComments).Contains(ProductInfo.ProjectUrl), Text(ds, DicomTag.ImageComments));
+            }
+
+            var syntaxes = new[]
+            {
+                DicomTransferSyntax.ImplicitVRLittleEndian,
+                DicomTransferSyntax.ExplicitVRLittleEndian,
+                DicomTransferSyntax.JPEGProcess14SV1,
+            };
+            foreach (var syntax in syntaxes)
+            {
+                Scp.Reset();
+                var request = MakeRequest(overrides: overrides);
+                Check($"{syntax.UID.Name}: the request is valid", ExamValidator.Validate(request).Count == 0, string.Join(" ", ExamValidator.Validate(request)));
+                var summary = await Run(request, SendOptions(syntax));
+                Check($"{syntax.UID.Name}: sent", summary.Success == 1 && Scp.Received.Count == 1, summary.ToString());
+                if (Scp.Received.TryPeek(out var received)) CheckDataset(syntax.UID.Name, received.Dataset);
+            }
+
+            var folder = Path.Combine(temp, "additionaltags");
+            var saved = await Run(MakeRequest(overrides: overrides), new StoreRunOptions { Send = false, Save = true, SaveFolder = folder });
+            Check("Saved: DICOMDIR is written with additional tags", saved.Saved == 1 && saved.DicomDirError == null && File.Exists(Path.Combine(folder, "DICOMDIR")), saved.DicomDirError);
+            CheckDataset("Saved file", DicomFile.Open(saved.Results[0].SavedPath).Dataset);
+        }
+
+        // ---------------------------------------------------------------- version check
+
+        private sealed class StubHandler : HttpMessageHandler
+        {
+            private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _answer;
+            public HttpRequestMessage LastRequest;
+
+            public StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> answer) => _answer = answer;
+
+            public static StubHandler Answering(HttpStatusCode status, string body) =>
+                new StubHandler((r, t) => Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body ?? string.Empty) }));
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+            {
+                LastRequest = request;
+                return _answer(request, token);
+            }
+        }
+
+        private static string ReleaseJson(string tag, string url = "https://github.com/droidgren/DCST4/releases/tag/x") =>
+            "{\"id\":1,\"tag_name\":\"" + tag + "\",\"html_url\":\"" + url + "\",\"draft\":false,\"assets\":[{\"name\":\"a\"}]}";
+
+        private static async Task TestUpdateChecker()
+        {
+            Console.WriteLine("\nVersion check");
+
+            Task<UpdateCheckResult> Check110(HttpMessageHandler handler, TimeSpan? timeout = null, CancellationToken token = default(CancellationToken)) =>
+                new UpdateChecker("1.1.0", handler: handler, timeout: timeout).CheckAsync(token);
+
+            foreach (var newer in new[] { "1.2.0", "v1.2.0", "V1.2.0", "1.4", "2", "1.1.1", "1.2.0-rc1" })
+            {
+                var result = await Check110(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson(newer)));
+                Check($"Tag {newer} is newer than 1.1.0", result.Outcome == UpdateCheckOutcome.NewVersion && !result.LatestVersion.StartsWith("v", StringComparison.OrdinalIgnoreCase), result.Outcome.ToString());
+            }
+            foreach (var same in new[] { "1.1.0", "1.1", "v1.1", "1.0.9", "1.0", "0.9.9" })
+            {
+                var result = await Check110(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson(same)));
+                Check($"Tag {same} is not newer than 1.1.0", result.Outcome == UpdateCheckOutcome.UpToDate, result.Outcome.ToString());
+            }
+
+            var found = await Check110(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("v1.2.0", "https://github.com/droidgren/DCST4/releases/tag/v1.2.0")));
+            Check("New version: names the version without the v", found.LatestVersion == "1.2.0", found.LatestVersion);
+            Check("New version: links to the release page", found.ReleaseUri?.AbsoluteUri == "https://github.com/droidgren/DCST4/releases/tag/v1.2.0", found.ReleaseUri?.ToString());
+
+            var odd = await Check110(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.2.0", "file:///C:/Windows/System32/calc.exe")));
+            Check("A link outside GitHub is not trusted", odd.ReleaseUri?.AbsoluteUri == ProductInfo.ProjectUrl + "/releases/latest", odd.ReleaseUri?.ToString());
+            var lookalike = await Check110(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.2.0", "https://github.com.example.org/x")));
+            Check("A lookalike host is not trusted", lookalike.ReleaseUri?.AbsoluteUri == ProductInfo.ProjectUrl + "/releases/latest", lookalike.ReleaseUri?.ToString());
+
+            Check("404: nothing published", (await Check110(StubHandler.Answering(HttpStatusCode.NotFound, "{}"))).Outcome == UpdateCheckOutcome.NoRelease);
+            Check("500: failed", (await Check110(StubHandler.Answering(HttpStatusCode.InternalServerError, "oops"))).Outcome == UpdateCheckOutcome.Failed);
+            Check("403 rate limit: failed", (await Check110(StubHandler.Answering(HttpStatusCode.Forbidden, "{}"))).Outcome == UpdateCheckOutcome.Failed);
+            Check("Malformed JSON: failed", (await Check110(StubHandler.Answering(HttpStatusCode.OK, "<html>proxy login</html>"))).Outcome == UpdateCheckOutcome.Failed);
+            Check("Empty answer: failed", (await Check110(StubHandler.Answering(HttpStatusCode.OK, string.Empty))).Outcome == UpdateCheckOutcome.Failed);
+            Check("No tag: failed", (await Check110(StubHandler.Answering(HttpStatusCode.OK, "{}"))).Outcome == UpdateCheckOutcome.Failed);
+            Check("A tag that is no version: failed", (await Check110(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("latest")))).Outcome == UpdateCheckOutcome.Failed);
+
+            var unreachable = new StubHandler((r, t) => { throw new HttpRequestException("No route to host"); });
+            Check("No network: failed, no exception", (await Check110(unreachable)).Outcome == UpdateCheckOutcome.Failed);
+
+            var hanging = new StubHandler(async (r, t) => { await Task.Delay(Timeout.Infinite, t); return null; });
+            var watch = Stopwatch.StartNew();
+            var timedOut = await Check110(hanging, TimeSpan.FromMilliseconds(100));
+            Check("Timeout: failed, no exception", timedOut.Outcome == UpdateCheckOutcome.Failed && watch.Elapsed < TimeSpan.FromSeconds(5), watch.Elapsed.ToString());
+
+            using (var cts = new CancellationTokenSource())
+            {
+                var pending = Check110(new StubHandler(async (r, t) => { await Task.Delay(Timeout.Infinite, t); return null; }), TimeSpan.FromSeconds(30), cts.Token);
+                cts.Cancel();
+                var cancelled = false;
+                try { await pending; }
+                catch (OperationCanceledException) { cancelled = true; }
+                Check("Cancelling throws, unlike a timeout", cancelled);
+            }
+
+            var headers = StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.1.0"));
+            await Check110(headers);
+            Check("Asks for the latest release of this project", headers.LastRequest.RequestUri.AbsoluteUri == "https://api.github.com/repos/droidgren/DCST4/releases/latest", headers.LastRequest.RequestUri.ToString());
+            Check("Sends the User-Agent GitHub requires, and nothing about the user", headers.LastRequest.Headers.UserAgent.ToString() == "DCST4/1.1.0", headers.LastRequest.Headers.UserAgent.ToString());
+
+            // ------------------------------------------------ The About window's status line
+            async Task<AboutViewModel> About(HttpMessageHandler handler)
+            {
+                var vm = new AboutViewModel(new UpdateChecker("1.1.0", handler: handler));
+                await vm.CheckForUpdateAsync(CancellationToken.None);
+                return vm;
+            }
+
+            var waiting = new AboutViewModel(new UpdateChecker("1.1.0", handler: StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.1.0"))));
+            Check("About: says it is checking before the answer", waiting.UpdateStatus.StartsWith("Checking") && waiting.ReleaseUri == null && waiting.ReleaseLinkText.Length == 0, waiting.UpdateStatus);
+            var latest = await About(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.1")));
+            Check("About: latest version", latest.UpdateStatus == "You have the latest version." && latest.ReleaseUri == null, latest.UpdateStatus);
+            var update = await About(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.2.0")));
+            Check("About: new version with a link", update.UpdateStatus == "New version available: 1.2.0." && update.ReleaseUri != null && update.ReleaseLinkText.Length > 0, update.UpdateStatus);
+            var none = await About(StubHandler.Answering(HttpStatusCode.NotFound, "{}"));
+            Check("About: nothing published", none.UpdateStatus == "No release has been published yet.", none.UpdateStatus);
+            var broken = await About(StubHandler.Answering(HttpStatusCode.BadGateway, string.Empty));
+            Check("About: failure is text, not an exception", broken.UpdateStatus == "Could not check for a new version." && broken.ReleaseUri == null, broken.UpdateStatus);
+
+            using (var cts = new CancellationTokenSource())
+            {
+                var closing = new AboutViewModel(new UpdateChecker("1.1.0", handler: new StubHandler(async (r, t) => { await Task.Delay(Timeout.Infinite, t); return null; }), timeout: TimeSpan.FromSeconds(30)));
+                var pending = closing.CheckForUpdateAsync(cts.Token);
+                cts.Cancel();
+                await pending;
+                Check("About: closing the window ends the check quietly", closing.UpdateStatus.StartsWith("Checking"), closing.UpdateStatus);
             }
         }
 
