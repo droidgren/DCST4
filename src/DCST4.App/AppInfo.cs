@@ -4,5 +4,7 @@ namespace DCST4
     {
         /// <summary>The program's name as shown in title bars and the Help menu.</summary>
         public const string DisplayName = "DICOM C-Store Tester 4 (DCST4)";
+
+        public const string ProjectUrl = "https://github.com/droidgren/DCST4";
     }
 }

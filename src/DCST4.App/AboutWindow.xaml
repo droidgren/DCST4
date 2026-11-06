@@ -10,6 +10,11 @@
         <TextBlock x:Name="NameText" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
         <TextBlock Text="A tool for testing a PACS or any DICOM Storage SCP" Margin="0,5,0,0" HorizontalAlignment="Center"/>
         <TextBlock Text="{Binding Version}" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+        <TextBlock Margin="0,5,0,0" HorizontalAlignment="Center">
+            <Hyperlink x:Name="ProjectLink" RequestNavigate="Hyperlink_RequestNavigate">
+                <Run x:Name="ProjectLinkText"/>
+            </Hyperlink>
+        </TextBlock>
 
         <Grid Margin="0,20,0,0">
             <Grid.ColumnDefinitions>
