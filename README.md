@@ -341,7 +341,10 @@ Version 1.0.0 was checked once by hand with DCMTK 3.7.0. This is not part of `ru
 
 DCMTK has no IOD validator, so this does not prove that every attribute an IOD requires is present. Those are checked against a list in the tests, not by an outside tool.
 
-The dataset profiles added in 1.4.0 have not been checked with DCMTK. To do so, run `matrix` and then `dcmftest` and `dcmdump` on the `datasets` folder.
+The dataset profiles added in 1.4.0 were checked once by hand with DCMTK 3.7.1, on the 74 files that `matrix` writes to its `datasets` folder:
+
+- `dcmftest` and `dcmdump` pass with no warnings. The first run found fragments of odd length from the HTJ2K encoder, which are now padded and covered by a check in the tests.
+- `dcmdjpeg`, `dcmdjpls` and `dcmdrle` decode the lossless JPEG, JPEG-LS and RLE variants at 8, 12 and 16 bits and RGB to pixels identical to the raw frames. DCMTK has no JPEG 2000 or HTJ2K decoder, so those were checked only with PureCodecs' own decoder.
 
 ## Dependencies
 

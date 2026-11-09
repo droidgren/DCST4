@@ -1,6 +1,8 @@
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
+using FellowOakDicom.IO.Buffer;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
@@ -12,6 +14,8 @@ namespace DCST4.Core.Pipeline
         /// <summary>DS holds at most 16 characters.</summary>
         private const string RatioFormat = "0.####";
         private const string ImageTypeDerived = "DERIVED";
+        /// <summary>The tag and length in front of each fragment. The Basic Offset Table counts them.</summary>
+        private const uint FragmentItemHeaderBytes = 8;
 
         public static DicomFile Convert(DicomFile file, DicomTransferSyntax syntax)
         {
@@ -27,8 +31,44 @@ namespace DCST4.Core.Pipeline
             var uncompressedSize = syntax.IsLossy ? PixelBytes(file.Dataset) : 0;
             var converted = file.Clone(syntax);
             UseOtherByteForEncapsulatedPixelData(converted.Dataset);
+            PadOddFragments(converted.Dataset);
             if (syntax.IsLossy) MarkLossy(converted.Dataset, syntax, uncompressedSize);
             return converted;
+        }
+
+        /// <summary>
+        /// Every fragment must have even length (PS3.5 A.4), but the HTJ2K encoder can leave one odd. DCMTK warns about those files,
+        /// and a strict PACS could reject them. A fragment that grows moves the ones after it, so the Basic Offset Table follows.
+        /// </summary>
+        private static void PadOddFragments(DicomDataset dataset)
+        {
+            var sequence = dataset.GetDicomItem<DicomItem>(DicomTag.PixelData) as DicomFragmentSequence;
+            if (sequence == null || sequence.Fragments.All(f => f.Size % 2 == 0)) return;
+
+            var movedTo = new Dictionary<uint, uint>();
+            uint oldPosition = 0;
+            uint newPosition = 0;
+            for (var i = 0; i < sequence.Fragments.Count; i++)
+            {
+                var fragment = sequence.Fragments[i];
+                movedTo[oldPosition] = newPosition;
+                oldPosition += (uint)fragment.Size + FragmentItemHeaderBytes;
+
+                if (fragment.Size % 2 != 0)
+                {
+                    // A new array is one byte longer than the encoded stream, and the added byte is zero.
+                    var padded = new byte[fragment.Size + 1];
+                    fragment.GetByteRange(0, (int)fragment.Size, padded);
+                    fragment = new MemoryByteBuffer(padded);
+                    sequence.Fragments[i] = fragment;
+                }
+                newPosition += (uint)fragment.Size + FragmentItemHeaderBytes;
+            }
+
+            for (var i = 0; i < sequence.OffsetTable.Count; i++)
+            {
+                if (movedTo.TryGetValue(sequence.OffsetTable[i], out var moved)) sequence.OffsetTable[i] = moved;
+            }
         }
 
         /// <summary>

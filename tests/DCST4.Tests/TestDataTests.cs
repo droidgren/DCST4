@@ -582,6 +582,14 @@ namespace DCST4.Tests
                 var pixelData = DicomPixelData.Create(read.Dataset);
                 check($"{label}: every frame is there", pixelData.NumberOfFrames == entry.FrameSha256.Count, pixelData.NumberOfFrames.ToString());
 
+                // Found by DCMTK: the HTJ2K encoder can leave a fragment with odd length.
+                var fragments = read.Dataset.GetDicomItem<DicomFragmentSequence>(DicomTag.PixelData);
+                check($"{label}: every fragment has even length", fragments.Fragments.All(f => f.Size % 2 == 0), string.Join(",", fragments.Fragments.Select(f => f.Size)));
+                if (fragments.OffsetTable.Count == fragments.Fragments.Count && fragments.Fragments.Count > 1)
+                {
+                    check($"{label}: the offset table points at each fragment", fragments.OffsetTable[1] == fragments.Fragments[0].Size + 8, fragments.OffsetTable[1].ToString());
+                }
+
                 if (choice.Syntax.IsLossy)
                 {
                     var ratio = read.Dataset.GetSingleValueOrDefault(DicomTag.LossyImageCompressionRatio, string.Empty);
