@@ -94,7 +94,7 @@ namespace DCST4.Tests
 
             if (args.Length >= 2 && args[0] == "scp")
             {
-                RunStandaloneScp(int.Parse(args[1], CultureInfo.InvariantCulture), args.Length > 2 && args[2] == "mixed");
+                RunStandaloneScp(int.Parse(args[1], CultureInfo.InvariantCulture), args.Length > 2 ? args[2] : null);
                 return 0;
             }
 
@@ -121,6 +121,7 @@ namespace DCST4.Tests
                     TestSuiteTests.TestTimeline(Port, ClosedPort, Check).GetAwaiter().GetResult();
                     TestSuiteTests.TestResultFiles(Port, temp, Check).GetAwaiter().GetResult();
                     TestSuiteTests.TestCli(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
+                    NegotiationTests.Run(Port, ClosedPort, temp, () => LogSink.Lines.ToArray(), Check).GetAwaiter().GetResult();
                     TestSendingSyntaxes().GetAwaiter().GetResult();
                     TestStatuses().GetAwaiter().GetResult();
                     TestAssociationBehaviour().GetAwaiter().GetResult();
@@ -1907,10 +1908,34 @@ namespace DCST4.Tests
         /// Runs the mock SCP until the process is stopped, for trying the real app by hand: DCST4.Tests.exe scp 11112 [mixed].
         /// "mixed" answers with a warning for every 5th image and a failure for every 7th. It stores nothing.
         /// </summary>
-        private static void RunStandaloneScp(int port, bool mixed)
+        /// <summary>A table to look at in the Capabilities tab: Explicit VR everywhere, compression for CT and MR only, and no Query/Retrieve.</summary>
+        private static ScpContextTable NegotiationScript()
+        {
+            var table = new ScpContextTable { Default = ScpAnswer.Reject(DicomPresentationContextResult.RejectTransferSyntaxesNotSupported) };
+            foreach (var sop in DCST4.Core.Capability.CapabilityCatalog.StorageSopClasses)
+            {
+                table.Set(sop, DicomTransferSyntax.ImplicitVRLittleEndian, ScpAnswer.Accept);
+                table.Set(sop, DicomTransferSyntax.ExplicitVRLittleEndian, ScpAnswer.Accept);
+            }
+            foreach (var sop in new[] { DicomUID.CTImageStorage, DicomUID.MRImageStorage })
+            {
+                table.Set(sop, DicomTransferSyntax.JPEGProcess14SV1, ScpAnswer.Accept);
+                table.Set(sop, DicomTransferSyntax.JPEG2000Lossless, ScpAnswer.Accept);
+                table.Set(sop, DicomTransferSyntax.RLELossless, ScpAnswer.Reject(DicomPresentationContextResult.RejectUser));
+            }
+            table.Set(DicomUID.Verification, DicomTransferSyntax.ImplicitVRLittleEndian, ScpAnswer.Accept);
+            foreach (var sop in DCST4.Core.Capability.CapabilityCatalog.QueryRetrieveFind.Concat(DCST4.Core.Capability.CapabilityCatalog.QueryRetrieveMoveAndGet))
+            {
+                table.Set(sop, ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported));
+            }
+            return table;
+        }
+
+        private static void RunStandaloneScp(int port, string mode)
         {
             Scp.Reset();
-            if (mixed)
+            if (mode == "negotiation") Scp.ContextTable = NegotiationScript();
+            if (mode == "mixed")
             {
                 Scp.StatusFor = i =>
                 {

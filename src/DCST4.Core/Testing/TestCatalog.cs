@@ -13,6 +13,10 @@ namespace DCST4.Core.Testing
         public static IReadOnlyList<ITestCase> All { get; } = new ITestCase[]
         {
             new CEchoTest(),
+            new NegotiationProbeTest(),
+            new UnknownCallingAeTest(),
+            new WrongCalledAeTest(),
+            new UnsupportedContextsTest(),
         };
 
         /// <summary>

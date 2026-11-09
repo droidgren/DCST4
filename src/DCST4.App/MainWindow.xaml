@@ -389,6 +389,43 @@
                         </Grid>
                     </DockPanel>
                 </TabItem>
+                <TabItem Header="Capabilities">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,2,2,4">
+                            <Button Content="Save as JSON..." Width="100" Click="SaveCapabilityJson_Click" IsEnabled="{Binding TestSuite.Capabilities.HasMatrix}"/>
+                            <Button Content="Save as CSV..." Width="100" Margin="6,0,0,0" Click="SaveCapabilityCsv_Click" IsEnabled="{Binding TestSuite.Capabilities.HasMatrix}"/>
+                            <Button Content="Load claimed..." Width="100" Margin="6,0,0,0" Click="LoadClaimedCapabilities_Click" IsEnabled="{Binding TestSuite.Capabilities.HasMatrix}"
+                                    ToolTip="Compare with a JSON file of what the vendor's Conformance Statement claims"/>
+                            <Button Content="Clear claimed" Width="90" Margin="6,0,0,0" Click="ClearClaimedCapabilities_Click" IsEnabled="{Binding TestSuite.Capabilities.HasClaimed}"/>
+                        </StackPanel>
+                        <TextBox DockPanel.Dock="Top" Text="{Binding TestSuite.Capabilities.RemoteSummary, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0" Background="Transparent" Margin="2,0,2,4"/>
+                        <TextBlock DockPanel.Dock="Bottom" Text="{Binding TestSuite.Capabilities.LegendText, Mode=OneWay}" TextWrapping="Wrap" Foreground="#FF505050" Margin="2,4,2,2"/>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="3*"/>
+                                <RowDefinition Height="4"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <DataGrid x:Name="CapabilityGrid" ItemsSource="{Binding TestSuite.Capabilities.Rows}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      HeadersVisibility="Column" GridLinesVisibility="All" HorizontalGridLinesBrush="#FFE0E0E0" VerticalGridLinesBrush="#FFE0E0E0"
+                                      SelectionUnit="Cell" CanUserReorderColumns="False" CanUserSortColumns="False" Background="White"/>
+                            <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Center" Height="4" Background="Transparent"/>
+                            <DockPanel Grid.Row="2">
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding TestSuite.Capabilities.ComparisonSummary}" FontWeight="SemiBold" Margin="2,0,2,2"/>
+                                <DataGrid ItemsSource="{Binding TestSuite.Capabilities.Differences}" AutoGenerateColumns="False" IsReadOnly="True"
+                                          HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#FFE0E0E0"
+                                          ClipboardCopyMode="IncludeHeader" Background="White">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Difference" Binding="{Binding Kind}" Width="170"/>
+                                        <DataGridTextColumn Header="SOP class" Binding="{Binding SopClass}" Width="300"/>
+                                        <DataGridTextColumn Header="Transfer syntax" Binding="{Binding TransferSyntax}" Width="260"/>
+                                        <DataGridTextColumn Header="What the SCP did" Binding="{Binding Actual}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </Grid>
+                    </DockPanel>
+                </TabItem>
                 <TabItem Header="Log">
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2">

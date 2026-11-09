@@ -1,3 +1,4 @@
+using DCST4.Core.Capability;
 using DCST4.Core.Generation;
 using DCST4.Core.Network;
 using DCST4.Core.Pipeline;
@@ -590,6 +591,7 @@ namespace DCST4.Tests
             vm.ProfileName = "Comparison";
 
             check("The list holds the catalog, ticked", suite.Choices.Count == TestCatalog.All.Count && suite.Choices.All(c => c.IsSelected), suite.Choices.Count.ToString());
+            foreach (var choice in suite.Choices) choice.IsSelected = choice.Test.Id == "c-echo";
 
             // ------------------------------------------------ the same content as the command line
             Scp.Reset();
@@ -695,8 +697,97 @@ namespace DCST4.Tests
             var fromOld = vm.BuildTargetProfile();
             check("Old profile: becomes a target profile", fromOld.Endpoint.Host == "old-host" && fromOld.Endpoint.Port == 4242 && fromOld.Endpoint.CallingAe == "OLDCALL" && fromOld.Endpoint.CalledAe == "OLDPACS" && fromOld.Endpoint.UseTls && fromOld.Endpoint.TlsClientCertThumbprint == "AA11", fromOld.Endpoint.Host);
             check("Old profile: defaults fill the rest, and it is valid", fromOld.LocalScpAe == TargetProfile.DefaultLocalScpAe && fromOld.UidRoot == TargetProfile.DefaultUidRoot && fromOld.Validate() == null, fromOld.Validate());
+            vm.SelectedProfile = null;
+            vm.ServerHost = "127.0.0.1";
+            vm.ServerPort = port;
+            vm.ServerAET = "MOCKSCP";
+            vm.CallingAET = "DCST4";
+            vm.UseTLS = false;
 
+            await CheckCapabilities(h, folder, check);
             await CheckTestsTabLayout(port, check);
+        }
+
+        private static ScpContextTable CapabilityScript()
+        {
+            var table = new ScpContextTable { Default = ScpAnswer.Reject(DicomPresentationContextResult.RejectTransferSyntaxesNotSupported) };
+            table.Set(DicomUID.CTImageStorage, DicomTransferSyntax.ExplicitVRLittleEndian, ScpAnswer.Accept);
+            table.Set(DicomUID.CTImageStorage, DicomTransferSyntax.ImplicitVRLittleEndian, ScpAnswer.Accept);
+            table.Set(DicomUID.Verification, DicomTransferSyntax.ImplicitVRLittleEndian, ScpAnswer.Accept);
+            return table;
+        }
+
+        private static async Task CheckCapabilities(Harness h, string folder, Action<string, bool, string> check)
+        {
+            var vm = h.Vm;
+            var suite = vm.TestSuite;
+            var capabilities = suite.Capabilities;
+
+            check("Capabilities: empty until a probe has run", !capabilities.HasMatrix && capabilities.Rows.Count == 0 && capabilities.RemoteSummary.Contains("Tests tab"), capabilities.RemoteSummary);
+
+            foreach (var choice in suite.Choices) choice.IsSelected = choice.Test.Id == "negotiation-probe";
+            h.Messages.Clear();
+            Scp.Reset();
+            Scp.ContextTable = CapabilityScript();
+            await h.Execute(vm.RunTestsCommand);
+
+            check("Capabilities: the run went through the busy state", !vm.IsBusy && h.Messages.Count == 0 && suite.Rows.Count == 1 && suite.Rows[0].Result == TestResultClass.PASS, suite.Rows.Count > 0 ? suite.Rows[0].Explanation : string.Join("; ", h.Messages));
+            check("Capabilities: one row per SOP class, one column per syntax", capabilities.HasMatrix && capabilities.Rows.Count == CapabilityCatalog.SopClasses.Count && capabilities.Columns.Count == CapabilityCatalog.TransferSyntaxes.Count && capabilities.Rows.All(r => r.Cells.Count == capabilities.Columns.Count), capabilities.Rows.Count.ToString());
+            var ctRow = capabilities.Rows.Single(r => r.SopClassUid == DicomUID.CTImageStorage.UID);
+            var explicitColumn = capabilities.Columns.Select((c, i) => new { c, i }).Single(x => x.c.ShortName == "Explicit LE").i;
+            var rleColumn = capabilities.Columns.Select((c, i) => new { c, i }).Single(x => x.c.ShortName == "RLE").i;
+            check("Capabilities: an accepted cell", ctRow.Cells[explicitColumn].Code == "✓" && ctRow.Cells[explicitColumn].ToolTip.Contains("Accepted") && ctRow.Cells[explicitColumn].ToolTip.Contains("presentation context"), ctRow.Cells[explicitColumn].ToolTip);
+            check("Capabilities: a rejected cell has its own code", ctRow.Cells[rleColumn].Code == "T" && ctRow.Cells[rleColumn].ToolTip.Contains("TransferSyntaxNotSupported"), ctRow.Cells[rleColumn].ToolTip);
+            check("Capabilities: the matrix files were saved with the run", suite.LastResultFiles.CapabilityJson != null && File.Exists(suite.LastResultFiles.CapabilityJson), null);
+            check("Capabilities: the remote is described", capabilities.RemoteSummary.Contains("MOCKSCP") && capabilities.RemoteSummary.Contains("max PDU"), capabilities.RemoteSummary);
+
+            // ------------------------------------------------ saving
+            var jsonPath = Path.Combine(folder, "saved-matrix.json");
+            var csvPath = Path.Combine(folder, "saved-matrix.csv");
+            vm.SaveCapabilityMatrix(jsonPath, false);
+            vm.SaveCapabilityMatrix(csvPath, true);
+            check("Capabilities: saved as JSON and CSV", CapabilityMatrix.Load(jsonPath).ToJson() == capabilities.Matrix.ToJson() && File.ReadAllText(csvPath, Encoding.UTF8).StartsWith("sop_class_uid"), null);
+
+            var blocked = Path.Combine(folder, "a-file-not-a-folder");
+            File.WriteAllText(blocked, "x");
+            h.Messages.Clear();
+            vm.SaveCapabilityMatrix(Path.Combine(blocked, "matrix.json"), false);
+            check("Capabilities: a save that cannot be done gives a message", h.Messages.Count == 1 && h.Messages[0].Contains("Could not save"), string.Join("; ", h.Messages));
+
+            // ------------------------------------------------ claimed vs actual
+            var claimedPath = Path.Combine(folder, "claimed.json");
+            File.WriteAllText(claimedPath, "{ \"rows\": [ { \"sopClassUid\": \"" + DicomUID.CTImageStorage.UID + "\", \"cells\": [ "
+                + "{ \"transferSyntaxUid\": \"" + DicomTransferSyntax.ExplicitVRLittleEndian.UID.UID + "\", \"result\": \"Accepted\" }, "
+                + "{ \"transferSyntaxUid\": \"" + DicomTransferSyntax.RLELossless.UID.UID + "\", \"result\": \"Accepted\" } ] } ] }");
+            h.Messages.Clear();
+            vm.LoadClaimedCapabilities(claimedPath);
+            ctRow = capabilities.Rows.Single(r => r.SopClassUid == DicomUID.CTImageStorage.UID);
+            var implicitColumn = capabilities.Columns.Select((c, i) => new { c, i }).Single(x => x.c.ShortName == "Implicit").i;
+            check("Claimed: no dialog, and the lists are filled", h.Messages.Count == 0 && capabilities.HasClaimed && capabilities.Differences.Count == 3, capabilities.Differences.Count.ToString());
+            check("Claimed: a claimed but rejected cell is marked", ctRow.Cells[rleColumn].Code == "T!" && ctRow.Cells[rleColumn].ToolTip.Contains("Claimed"), ctRow.Cells[rleColumn].Code);
+            check("Claimed: an accepted but not claimed cell is marked", ctRow.Cells[implicitColumn].Code == "✓+", ctRow.Cells[implicitColumn].Code);
+            check("Claimed: the summary counts them", capabilities.ComparisonSummary.Contains("1 claimed but rejected") && capabilities.ComparisonSummary.Contains("2 accepted but not claimed"), capabilities.ComparisonSummary);
+
+            capabilities.SetClaimed(null);
+            ctRow = capabilities.Rows.Single(r => r.SopClassUid == DicomUID.CTImageStorage.UID);
+            check("Claimed: clearing removes the marks", !capabilities.HasClaimed && capabilities.Differences.Count == 0 && ctRow.Cells[rleColumn].Code == "T" && capabilities.ComparisonSummary.Length == 0, ctRow.Cells[rleColumn].Code);
+
+            var broken = Path.Combine(folder, "broken-claim.json");
+            File.WriteAllText(broken, "{ \"rows\": ");
+            h.Messages.Clear();
+            vm.LoadClaimedCapabilities(broken);
+            check("Claimed: a broken file gives a message and changes nothing", h.Messages.Count == 1 && h.Messages[0].Contains("not valid") && !capabilities.HasClaimed, string.Join("; ", h.Messages));
+
+            // ------------------------------------------------ another run keeps the claims
+            vm.LoadClaimedCapabilities(claimedPath);
+            Scp.Reset();
+            Scp.ContextTable = CapabilityScript();
+            h.Messages.Clear();
+            await h.Execute(vm.RunTestsCommand);
+            check("Claimed: a new run is compared with the same claims", capabilities.HasClaimed && capabilities.Differences.Count == 3, capabilities.Differences.Count.ToString());
+            capabilities.SetClaimed(null);
+            Scp.Reset();
+            foreach (var choice in suite.Choices) choice.IsSelected = true;
         }
 
         private sealed class BindingErrorListener : TraceListener
@@ -777,6 +868,39 @@ namespace DCST4.Tests
                     var encoder = new PngBitmapEncoder();
                     encoder.Frames.Add(BitmapFrame.Create(bitmap));
                     using (var stream = File.Create(picture)) encoder.Save(stream);
+                }
+
+                // ------------------------------------------------ the Capabilities tab, with a real probe in it
+                Scp.Reset();
+                Scp.ContextTable = CapabilityScript();
+                var profile = TestSuiteTests.MockProfile(port);
+                var outcome = await NegotiationProbe.RunAsync(profile, null, CancellationToken.None);
+                Scp.Reset();
+                vm.TestSuite.Capabilities.Show(outcome.Matrix);
+                var claimed = new CapabilityMatrix();
+                claimed.Rows.Add(new MatrixRow { SopClassUid = DicomUID.CTImageStorage.UID, Cells = { new MatrixCell { TransferSyntaxUid = DicomTransferSyntax.RLELossless.UID.UID, Result = CapabilityResult.Accepted } } });
+                vm.TestSuite.Capabilities.SetClaimed(claimed);
+
+                var capabilitiesTab = tabs.Items.OfType<TabItem>().Single(i => (string)i.Header == "Capabilities");
+                tabs.SelectedItem = capabilitiesTab;
+                content.Measure(new Size(width, height));
+                content.Arrange(new Rect(0, 0, width, height));
+                content.UpdateLayout();
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+
+                var grid = (DataGrid)window.FindName("CapabilityGrid");
+                check("Capabilities tab: is laid out with one column per syntax", capabilitiesTab.IsSelected && grid.Columns.Count == CapabilityCatalog.TransferSyntaxes.Count + 1 && grid.ActualHeight > 0, grid.Columns.Count.ToString());
+                var capabilityProblems = listener.Errors.Where(e => e.Contains("Capabilities") || e.Contains("Cells[") || e.Contains("SopClass") || e.Contains("Differences")).ToList();
+                check("Capabilities tab: every binding resolves", capabilityProblems.Count == 0, string.Join("\n", capabilityProblems));
+
+                var capabilityPicture = Environment.GetEnvironmentVariable("DCST4_CAPABILITIES_TAB_PNG");
+                if (!string.IsNullOrEmpty(capabilityPicture))
+                {
+                    var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                    bitmap.Render(content);
+                    var encoder = new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                    using (var stream = File.Create(capabilityPicture)) encoder.Save(stream);
                 }
             }
             finally

@@ -10,7 +10,10 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace DCST4
 {
@@ -42,7 +45,55 @@ namespace DCST4
             {
                 if (e.Action == NotifyCollectionChangedAction.Add && LogList.IsVisible) LogList.ScrollIntoView(e.NewItems[0]);
             };
+
+            _viewModel.TestSuite.Capabilities.ColumnsChanged += RebuildCapabilityColumns;
         }
+
+        /// <summary>One column per transfer syntax, so they follow the matrix rather than being written in the XAML.</summary>
+        private void RebuildCapabilityColumns()
+        {
+            CapabilityGrid.Columns.Clear();
+            CapabilityGrid.Columns.Add(new DataGridTextColumn { Header = "SOP class", Binding = new Binding(nameof(CapabilityRowView.SopClass)), Width = 310 });
+
+            var columns = _viewModel.TestSuite.Capabilities.Columns;
+            for (var i = 0; i < columns.Count; i++)
+            {
+                var text = new FrameworkElementFactory(typeof(TextBlock));
+                text.SetBinding(TextBlock.TextProperty, new Binding($"Cells[{i}].{nameof(CapabilityCellView.Code)}"));
+                text.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                text.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+
+                var cell = new FrameworkElementFactory(typeof(Border));
+                cell.SetBinding(Border.BackgroundProperty, new Binding($"Cells[{i}].{nameof(CapabilityCellView.Background)}"));
+                cell.SetBinding(ToolTipProperty, new Binding($"Cells[{i}].{nameof(CapabilityCellView.ToolTip)}"));
+                cell.AppendChild(text);
+
+                CapabilityGrid.Columns.Add(new DataGridTemplateColumn
+                {
+                    Header = new TextBlock { Text = columns[i].ShortName, ToolTip = columns[i].Name, LayoutTransform = new RotateTransform(-90) },
+                    CellTemplate = new DataTemplate { VisualTree = cell },
+                    Width = 34,
+                });
+            }
+        }
+
+        private void SaveCapabilityJson_Click(object sender, RoutedEventArgs e) => SaveCapabilityMatrix("JSON files (*.json)|*.json", ".json", false);
+
+        private void SaveCapabilityCsv_Click(object sender, RoutedEventArgs e) => SaveCapabilityMatrix("CSV files (*.csv)|*.csv", ".csv", true);
+
+        private void SaveCapabilityMatrix(string filter, string extension, bool asCsv)
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog { Filter = filter, DefaultExt = extension, FileName = "capability-matrix" + extension };
+            if (dialog.ShowDialog(this) == true) _viewModel.SaveCapabilityMatrix(dialog.FileName, asCsv);
+        }
+
+        private void LoadClaimedCapabilities_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*", Title = "Select what the vendor claims" };
+            if (dialog.ShowDialog(this) == true) _viewModel.LoadClaimedCapabilities(dialog.FileName);
+        }
+
+        private void ClearClaimedCapabilities_Click(object sender, RoutedEventArgs e) => _viewModel.TestSuite.Capabilities.SetClaimed(null);
 
         protected override void OnClosing(CancelEventArgs e)
         {

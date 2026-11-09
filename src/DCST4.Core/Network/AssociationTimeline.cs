@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace DCST4.Core.Network
 {
@@ -29,6 +30,19 @@ namespace DCST4.Core.Network
         /// not used because it comes from a counter shared by the whole process, so it differs from run to run.
         /// </summary>
         public int? DimseIndex { get; set; }
+        /// <summary>Which association of a test that opens several, from 1. Null for a test with one association.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? Association { get; set; }
+    }
+
+    /// <summary>An A-ASSOCIATE-RJ as the SCP sent it.</summary>
+    public sealed class AssociationRejection
+    {
+        public string Result { get; set; }
+        public string Source { get; set; }
+        public string Reason { get; set; }
+
+        public override string ToString() => $"result {Result}, source {Source}, reason {Reason}";
     }
 
     /// <summary>
@@ -47,9 +61,10 @@ namespace DCST4.Core.Network
     public sealed class AssociationTimeline
     {
         private readonly object _lock = new object();
-        private readonly Stopwatch _clock = Stopwatch.StartNew();
+        private readonly Stopwatch _clock;
         private readonly List<ProtocolEvent> _events = new List<ProtocolEvent>();
         private List<NegotiatedContext> _negotiation = new List<NegotiatedContext>();
+        private AssociationRejection _rejection;
         private string _associationDetail;
         private long _attachedAtMs;
         private long? _endedAtMs;
@@ -57,6 +72,24 @@ namespace DCST4.Core.Network
         private bool _accepted;
         private bool _completed;
         private int _dimseCount;
+
+        /// <param name="clock">A running clock shared with other timelines, so that several associations of one test share a time axis.</param>
+        public AssociationTimeline(Stopwatch clock = null)
+        {
+            _clock = clock ?? Stopwatch.StartNew();
+        }
+
+        /// <summary>The A-ASSOCIATE-RJ, or null if there was none.</summary>
+        public AssociationRejection Rejection
+        {
+            get { lock (_lock) return _rejection; }
+        }
+
+        /// <summary>Whether an A-ASSOCIATE-AC arrived.</summary>
+        public bool Accepted
+        {
+            get { lock (_lock) return _accepted; }
+        }
 
         /// <summary>A snapshot of the events so far, in order.</summary>
         public List<ProtocolEvent> Events
@@ -172,6 +205,7 @@ namespace DCST4.Core.Network
             lock (_lock)
             {
                 EnsureRequestRecorded();
+                _rejection = new AssociationRejection { Result = result.ToString(), Source = source.ToString(), Reason = reason.ToString() };
                 Add(ProtocolEvent.Received, "A-ASSOCIATE-RJ", $"Result {result}, source {source}, reason {reason}");
             }
         }

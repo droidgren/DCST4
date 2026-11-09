@@ -105,6 +105,11 @@ namespace DCST4.Core.Testing
             {
                 entry.Detail = entry.Detail?.Replace(thumbprint, CertificatePlaceholder);
             }
+            if (result.CapabilityMatrix == null) return;
+            foreach (var association in result.CapabilityMatrix.Associations)
+            {
+                association.Detail = association.Detail?.Replace(thumbprint, CertificatePlaceholder);
+            }
         }
 
         private void Raise(TestProgress progress)

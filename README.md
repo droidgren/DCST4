@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.4.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.5.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -23,7 +23,8 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Full response logging:** status code, state, description, Error Comment, Offending Element and time for every image, including warnings and vendor-specific codes.
 - **Save to disk:** instead of, or in addition to, sending, as a DICOM File-set with a DICOMDIR that viewers can open.
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
-- **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). The first test is C-ECHO, and each run is saved as JSON and CSV for comparison over time. See [Testing a PACS](#testing-a-pacs).
+- **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). Each run is saved as JSON and CSV for comparison over time. See [Testing a PACS](#testing-a-pacs).
+- **Capability matrix:** finds out from association negotiation alone, with no images sent, which SOP classes and transfer syntaxes a PACS supports, and compares that with what the vendor's Conformance Statement claims. See [What the PACS supports](#what-the-pacs-supports).
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
 - **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, Enhanced CT and MR, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
 
@@ -184,6 +185,59 @@ Each run writes `DCST4-run-<UTC time>.json` with full detail and a `.csv` with o
 
 Two identical runs differ only in the times and durations, from the program or the command line alike.
 
+### What the PACS supports
+
+The test `negotiation-probe` asks the PACS what it supports without sending a single image. It proposes every SOP class that DCST4 can generate, plus Verification, Storage Commitment Push Model and Study and Patient Root Query/Retrieve FIND, MOVE and GET, each with 19 transfer syntaxes: uncompressed, Deflated, JPEG, JPEG-LS, JPEG 2000, RLE, HTJ2K and MPEG-4/H.264. Each presentation context holds exactly one transfer syntax, so the answer is per syntax and not only the first one accepted.
+
+An association can hold at most 128 presentation contexts, so the probe splits the work over several associations, 5 by default. Each one is opened with a C-ECHO, whose context takes one of the 128 places. A last association asks about SCP/SCU role selection for the storage classes and extended negotiation for Query/Retrieve. It is separate so that a PACS that objects to those cannot affect the matrix.
+
+The result is on the **Capabilities** tab, with one row per SOP class and one column per syntax, and is saved next to the result files as `<run>-capability.json` and `.csv`. The tab can also save it on its own.
+
+| Cell result                  | Meaning                                                                |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| `Accepted`                   | The context was accepted with the proposed syntax.                     |
+| `AbstractSyntaxNotSupported` | Rejected: abstract syntax not supported.                               |
+| `TransferSyntaxNotSupported` | Rejected: transfer syntax not supported.                               |
+| `UserRejection`              | Rejected by the user.                                                  |
+| `NoReason`                   | Rejected, no reason given.                                             |
+| `NotAnswered`                | The association was accepted but the answer has no item for this context, which the standard requires. |
+| `AcceptedOtherSyntax`        | Accepted, but with another syntax than the one proposed.               |
+| `AssociationRejected`        | The whole association was refused, so the context was never considered. |
+| `AssociationFailed`          | The association failed before the PACS answered.                       |
+| `NotProbed`                  | The probe never got this far, for example because it was cancelled.    |
+
+The matrix file also holds, per association, how it ended and any reject result, source and reason, and the remote Implementation Class UID, Implementation Version Name and maximum PDU length, as well as the role selection and extended negotiation replies. A PACS that does not answer such an item is recorded as not having answered.
+
+The test is `PASS` when everything was answered and every association was released, and `NOT_SUPPORTED` if nothing was accepted. A rejected or aborted association, or an answer that breaks the rules (`NotAnswered`, `AcceptedOtherSyntax`), gives `FAIL`. A timeout or a connection that fails stops the probe, and the cells not reached are `NotProbed`.
+
+**Claimed vs actual.** **Load claimed...** on the tab reads a JSON file of what the vendor's Conformance Statement claims, in the same layout as the matrix. Only `sopClassUid`, `transferSyntaxUid` and `result` are required, and a saved matrix can be used as a starting point:
+
+```json
+{
+  "rows": [
+    {
+      "sopClassUid": "1.2.840.10008.5.1.4.1.1.2",
+      "cells": [
+        { "transferSyntaxUid": "1.2.840.10008.1.2", "result": "Accepted" },
+        { "transferSyntaxUid": "1.2.840.10008.1.2.4.70", "result": "Accepted" }
+      ]
+    }
+  ]
+}
+```
+
+Only `Accepted` counts as a claim. The tab then lists what was **claimed but rejected**, **accepted but not claimed**, and **claimed but not answered**, the last for a combination the probe never got an answer about, which says nothing about the PACS.
+
+**Tests of refusals.** All three are in the `Capability` category:
+
+| Test                                | What it does                                                              | Result                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `negotiation-unknown-calling-ae`    | Calls with an AE title the PACS should not know                           | Rejected: `EXPECTED_FAILURE`, with result, source and reason. Accepted: `FAIL` |
+| `negotiation-wrong-called-ae`       | Calls the PACS by the wrong AE title                                      | The same                                                               |
+| `negotiation-unsupported-contexts`  | Proposes only an abstract syntax under the profile's UID root, which cannot exist | Rejected, or accepted with the context rejected: `EXPECTED_FAILURE`, and the Details say which. Context accepted: `FAIL` |
+
+A PACS that accepts an unknown AE title gets `FAIL` as a finding to report, with `finding` in the Details, and `DCST4.Cli.exe` then exits with 1. A-ABORT or a closed connection in place of a proper rejection is also `FAIL`, and says so. The two AE title tests first open an association with the profile's own titles, and give `INDETERMINATE` if that fails, since a rejection would then prove nothing.
+
 ## Test datasets
 
 The test suite works with datasets that can be generated again, unlike Generate & Send, where every run gets new UIDs and the current date. `DCST4.Cli.exe generate` writes a dataset as a DICOM File-set with a DICOMDIR and a `manifest.json`:
@@ -258,10 +312,11 @@ src\DCST4.Core\     No WPF reference
   TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
   Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary
   Network\          Ping, C-ECHO, C-STORE, AssociationTimeline, AssociationNegotiation
+  Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
   Output\           DICOM File-set and DICOMDIR
   Testing\          TargetProfile, ITestCase, TestRunner, TestCatalog, TestResult, ResultFileWriter
     Cases\          The test cases
-src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs
+src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs, the Capabilities tab ViewModels\CapabilityViewModel.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
 tools\              List refresh script
@@ -269,7 +324,9 @@ tools\              List refresh script
 
 The app and the command line are front-ends on the same engine in `Testing\`. To add a test, implement `ITestCase` in `Testing\Cases\` and add it to `TestCatalog.All`, and it appears in both. Its `Id` must stay the same across versions, because result files are compared by it. Change `TestRunReport.CurrentSchemaVersion` when the result files change.
 
-`AssociationTimeline` is built on `IDicomClient`, because fo-dicom's own event collector is internal. It settles how an association ended only after `SendAsync` is over, since `AssociationReleased` is also raised after an abort. C-ECHO is wired to it so far.
+`AssociationTimeline` is built on `IDicomClient`, because fo-dicom's own event collector is internal. It settles how an association ended only after `SendAsync` is over, since `AssociationReleased` is also raised after an abort. C-ECHO and the negotiation tests are wired to it so far.
+
+`NegotiationProbe` runs each association through `EchoService.EchoAsync`, whose `configure` parameter decides what is proposed. It depends on how fo-dicom builds an association: a plain C-ECHO adds one context, Verification with Implicit VR, as ID 1, and `AdditionalPresentationContexts` follow unchanged, but a context identical to one already there is silently dropped. So Verification with Implicit VR is never proposed twice, and that cell of the matrix is answered by the C-ECHO's own context. After the A-ASSOCIATE-AC a context no longer holds what was proposed, so answers are paired with the plan by position. A role reply overwrites the proposed role, which is why the SCU role is proposed as null: it stays null only when no reply came. Later phases can choose a transfer syntax per object type from `CapabilityMatrix`.
 
 Generation knows nothing about sending. The two meet at `IImageSource`, which supplies images lazily so that a long stack does not sit in memory. That leaves room for:
 
@@ -311,6 +368,9 @@ Other ways to use it:
 
 # Run the mock SCP for trying the app by hand. "mixed" scripts warnings and failures. It stores nothing.
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 mixed
+
+# The same, with a table of what is accepted, for looking at the Capabilities tab
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 negotiation
 ```
 
 JPEG Lossless streams are checked with a small decoder written from ITU T.81 (`LosslessJpegDecoder.cs`). fo-dicom's built-in decoder is not used as the reference, because it was seen returning 0 for the last pixel of a frame that this decoder and PureCodecs both decode correctly.
@@ -350,6 +410,15 @@ The dataset profiles added in 1.4.0 were checked once by hand with DCMTK 3.7.1, 
 - `dcmmkdir` builds the same record types as DCST4's DICOMDIR for all 21 profiles, and `dcm2img` renders every image DCMTK has a codec for.
 - 80 sends from DCST4 to `storescp` on the same computer give 288 received objects that match the manifest, in every syntax, and so does a 660 MB object. `storescu` sent the 214 uncompressed files. It could not send the compressed ones with the options used, since its negotiation settled on Explicit VR.
 
+The negotiation probe added in 1.5.0 was checked once by hand against DCMTK 3.7.1 `storescp` on the same computer, with a configuration file limiting it to four SOP classes:
+
+- All 551 cells of the matrix agree with that configuration. `storescp` accepted 7 combinations, answered 475 with abstract syntax not supported and 69 with transfer syntax not supported.
+- `storescp`'s own debug output shows 589 proposed contexts with exactly one transfer syntax each and no request above 128 contexts, and the probe's associations were all released.
+- The role selection and extended negotiation items reached it and it answered none of them, which the matrix records as no reply.
+- It accepts any AE title by default, so the two AE title tests report the finding as described. It answered the unsupported abstract syntax by accepting the association and rejecting the context.
+
+A comparison with Orthanc has not been done, since it was not available.
+
 ## Dependencies
 
 | Package                  | Use                                                          | Licence    |
@@ -367,8 +436,23 @@ The dataset profiles added in 1.4.0 were checked once by hand with DCMTK 3.7.1, 
 | Log, kept for 7 days               | `%LocalAppData%\DCST4\Logs\`, `Cli-*.log` for the command line |
 | Test results from the program      | `%LocalAppData%\DCST4\TestRuns\`, or the folder on the Tests tab |
 | Test results from the command line | The folder given with `--out`                                  |
+| Capability matrix of a run         | Next to its result files, as `<run>-capability.json` and `.csv` |
 
 ## Changelog
+
+### 1.5.0
+
+New:
+
+- Negotiation probe: finds out from association negotiation alone, with no images sent, which SOP classes and transfer syntaxes a PACS supports, with one presentation context per syntax, split over several associations to respect the limit of 128
+- Records per context whether it was accepted, or rejected as abstract syntax not supported, transfer syntax not supported, by the user or with no reason, and the remote Implementation Class UID, Implementation Version Name and maximum PDU length, and replies to role selection and extended negotiation
+- Capabilities tab with the matrix of SOP classes and transfer syntaxes, and export as JSON and CSV
+- Claimed vs actual: load a JSON file of what the vendor's Conformance Statement claims and see what was claimed but rejected and accepted but not claimed
+- Tests of refusals: unknown calling AE title, wrong called AE title, and an association with only unsupported contexts. A PACS that accepts an unknown AE title is reported as a finding
+
+Changed:
+
+- The result files have schema version 2, with the capability matrix and the association number of each protocol step
 
 ### 1.4.0
 
