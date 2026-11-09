@@ -298,6 +298,97 @@
                         </DataGrid.Columns>
                     </DataGrid>
                 </TabItem>
+                <TabItem Header="Tests">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="2,2,2,4">
+                            <Button DockPanel.Dock="Left" Content="Run tests" Width="80" Command="{Binding RunTestsCommand}" FontWeight="SemiBold"
+                                    ToolTip="Run the ticked tests against the destination above"/>
+                            <Button DockPanel.Dock="Left" Content="Cancel" Width="60" Margin="6,0,0,0" Command="{Binding CancelCommand}"/>
+                            <Button DockPanel.Dock="Left" Content="Save profile as JSON..." Width="140" Margin="6,0,0,0" Click="SaveTargetProfileButton_Click" IsEnabled="{Binding IsIdle}"
+                                    ToolTip="Save the destination above as a file for DCST4.Cli.exe"/>
+                            <TextBlock DockPanel.Dock="Left" Text="Results folder:" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                            <Button DockPanel.Dock="Right" Content="Open" Width="50" Margin="4,0,0,0" Click="OpenTestResultsFolderButton_Click"/>
+                            <Button DockPanel.Dock="Right" Content="..." Width="26" Margin="4,0,0,0" Click="BrowseTestResultsFolderButton_Click" IsEnabled="{Binding IsIdle}" ToolTip="Select the folder"/>
+                            <TextBox Text="{Binding TestSuite.ResultsFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsEnabled="{Binding IsIdle}"/>
+                        </DockPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="230"/>
+                                <ColumnDefinition Width="4"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ListBox ItemsSource="{Binding TestSuite.Choices}" IsEnabled="{Binding IsIdle}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                            <TextBlock>
+                                                <Run Text="{Binding Name, Mode=OneWay}"/>
+                                                <Run Text="{Binding Category, Mode=OneWay}" Foreground="#FF505050"/>
+                                            </TextBlock>
+                                        </CheckBox>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent"/>
+                            <Grid Grid.Column="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="4"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <DataGrid ItemsSource="{Binding TestSuite.Rows}" SelectedItem="{Binding TestSuite.SelectedRow, Mode=TwoWay}" AutoGenerateColumns="False" IsReadOnly="True"
+                                          HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#FFE0E0E0" SelectionMode="Single"
+                                          ClipboardCopyMode="IncludeHeader" Background="White">
+                                    <DataGrid.RowStyle>
+                                        <Style TargetType="DataGridRow">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Result}" Value="NOT_SUPPORTED">
+                                                    <Setter Property="Background" Value="#FFFFF4C2"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Result}" Value="FAIL">
+                                                    <Setter Property="Background" Value="#FFFAD4D0"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Result}" Value="TOOL_ERROR">
+                                                    <Setter Property="Background" Value="#FFFAD4D0"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Result}" Value="TIMEOUT">
+                                                    <Setter Property="Background" Value="#FFE6E6E6"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Result}" Value="INDETERMINATE">
+                                                    <Setter Property="Background" Value="#FFE6E6E6"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </DataGrid.RowStyle>
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Test" Binding="{Binding Name}" Width="170"/>
+                                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="80"/>
+                                        <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="110"/>
+                                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="60"/>
+                                        <DataGridTextColumn Header="ms" Binding="{Binding DurationMs}" Width="50"/>
+                                        <DataGridTextColumn Header="Explanation" Binding="{Binding Explanation}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Center" Height="4" Background="Transparent"/>
+                                <DockPanel Grid.Row="2">
+                                    <TextBox DockPanel.Dock="Top" Text="{Binding TestSuite.SelectedRow.Explanation, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="48"
+                                             VerticalScrollBarVisibility="Auto" Background="#FFF0F0F0" Margin="0,0,0,2"/>
+                                    <DataGrid ItemsSource="{Binding TestSuite.SelectedRow.Timeline}" AutoGenerateColumns="False" IsReadOnly="True"
+                                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#FFE0E0E0"
+                                              ClipboardCopyMode="IncludeHeader" Background="White">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="ms" Binding="{Binding OffsetMs}" Width="50"/>
+                                            <DataGridTextColumn Header="Direction" Binding="{Binding Direction}" Width="70"/>
+                                            <DataGridTextColumn Header="Protocol step" Binding="{Binding Type}" Width="130"/>
+                                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="60"/>
+                                            <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" Width="*"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </DockPanel>
+                            </Grid>
+                        </Grid>
+                    </DockPanel>
+                </TabItem>
                 <TabItem Header="Log">
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2">

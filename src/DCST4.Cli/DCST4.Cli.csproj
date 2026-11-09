@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>DCST4.Cli</RootNamespace>
+    <!-- Not "DCST4": that would collide with the app's DCST4.exe in the same folder on a case-insensitive disk. -->
+    <AssemblyName>DCST4.Cli</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <AssemblyTitle>DCST4.Cli</AssemblyTitle>
+    <Description>DICOM C-Store Tester 4, command line</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DCST4.Core\DCST4.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+  <!-- Same layout as the app, so that the two can share one folder: the exe and its config at the top, all libraries in libs\. -->
+  <Target Name="MoveDllsToLibs" AfterTargets="Build">
+    <ItemGroup>
+      <DllsToMove Include="$(TargetDir)*.dll" />
+    </ItemGroup>
+    <MakeDir Directories="$(TargetDir)libs" />
+    <Move SourceFiles="@(DllsToMove)" DestinationFolder="$(TargetDir)libs" />
+  </Target>
+  <Target Name="DeleteLibDirectoryOnClean" AfterTargets="Clean">
+    <RemoveDir Directories="$(TargetDir)libs" />
+  </Target>
+
+</Project>

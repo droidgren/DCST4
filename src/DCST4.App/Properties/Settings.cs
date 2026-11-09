@@ -118,5 +118,9 @@ namespace DCST4.Properties
 
         [UserScopedSetting, DefaultSettingValue("")]
         public string SaveFolder { get => (string)this[nameof(SaveFolder)]; set => this[nameof(SaveFolder)] = value; }
+
+        /// <summary>Where test runs write their JSON and CSV. Empty = the default folder under %LocalAppData%\DCST4.</summary>
+        [UserScopedSetting, DefaultSettingValue("")]
+        public string TestResultsFolder { get => (string)this[nameof(TestResultsFolder)]; set => this[nameof(TestResultsFolder)] = value; }
     }
 }

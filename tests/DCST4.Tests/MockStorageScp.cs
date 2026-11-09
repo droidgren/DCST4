@@ -33,6 +33,11 @@ namespace DCST4.Tests
         public static Tag OffendingElement;
         public static int ResponseDelayMs;
         public static int HangFromImage = -1;
+        public static int EchoDelayMs;
+        /// <summary>Answer C-ECHO with A-ABORT instead of a response.</summary>
+        public static bool AbortOnEcho;
+        /// <summary>Status of the C-ECHO response. Null means Success.</summary>
+        public static DicomStatus EchoStatus;
 
         public static int AssociationCount;
         public static int EchoCount;
@@ -50,6 +55,9 @@ namespace DCST4.Tests
             OffendingElement = null;
             ResponseDelayMs = 0;
             HangFromImage = -1;
+            EchoDelayMs = 0;
+            AbortOnEcho = false;
+            EchoStatus = null;
             AssociationCount = 0;
             EchoCount = 0;
             StoreCount = 0;
@@ -89,10 +97,19 @@ namespace DCST4.Tests
         public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason) { }
         public void OnConnectionClosed(Exception exception) { }
 
-        public Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
+        public async Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
         {
             Interlocked.Increment(ref Scp.EchoCount);
-            return Task.FromResult(new DicomCEchoResponse(request, DicomStatus.Success));
+            if (Scp.AbortOnEcho)
+            {
+                await SendAbortAsync(DicomAbortSource.ServiceProvider, DicomAbortReason.UnexpectedPDU);
+                // A response must not follow the abort. By the time this one goes out, the connection is gone.
+                await Task.Delay(3000);
+                return new DicomCEchoResponse(request, DicomStatus.Success);
+            }
+
+            if (Scp.EchoDelayMs > 0) await Task.Delay(Scp.EchoDelayMs);
+            return new DicomCEchoResponse(request, Scp.EchoStatus ?? DicomStatus.Success);
         }
 
         public async Task<DicomCStoreResponse> OnCStoreRequestAsync(DicomCStoreRequest request)

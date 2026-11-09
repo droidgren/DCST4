@@ -42,7 +42,7 @@ namespace DCST4.Core.Network
             return ValidateAeTitle("Calling AET", CallingAe) ?? ValidateAeTitle("Called AET", CalledAe);
         }
 
-        private static string ValidateAeTitle(string field, string value)
+        internal static string ValidateAeTitle(string field, string value)
         {
             var trimmed = value?.Trim();
             if (string.IsNullOrEmpty(trimmed)) return $"{field} is empty.";

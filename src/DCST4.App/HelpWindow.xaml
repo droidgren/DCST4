@@ -64,6 +64,26 @@
             </Table>
             <Paragraph>Vendor-specific codes keep their real value in the Status column. The status bar shows the totals and throughput of the last run. Images never generated because the run stopped early have no row, but are counted as not sent in the totals.</Paragraph>
 
+            <Paragraph Style="{StaticResource H}">Running tests against a PACS</Paragraph>
+            <Paragraph>On the Tests tab below the exam settings, tick the tests and click Run tests. They run against the destination entered under Server. Select a row to see its explanation and the steps of the association, with the raw status of each response. Cancel stops the run, and what was finished is still saved.</Paragraph>
+            <Table CellSpacing="4">
+                <Table.Columns>
+                    <TableColumn Width="130"/>
+                    <TableColumn/>
+                </Table.Columns>
+                <TableRowGroup>
+                    <TableRow><TableCell><Paragraph>PASS</Paragraph></TableCell><TableCell><Paragraph>The system did what the test expects.</Paragraph></TableCell></TableRow>
+                    <TableRow Background="#FFFAD4D0"><TableCell><Paragraph>FAIL</Paragraph></TableCell><TableCell><Paragraph>It answered, refused or broke off in a way the test does not accept.</Paragraph></TableCell></TableRow>
+                    <TableRow Background="#FFFFF4C2"><TableCell><Paragraph>NOT_SUPPORTED</Paragraph></TableCell><TableCell><Paragraph>It said it does not support this, for example by not accepting the SOP class.</Paragraph></TableCell></TableRow>
+                    <TableRow><TableCell><Paragraph>EXPECTED_FAILURE</Paragraph></TableCell><TableCell><Paragraph>It refused something it is supposed to refuse.</Paragraph></TableCell></TableRow>
+                    <TableRow Background="#FFE6E6E6"><TableCell><Paragraph>TIMEOUT</Paragraph></TableCell><TableCell><Paragraph>No connection, association or response within the timeout under File &gt; Settings.</Paragraph></TableCell></TableRow>
+                    <TableRow Background="#FFE6E6E6"><TableCell><Paragraph>INDETERMINATE</Paragraph></TableCell><TableCell><Paragraph>The test could not reach a verdict, for example because the run was cancelled.</Paragraph></TableCell></TableRow>
+                    <TableRow Background="#FFFAD4D0"><TableCell><Paragraph>TOOL_ERROR</Paragraph></TableCell><TableCell><Paragraph>A bug or local problem in this program, such as a missing client certificate. Not the fault of the PACS.</Paragraph></TableCell></TableRow>
+                </TableRowGroup>
+            </Table>
+            <Paragraph>Each run is saved as a JSON file with full detail and a CSV file with one row per result, in the folder on the tab. The client certificate thumbprint is never written to them.</Paragraph>
+            <Paragraph>The same tests can run from the command line with DCST4.Cli.exe, which is in the program's folder. Click Save profile as JSON to write the destination to a file, and then run: DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results. The exit code is 0 with no FAIL or TOOL_ERROR, 1 with at least one of those, 2 for bad arguments or an unusable profile, and 130 if cancelled with Ctrl+C.</Paragraph>
+
             <Paragraph Style="{StaticResource H}">Saving to disk</Paragraph>
             <Paragraph>Tick Save to disk, with or without Send to server. The folder becomes a DICOM File-set that viewers can open: a DICOMDIR at the top, and the images in DICOM\EX000001\S001\IM0001 in the selected transfer syntax. DICOM limits these names to 8 characters and no extension, so the folders do not show patient details. The Saved to column shows where each image went.</Paragraph>
             <Paragraph>Each run gets a new EX folder and nothing is overwritten. Saving again to the same folder adds to the same DICOMDIR. Each file is saved before it is sent, so it exists even if sending fails, and the DICOMDIR is written when the run ends, also if it stopped early.</Paragraph>
@@ -73,7 +93,7 @@
             <Paragraph>Opening Help &gt; About also asks GitHub and shows the result in the window, including if the check failed. Nothing is downloaded or installed.</Paragraph>
 
             <Paragraph Style="{StaticResource H}">Logs and settings</Paragraph>
-            <Paragraph>The Log tab shows this program's messages, and the complete log is in File &gt; Open log directory (%LocalAppData%\DCST4\Logs). Settings are stored in %LocalAppData%\DCST4\user.config.</Paragraph>
+            <Paragraph>The Log tab shows this program's messages, and the complete log is in File &gt; Open log directory (%LocalAppData%\DCST4\Logs). The command line program logs to Cli files in the same folder. Settings are stored in %LocalAppData%\DCST4\user.config.</Paragraph>
         </FlowDocument>
     </FlowDocumentScrollViewer>
 </Window>

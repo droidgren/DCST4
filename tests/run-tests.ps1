@@ -35,7 +35,8 @@ if (-not $p.WaitForExit($TimeoutSeconds * 1000)) {
 }
 
 if ($hashBefore -ne (Get-FileHash $userConfig -ErrorAction SilentlyContinue).Hash) {
-    Write-Warning "$userConfig was modified by the test run."
+    Write-Host "FAIL  $userConfig was modified by the test run." -ForegroundColor Red
+    exit 1
 }
 
 exit $p.ExitCode

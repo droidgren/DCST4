@@ -111,17 +111,22 @@ namespace DCST4.Tests
                 TestJpegRoundTrip();
                 TestAdditionalTags();
                 TestUpdateChecker().GetAwaiter().GetResult();
+                TestSuiteTests.TestProfiles(temp, Check);
+                TestSuiteTests.TestFramework(Check).GetAwaiter().GetResult();
 
                 using (DicomServerFactory.Create<MockStorageScp>(Port))
                 {
                     TestConnectivity().GetAwaiter().GetResult();
+                    TestSuiteTests.TestTimeline(Port, ClosedPort, Check).GetAwaiter().GetResult();
+                    TestSuiteTests.TestResultFiles(Port, temp, Check).GetAwaiter().GetResult();
+                    TestSuiteTests.TestCli(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                     TestSendingSyntaxes().GetAwaiter().GetResult();
                     TestStatuses().GetAwaiter().GetResult();
                     TestAssociationBehaviour().GetAwaiter().GetResult();
                     TestFaults().GetAwaiter().GetResult();
                     TestSaving(temp).GetAwaiter().GetResult();
                     TestAdditionalTagDelivery(temp).GetAwaiter().GetResult();
-                    ViewModelTests.Run(Port, (name, ok, detail) => Check(name, ok, detail));
+                    ViewModelTests.Run(Port, ClosedPort, temp, (name, ok, detail) => Check(name, ok, detail));
                 }
                 TestTls().GetAwaiter().GetResult();
             }
@@ -860,6 +865,12 @@ namespace DCST4.Tests
             var rejected = await EchoService.EchoAsync(options.Endpoint, options.Network, CancellationToken.None);
             Check("Echo with a rejected association fails", rejected.Outcome == ConnectivityOutcome.Failed, rejected.Message);
             Scp.RejectAssociation = false;
+
+            LogSink.Clear();
+            await Run(MakeRequest(), options);
+            Check("Negotiation log: association line unchanged", LogSink.Lines.Any(l => l.StartsWith("Information Association accepted: ") && l.Contains("max PDU")), null);
+            Check("Negotiation log: context line unchanged", LogSink.Lines.Any(l => l.StartsWith("Information Presentation context ") && l.Contains(": proposed [") && l.Contains("], accepted ")), null);
+            Scp.Reset();
 
             var ping = await PingService.PingAsync("127.0.0.1");
             Check("Ping localhost succeeds", ping.Outcome == ConnectivityOutcome.Success, ping.Message);
