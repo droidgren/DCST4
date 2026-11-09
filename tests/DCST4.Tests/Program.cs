@@ -130,6 +130,7 @@ namespace DCST4.Tests
                 TestCharacterSets(temp);
                 TestValidation();
                 TestGeneration();
+                TestIodRules();
                 TestPixelDataSizes(temp);
                 TestSizeEstimate();
                 TestManualOverrides();
@@ -447,7 +448,7 @@ namespace DCST4.Tests
                 { "XA", new[] { DicomTag.BodyPartExamined, DicomTag.PatientOrientation, DicomTag.PixelIntensityRelationship, DicomTag.RadiationSetting, DicomTag.KVP, DicomTag.XRayTubeCurrent, DicomTag.ExposureTime, DicomTag.Exposure, DicomTag.PositionerPrimaryAngle, DicomTag.PositionerSecondaryAngle, DicomTag.LossyImageCompression } },
                 { "RF", new[] { DicomTag.BodyPartExamined, DicomTag.PatientOrientation, DicomTag.PixelIntensityRelationship, DicomTag.RadiationSetting, DicomTag.KVP, DicomTag.XRayTubeCurrent, DicomTag.ExposureTime, DicomTag.Exposure, DicomTag.LossyImageCompression } },
                 { "MG", new[] { DicomTag.PresentationIntentType, DicomTag.PresentationLUTShape, DicomTag.PixelIntensityRelationship, DicomTag.PixelIntensityRelationshipSign, DicomTag.RescaleIntercept, DicomTag.RescaleSlope, DicomTag.RescaleType, DicomTag.DetectorType, DicomTag.ImagerPixelSpacing, DicomTag.ImageLaterality, DicomTag.AnatomicRegionSequence, DicomTag.PatientOrientation, DicomTag.LossyImageCompression, DicomTag.PositionerType, DicomTag.OrganExposed, DicomTag.ViewCodeSequence, DicomTag.ViewPosition } },
-                { "PT", new[] { DicomTag.FrameOfReferenceUID, DicomTag.PatientPosition, DicomTag.ImagePositionPatient, DicomTag.ImageOrientationPatient, DicomTag.PixelSpacing, DicomTag.SliceThickness, DicomTag.SeriesDate, DicomTag.SeriesTime, DicomTag.Units, DicomTag.CountsSource, DicomTag.SeriesType, DicomTag.CorrectedImage, DicomTag.DecayCorrection, DicomTag.DecayFactor, DicomTag.CollimatorType, DicomTag.NumberOfSlices, DicomTag.ImageIndex, DicomTag.FrameReferenceTime, DicomTag.ActualFrameDuration, DicomTag.AcquisitionDate, DicomTag.AcquisitionTime, DicomTag.RescaleIntercept, DicomTag.RescaleSlope, DicomTag.RadiopharmaceuticalInformationSequence, DicomTag.PatientOrientationCodeSequence, DicomTag.PatientGantryRelationshipCodeSequence, DicomTag.LossyImageCompression } },
+                { "PT", new[] { DicomTag.FrameOfReferenceUID, DicomTag.ImagePositionPatient, DicomTag.ImageOrientationPatient, DicomTag.PixelSpacing, DicomTag.SliceThickness, DicomTag.SeriesDate, DicomTag.SeriesTime, DicomTag.Units, DicomTag.CountsSource, DicomTag.SeriesType, DicomTag.CorrectedImage, DicomTag.DecayCorrection, DicomTag.DecayFactor, DicomTag.CollimatorType, DicomTag.NumberOfSlices, DicomTag.ImageIndex, DicomTag.FrameReferenceTime, DicomTag.ActualFrameDuration, DicomTag.AcquisitionDate, DicomTag.AcquisitionTime, DicomTag.RescaleIntercept, DicomTag.RescaleSlope, DicomTag.RadiopharmaceuticalInformationSequence, DicomTag.PatientOrientationCodeSequence, DicomTag.PatientGantryRelationshipCodeSequence, DicomTag.LossyImageCompression } },
                 { "NM", new[] { DicomTag.PatientOrientation, DicomTag.PixelSpacing, DicomTag.NumberOfFrames, DicomTag.FrameIncrementPointer, DicomTag.EnergyWindowVector, DicomTag.NumberOfEnergyWindows, DicomTag.EnergyWindowInformationSequence, DicomTag.DetectorVector, DicomTag.NumberOfDetectors, DicomTag.DetectorInformationSequence, DicomTag.RadiopharmaceuticalInformationSequence, DicomTag.PatientOrientationCodeSequence, DicomTag.PatientGantryRelationshipCodeSequence, DicomTag.CountsAccumulated, DicomTag.ActualFrameDuration, DicomTag.LossyImageCompression } },
             };
 
@@ -551,6 +552,67 @@ namespace DCST4.Tests
             Check("US: default is valid", ExamValidator.Validate(MakeRequest("US")).Count == 0, string.Join("; ", ExamValidator.Validate(MakeRequest("US"))));
         }
 
+        /// <summary>What dciodvfy and dicom-validator found in 1.6.0, kept from coming back.</summary>
+        private static void TestIodRules()
+        {
+            Console.WriteLine("\nIOD rules");
+
+            foreach (var code in new[] { "CT", "MR", "CR", "DX", "US", "XA", "RF", "MG", "PT" })
+            {
+                Check($"{code}: no Number of Frames on a single-frame image", !FirstImage(MakeRequest(code)).Contains(DicomTag.NumberOfFrames));
+            }
+
+            var file = new ExamGenerator(MakeRequest("CT")).GetImages(CancellationToken.None).Single().File;
+            foreach (var syntax in new[] { DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.JPEGProcess14SV1 })
+            {
+                var converted = TransferSyntaxConverter.Convert(file, syntax);
+                Check($"{syntax.UID.Name}: conversion does not add Number of Frames", !converted.Dataset.Contains(DicomTag.NumberOfFrames));
+                Check($"{syntax.UID.Name}: still read as one frame", DicomPixelData.Create(converted.Dataset).NumberOfFrames == 1);
+            }
+
+            Check("NM keeps Number of Frames, as its IOD requires", FirstImage(MakeRequest("NM")).GetSingleValue<int>(DicomTag.NumberOfFrames) == 1);
+            Check("A multi-frame image keeps it", DatasetObject("us-multiframe").GetSingleValue<int>(DicomTag.NumberOfFrames) > 1);
+
+            Func<string, string, DicomDataset> examImage = (code, name) =>
+            {
+                var request = MakeRequest(code);
+                request.Preset = request.Modality.Presets.First(p => p.Name == name);
+                return FirstImage(request);
+            };
+            foreach (var exam in new[] { Tuple.Create("CR", "Hand"), Tuple.Create("MR", "Knee"), Tuple.Create("XA", "Peripheral") })
+            {
+                Check($"{exam.Item1} {exam.Item2}: a paired body part has a side", examImage(exam.Item1, exam.Item2).GetSingleValueOrDefault(DicomTag.Laterality, string.Empty) == "R");
+            }
+            var lungs = examImage("NM", "Lung Perfusion");
+            Check("NM Lung Perfusion: both lungs, so Laterality is present and empty", lungs.Contains(DicomTag.Laterality) && lungs.GetValueCount(DicomTag.Laterality) == 0);
+
+            Check("No body part: Laterality is present and empty", DatasetObject("secondary-capture").Contains(DicomTag.Laterality));
+            Check("CT Head: no Laterality", !FirstImage(MakeRequest("CT")).Contains(DicomTag.Laterality));
+            var mg = FirstImage(MakeRequest("MG"));
+            Check("MG: Image Laterality takes its place", mg.Contains(DicomTag.ImageLaterality) && !mg.Contains(DicomTag.Laterality));
+            Check("MG: View Modifier Code Sequence is present and empty", mg.GetSequence(DicomTag.ViewCodeSequence).Items.Single().GetSequence(DicomTag.ViewModifierCodeSequence).Items.Count == 0);
+
+            var pt = FirstImage(MakeRequest("PT"));
+            Check("PT: Patient Orientation Code Sequence and no Patient Position", pt.Contains(DicomTag.PatientOrientationCodeSequence) && !pt.Contains(DicomTag.PatientPosition));
+            Check("CT keeps Patient Position", FirstImage(MakeRequest("CT")).Contains(DicomTag.PatientPosition));
+
+            var rf = FirstImage(MakeRequest("RF"));
+            Check("RF: no positioner angles", !rf.Contains(DicomTag.PositionerPrimaryAngle) && !rf.Contains(DicomTag.PositionerSecondaryAngle));
+            var nmTracer = FirstImage(MakeRequest("NM")).GetSequence(DicomTag.RadiopharmaceuticalInformationSequence).Items.Single();
+            Check("NM: no Radionuclide Half Life", !nmTracer.Contains(DicomTag.RadionuclideHalfLife));
+
+            foreach (var id in new[] { "rt-structure-set", "grayscale-presentation-state" })
+            {
+                var document = DatasetObject(id);
+                Check($"{id}: no Content Date or Time", !document.Contains(DicomTag.ContentDate) && !document.Contains(DicomTag.ContentTime));
+            }
+            Check("Presentation State: Laterality is present and empty", DatasetObject("grayscale-presentation-state").Contains(DicomTag.Laterality));
+        }
+
+        /// <summary>The profile's own object: the last one, after any image it refers to.</summary>
+        private static DicomDataset DatasetObject(string profileId) =>
+            new TestDatasetGenerator(new TestDatasetRequest { ProfileId = profileId, Rows = 64, Columns = 64 }).GetImages(CancellationToken.None).Last().File.Dataset;
+
         private static DicomDataset FirstImage(ExamRequest request) => new ExamGenerator(request).GetImages(CancellationToken.None).First().File.Dataset;
 
         private static void TestNewModalities()
@@ -612,7 +674,7 @@ namespace DCST4.Tests
 
             var dx = FirstImage(MakeRequest("DX"));
             Check("DX: Anatomic Region Sequence stays empty", dx.GetSequence(DicomTag.AnatomicRegionSequence).Items.Count == 0);
-            Check("DX: no mammography tags", !dx.Contains(DicomTag.PositionerType) && !dx.Contains(DicomTag.ViewCodeSequence));
+            Check("DX: a Positioner Type of its own, and no mammography tags", Text(dx, DicomTag.PositionerType) == "COLUMN" && !dx.Contains(DicomTag.ViewCodeSequence));
 
             var pt = Modality("PT");
             Check("PT: only 16 bits, as the PET Image module requires", pt.BitDepths.SequenceEqual(new[] { 16 }) && pt.DefaultBitDepth == 16);
@@ -622,7 +684,7 @@ namespace DCST4.Tests
             Check("PT: slices share a Frame of Reference", slices.Select(d => Text(d, DicomTag.FrameOfReferenceUID)).Distinct().Count() == 1 && Text(slices[0], DicomTag.FrameOfReferenceUID).Length > 0);
             Check("PT: slice positions move", slices.Select(d => d.GetValues<decimal>(DicomTag.ImagePositionPatient)[2]).Distinct().Count() == 3);
             Check("PT: series type and units", slices[0].GetValues<string>(DicomTag.SeriesType).SequenceEqual(new[] { "STATIC", "IMAGE" }) && Text(slices[0], DicomTag.Units) == "BQML");
-            Check("PT: rescale in Bq/ml", Text(slices[0], DicomTag.RescaleType) == "BQML" && slices[0].GetSingleValue<decimal>(DicomTag.RescaleIntercept) == 0 && slices[0].GetSingleValue<decimal>(DicomTag.RescaleSlope) == 1);
+            Check("PT: rescale, with the units in Units", !slices[0].Contains(DicomTag.RescaleType) && slices[0].GetSingleValue<decimal>(DicomTag.RescaleIntercept) == 0 && slices[0].GetSingleValue<decimal>(DicomTag.RescaleSlope) == 1);
             var fdg = slices[0].GetSequence(DicomTag.RadiopharmaceuticalInformationSequence).Items.Single();
             Check("PT: the tracer is described", Text(fdg, DicomTag.Radiopharmaceutical) == "Fluorodeoxyglucose" && fdg.GetSingleValue<decimal>(DicomTag.RadionuclideHalfLife) > 6000 && fdg.GetSingleValue<decimal>(DicomTag.RadionuclidePositronFraction) > 0 && fdg.Contains(DicomTag.RadionuclideCodeSequence));
             var longStack = FirstImage(MakeRequest("PT", images: 70000));

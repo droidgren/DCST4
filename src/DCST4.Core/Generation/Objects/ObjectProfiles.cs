@@ -165,6 +165,8 @@ namespace DCST4.Core.Generation.Objects
         public override void AddContent(DicomDataset dataset, ObjectContext context)
         {
             var source = context.Source;
+            dataset.Remove(DicomTag.ContentDate, DicomTag.ContentTime);
+            dataset.AddOrUpdate(DicomTag.Laterality, new string[0]);
             dataset.AddOrUpdate(DicomTag.PresentationCreationDate, DicomImageBuilder.Da(context.ContentTime));
             dataset.AddOrUpdate(DicomTag.PresentationCreationTime, DicomImageBuilder.Tm(context.ContentTime));
             dataset.AddOrUpdate(DicomTag.ContentLabel, "DCST4_TEST");
@@ -289,6 +291,7 @@ namespace DCST4.Core.Generation.Objects
             dataset.AddOrUpdate(DicomTag.OperatorsName, string.Empty);
             dataset.AddOrUpdate(DicomTag.StructureSetLabel, "DCST4 TEST");
             dataset.AddOrUpdate(DicomTag.StructureSetName, "DCST4 test" + context.TextSuffix);
+            dataset.Remove(DicomTag.ContentDate, DicomTag.ContentTime);
             dataset.AddOrUpdate(DicomTag.StructureSetDate, DicomImageBuilder.Da(context.ContentTime));
             dataset.AddOrUpdate(DicomTag.StructureSetTime, DicomImageBuilder.Tm(context.ContentTime));
 

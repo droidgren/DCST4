@@ -30,6 +30,8 @@ namespace DCST4.Core.Pipeline
 
             var uncompressedSize = syntax.IsLossy ? PixelBytes(file.Dataset) : 0;
             var converted = file.Clone(syntax);
+            // The transcoder adds Number of Frames, which a single-frame IOD does not have.
+            if (!file.Dataset.Contains(DicomTag.NumberOfFrames)) converted.Dataset.Remove(DicomTag.NumberOfFrames);
             UseOtherByteForEncapsulatedPixelData(converted.Dataset);
             PadOddFragments(converted.Dataset);
             if (syntax.IsLossy) MarkLossy(converted.Dataset, syntax, uncompressedSize);

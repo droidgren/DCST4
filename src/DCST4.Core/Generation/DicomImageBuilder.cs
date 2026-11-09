@@ -27,6 +27,12 @@ namespace DCST4.Core.Generation
 
         private static readonly string SoftwareVersion = typeof(DicomImageBuilder).GetTypeInfo().Assembly.GetName().Version.ToString(3);
 
+        /// <summary>A paired structure, or no body part at all, in which case it cannot be ruled out.</summary>
+        private static bool NeedsLaterality(string bodyPart) =>
+            string.IsNullOrEmpty(bodyPart) || PairedBodyParts.Contains(bodyPart);
+
+        private static readonly HashSet<string> PairedBodyParts = new HashSet<string>(StringComparer.Ordinal) { "BREAST", "HAND", "KNEE", "LEG", "LUNG" };
+
         public static DicomDataset Build(ExamRequest request, SeriesContext series, int imageIndex, DateTime contentTime)
         {
             var id = request.Identity;
@@ -69,6 +75,13 @@ namespace DCST4.Core.Generation
                 ContentTime = contentTime,
             };
             modality.AddModalityTags(dataset, preset, context);
+
+            // Type 2C, so present and empty where no side applies.
+            if (!dataset.Contains(DicomTag.ImageLaterality) && NeedsLaterality(preset.BodyPart))
+            {
+                if (preset.Laterality != null) dataset.AddOrUpdate(DicomTag.Laterality, preset.Laterality);
+                else dataset.AddOrUpdate(DicomTag.Laterality, new string[0]);
+            }
 
             // After the program's own tags, so that a custom tag can replace one such as Manufacturer. The rules keep it from the pixel description.
             foreach (var additional in id.AdditionalTags) AdditionalTagWriter.Write(dataset, additional);
@@ -179,6 +192,8 @@ namespace DCST4.Core.Generation
             {
                 pixelData.AddFrame(new MemoryByteBuffer(RenderFrame(request, imageIndex, frame, lines).Data));
             }
+
+            if (!modality.KeepsNumberOfFrames) dataset.Remove(DicomTag.NumberOfFrames);
         }
 
         /// <summary>A multi-frame image scrolls through its frames, as a single-frame stack does through its images.</summary>
@@ -221,8 +236,8 @@ namespace DCST4.Core.Generation
                 {
                     { DicomTag.RescaleIntercept, ModalityProfile.Ds(modality.RescaleIntercept.Value) },
                     { DicomTag.RescaleSlope, "1" },
-                    { DicomTag.RescaleType, modality.RescaleType },
                 };
+                if (modality.RescaleType != null) rescale.Add(DicomTag.RescaleType, modality.RescaleType);
             }
 
             if (modality.UsesFunctionalGroups)
