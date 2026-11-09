@@ -1,4 +1,6 @@
 using DCST4.Core;
+using DCST4.Core.Generation.Datasets;
+using DCST4.Core.TestData;
 using DCST4.Core.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -50,7 +52,20 @@ namespace DCST4.Cli
                 return RunExitCodes.Clean;
             }
 
-            if (args.Length == 0 || !args[0].Equals("run", StringComparison.OrdinalIgnoreCase)) return UsageError("Expected the command 'run'.");
+            if (args.Length == 1 && args[0].Equals("list-datasets", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var dataset in DatasetProfileCatalog.All)
+                {
+                    Console.WriteLine(dataset.Id.PadRight(30) + dataset.DisplayName + (dataset.IncludedByDefault ? string.Empty : " (only when asked for by name)"));
+                }
+                return RunExitCodes.Clean;
+            }
+
+            if (args.Length >= 1 && args[0].Equals("list-codecs", StringComparison.OrdinalIgnoreCase)) return ListCodecs(args);
+
+            if (args.Length >= 1 && args[0].Equals("generate", StringComparison.OrdinalIgnoreCase)) return await GenerateAsync(args).ConfigureAwait(false);
+
+            if (args.Length == 0 || !args[0].Equals("run", StringComparison.OrdinalIgnoreCase)) return UsageError("Expected the command 'run', 'generate', 'list-datasets' or 'list-codecs'.");
 
             var arguments = CliArguments.Parse(args, out var argumentError);
             if (arguments == null) return UsageError(argumentError);
@@ -83,6 +98,11 @@ namespace DCST4.Cli
                 return Refuse($"Cannot use the output folder {arguments.OutputFolder}: {ex.Message}");
             }
 
+            return await WithCancelKeyAsync(token => ExecuteAsync(profile, tests, arguments.OutputFolder, arguments.PatientNaming, token)).ConfigureAwait(false);
+        }
+
+        private static async Task<int> WithCancelKeyAsync(Func<CancellationToken, Task<int>> action)
+        {
             using (var cancellation = new CancellationTokenSource())
             {
                 ConsoleCancelEventHandler onCancel = (s, e) =>
@@ -97,7 +117,7 @@ namespace DCST4.Cli
 
                 try
                 {
-                    return await ExecuteAsync(profile, tests, arguments.OutputFolder, cancellation.Token).ConfigureAwait(false);
+                    return await action(cancellation.Token).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -106,7 +126,48 @@ namespace DCST4.Cli
             }
         }
 
-        private static async Task<int> ExecuteAsync(TargetProfile profile, System.Collections.Generic.IReadOnlyList<ITestCase> tests, string outputFolder, CancellationToken token)
+        private static async Task<int> GenerateAsync(string[] args)
+        {
+            var command = GenerateCommand.Parse(args, out var argumentError);
+            if (command == null) return UsageError(argumentError);
+
+            var problems = command.Request.Validate();
+            if (problems.Count > 0) return Refuse(string.Join(" ", problems));
+
+            var manifest = Path.Combine(command.OutputFolder, GenerateCommand.ManifestFileName);
+            if (File.Exists(manifest)) return Refuse($"{manifest} already exists. Use a new folder, so that an earlier manifest is not lost.");
+
+            ConfigureLogging(command.LogFolder);
+
+            try
+            {
+                return await WithCancelKeyAsync(command.ExecuteAsync).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsFileProblem(ex))
+            {
+                return Refuse($"Cannot use the output folder {command.OutputFolder}: {ex.Message}");
+            }
+        }
+
+        private static int ListCodecs(string[] args)
+        {
+            string logFolder = null;
+            for (var i = 1; i < args.Length; i += 2)
+            {
+                if (!args[i].Equals("--log-dir", StringComparison.OrdinalIgnoreCase) || i + 1 >= args.Length) return UsageError($"Unknown option {args[i]}.");
+                logFolder = args[i + 1];
+            }
+
+            ConfigureLogging(logFolder);
+            foreach (var result in CompressionCatalog.ProbeAll())
+            {
+                var kind = result.SamplesPerPixel == 1 ? result.BitsStored + " bit" : "RGB";
+                Console.WriteLine(result.SyntaxId.PadRight(16) + kind.PadRight(8) + (result.Available ? "available" : "unavailable: " + result.Reason));
+            }
+            return RunExitCodes.Clean;
+        }
+
+        private static async Task<int> ExecuteAsync(TargetProfile profile, System.Collections.Generic.IReadOnlyList<ITestCase> tests, string outputFolder, TestPatientNaming patientNaming, CancellationToken token)
         {
             var runner = new TestRunner();
             runner.Progress += progress =>
@@ -117,7 +178,7 @@ namespace DCST4.Cli
                 }
             };
 
-            var report = await runner.RunAsync(profile, tests, token).ConfigureAwait(false);
+            var report = await runner.RunAsync(profile, tests, token, patientNaming).ConfigureAwait(false);
             Console.WriteLine(string.Join(", ", report.Summary.Where(p => p.Value > 0).Select(p => $"{p.Key} {p.Value}")) + (report.Cancelled ? " (cancelled)" : string.Empty));
 
             try

@@ -1,5 +1,4 @@
 using DCST4.Core.Pipeline;
-using DCST4.Core.TestData;
 using FellowOakDicom;
 using System;
 using System.Collections.Generic;
@@ -34,8 +33,8 @@ namespace DCST4.Core.Generation
                 var series = new SeriesContext
                 {
                     SeriesIndex = seriesIndex,
-                    SeriesInstanceUid = request.Identity.SeriesInstanceUid ?? IdentifierGenerator.Uid(),
-                    FrameOfReferenceUid = IdentifierGenerator.Uid(),
+                    SeriesInstanceUid = request.Identity.SeriesInstanceUid ?? request.Uids.Uid("series/" + seriesIndex),
+                    FrameOfReferenceUid = request.Uids.Uid("frame-of-reference/" + seriesIndex),
                     SeriesDescription = SeriesDescription(seriesIndex),
                     StudyTime = startTime,
                     SeriesTime = seriesTime,

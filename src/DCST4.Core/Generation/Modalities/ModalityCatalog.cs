@@ -126,7 +126,7 @@ namespace DCST4.Core.Generation.Modalities
     /// Ultrasound Image IOD, single-frame grayscale B-mode: MONOCHROME2 with 8 bits allocated and stored. Distances in a viewer
     /// come from the calibrated region in Sequence of Ultrasound Regions, since US images have no Pixel Spacing.
     /// </summary>
-    public sealed class UsProfile : ModalityProfile
+    public class UsProfile : ModalityProfile
     {
         private const ushort RegionSpatialFormat2D = 1;
         private const ushort RegionDataTypeTissue = 1;

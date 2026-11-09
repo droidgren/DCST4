@@ -1,4 +1,5 @@
 using DCST4.Core.Network;
+using DCST4.Core.TestData;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -23,12 +24,16 @@ namespace DCST4.Core.Testing
 
     public sealed class TestContext
     {
-        public TestContext(TargetProfile profile)
+        public TestContext(TargetProfile profile, TestPatientNaming patientNaming = TestPatientNaming.RegistrySwedishName)
         {
             Profile = profile ?? throw new ArgumentNullException(nameof(profile));
+            PatientNaming = patientNaming;
         }
 
         public TargetProfile Profile { get; }
+
+        /// <summary>How the datasets of this run name the patient. Given by the front-end, since Core does not read its settings.</summary>
+        public TestPatientNaming PatientNaming { get; }
     }
 
     public interface ITestCase

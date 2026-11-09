@@ -1,3 +1,4 @@
+using DCST4.Core.TestData;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -18,13 +19,13 @@ namespace DCST4.Core.Testing
         /// <summary>Raised on a background thread.</summary>
         public event Action<TestProgress> Progress;
 
-        public async Task<TestRunReport> RunAsync(TargetProfile profile, IReadOnlyList<ITestCase> tests, CancellationToken token)
+        public async Task<TestRunReport> RunAsync(TargetProfile profile, IReadOnlyList<ITestCase> tests, CancellationToken token, TestPatientNaming patientNaming = TestPatientNaming.RegistrySwedishName)
         {
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             if (tests == null) throw new ArgumentNullException(nameof(tests));
 
             var trimmed = profile.Trimmed();
-            var context = new TestContext(trimmed);
+            var context = new TestContext(trimmed, patientNaming);
             var report = new TestRunReport
             {
                 ToolVersion = ProductInfo.Version,

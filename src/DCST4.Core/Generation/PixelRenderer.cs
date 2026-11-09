@@ -22,11 +22,15 @@ namespace DCST4.Core.Generation
         /// <summary>Position in the stack, 0 for the first image.</summary>
         public int ImageIndex { get; set; }
         public int ImagesInSeries { get; set; } = 1;
+        /// <summary>1 for grayscale. 3 gives interleaved RGB at 8 bits per sample, with coloured patches so that swapped channels show.</summary>
+        public int SamplesPerPixel { get; set; } = 1;
+        /// <summary>Greater than 0: drawn as a binary strip, since frames at the same distance from the middle would otherwise be identical.</summary>
+        public int FrameNumber { get; set; }
     }
 
     public sealed class RenderedPixels
     {
-        /// <summary>Monochrome little endian: one byte per pixel at 8 bits allocated, otherwise two.</summary>
+        /// <summary>Monochrome little endian, one byte per pixel at 8 bits allocated, otherwise two. Or interleaved RGB, three bytes per pixel.</summary>
         public byte[] Data { get; set; }
         public int MinValue { get; set; }
         public int MaxValue { get; set; }
@@ -53,11 +57,74 @@ namespace DCST4.Core.Generation
                     DrawBackground(g, spec);
                     DrawSliceMarker(g, spec);
                     DrawGrayscaleBar(g, spec);
+                    if (spec.SamplesPerPixel > 1) DrawColorPatches(g, spec);
                     DrawWatermark(g, spec);
                     DrawTextBlock(g, spec);
+                    if (spec.FrameNumber > 0) DrawFrameNumber(g, spec);
                 }
-                return ToPixels(bitmap, spec);
+                return spec.SamplesPerPixel > 1 ? ToRgb(bitmap, spec) : ToPixels(bitmap, spec);
             }
+        }
+
+        /// <summary>Red, green and blue squares above the gray bar.</summary>
+        private static void DrawColorPatches(Graphics g, PixelRenderSpec spec)
+        {
+            var size = Math.Max(4, Math.Min(spec.Rows, spec.Columns) / 12);
+            var top = spec.Rows - Math.Max(4, spec.Rows / 24) - size - 2;
+            var colors = new[] { Color.Red, Color.Lime, Color.Blue };
+            for (var i = 0; i < colors.Length; i++)
+            {
+                using (var brush = new SolidBrush(colors[i]))
+                {
+                    g.FillRectangle(brush, 2 + i * size, top, size, size);
+                }
+            }
+        }
+
+        /// <summary>The frame number in binary, most significant bit first, in the top right corner. White is 1, black is 0.</summary>
+        private static void DrawFrameNumber(Graphics g, PixelRenderSpec spec)
+        {
+            const int bits = 16;
+            var cell = Math.Max(2, Math.Min(spec.Rows, spec.Columns) / 128);
+            var left = spec.Columns - bits * cell - 2;
+            using (var white = new SolidBrush(Color.White))
+            using (var black = new SolidBrush(Color.Black))
+            {
+                for (var bit = 0; bit < bits; bit++)
+                {
+                    var isSet = (spec.FrameNumber >> (bits - 1 - bit) & 1) == 1;
+                    g.FillRectangle(isSet ? white : black, left + bit * cell, 2, cell, cell * 2);
+                }
+            }
+        }
+
+        private static RenderedPixels ToRgb(Bitmap bitmap, PixelRenderSpec spec)
+        {
+            const int samples = 3;
+            var data = new byte[spec.Rows * spec.Columns * samples];
+            var locked = bitmap.LockBits(new Rectangle(0, 0, spec.Columns, spec.Rows), ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+            try
+            {
+                var row = new byte[Math.Abs(locked.Stride)];
+                var target = 0;
+                for (var y = 0; y < spec.Rows; y++)
+                {
+                    Marshal.Copy(IntPtr.Add(locked.Scan0, y * locked.Stride), row, 0, row.Length);
+                    for (var x = 0; x < spec.Columns; x++)
+                    {
+                        // A 24-bit Bitmap stores each pixel as blue, green, red.
+                        data[target++] = row[x * samples + 2];
+                        data[target++] = row[x * samples + 1];
+                        data[target++] = row[x * samples];
+                    }
+                }
+            }
+            finally
+            {
+                bitmap.UnlockBits(locked);
+            }
+
+            return new RenderedPixels { Data = data, MinValue = 0, MaxValue = byte.MaxValue };
         }
 
         private static void DrawBackground(Graphics g, PixelRenderSpec spec)

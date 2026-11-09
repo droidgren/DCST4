@@ -55,6 +55,14 @@ namespace DCST4.Core.Generation
         public string StationName { get; set; }
         /// <summary>Tags added in Settings, with their final values.</summary>
         public IList<AdditionalTagValue> AdditionalTags { get; set; } = new List<AdditionalTagValue>();
+
+        /// <summary>A copy with another Series Description, for a series that has a different purpose in the same study.</summary>
+        public ExamIdentity WithSeriesDescription(string description)
+        {
+            var copy = (ExamIdentity)MemberwiseClone();
+            copy.SeriesDescription = description;
+            return copy;
+        }
     }
 
     /// <summary>Fills in everything the user has not entered manually.</summary>
@@ -65,12 +73,14 @@ namespace DCST4.Core.Generation
         private readonly TestPersonnummerRegistry _registry;
         private readonly Random _random;
         private readonly Func<DateTime> _clock;
+        private readonly IUidSource _uids;
 
-        public IdentityGenerator(TestPersonnummerRegistry registry = null, Random random = null, Func<DateTime> clock = null)
+        public IdentityGenerator(TestPersonnummerRegistry registry = null, Random random = null, Func<DateTime> clock = null, IUidSource uids = null)
         {
             _registry = registry ?? TestPersonnummerRegistry.Default;
             _random = random ?? new Random();
             _clock = clock ?? (() => DateTime.Now);
+            _uids = uids ?? GeneratedUidSource.Instance;
         }
 
         public ExamIdentity Generate(IdentityOverrides manual, ModalityProfile modality, ExamPreset preset, int minAge = 0, int maxAge = 100)
@@ -112,7 +122,7 @@ namespace DCST4.Core.Generation
                 PatientName = manual.PatientName ?? AutoText(manual, SwedishNames.Pick(nameRandom, sex)),
                 AccessionNumber = manual.AccessionNumber ?? IdentifierGenerator.AccessionNumber(accessionRandom, studyDate),
                 StudyId = manual.StudyId ?? IdentifierGenerator.StudyId(studyIdRandom),
-                StudyInstanceUid = manual.StudyInstanceUid ?? IdentifierGenerator.Uid(),
+                StudyInstanceUid = manual.StudyInstanceUid ?? _uids.Uid("study"),
                 SeriesInstanceUid = manual.SeriesInstanceUid,
                 SopInstanceUid = manual.SopInstanceUid,
                 StudyDateTime = studyDate,

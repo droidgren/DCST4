@@ -630,6 +630,9 @@ namespace DCST4.Tests
             refused("No arguments: exit code 2", await RunCli(), "Usage");
             refused("Unknown command: exit code 2", await RunCli("walk"), "Usage");
             refused("Unknown option: exit code 2", await RunCli("run", "--wat", "x"), "--wat");
+            var named = await RunCli("run", "--profile", profilePath, "--tests", "c-echo", "--out", Path.Combine(folder, "named"), "--log-dir", logs, "--patient-naming", "MarkedTestName");
+            check("--patient-naming is accepted on run", named.ExitCode == 0 && named.Output.Contains("c-echo: PASS"), named.Output);
+            refused("Unknown --patient-naming: exit code 2", await RunCli("run", "--profile", profilePath, "--tests", "c-echo", "--out", folder, "--patient-naming", "Bad"), "Bad");
             refused("Missing --profile: exit code 2", await RunCli("run", "--tests", "c-echo", "--out", folder), "--profile");
             refused("Option without a value: exit code 2", await RunCli("run", "--profile"), "--profile");
             refused("Missing profile file: exit code 2", await RunCli("run", "--profile", Path.Combine(folder, "none.json"), "--tests", "c-echo", "--out", folder, "--log-dir", logs), "Could not read");

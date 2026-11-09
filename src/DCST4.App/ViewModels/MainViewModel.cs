@@ -818,7 +818,8 @@ namespace DCST4.ViewModels
 
             var runner = new TestRunner();
             runner.Progress += progress => _dispatcher.BeginInvoke(new Action(() => ShowTestProgress(progress)), DispatcherPriority.Background);
-            var report = await runner.RunAsync(profile, tests, token);
+            DCST4.Core.TestData.TestPatientNames.TryParse(Settings.Default.TestPatientNaming, out var patientNaming);
+            var report = await runner.RunAsync(profile, tests, token, patientNaming);
 
             // Let the rows queued by the background thread land before the summary replaces the status.
             await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);

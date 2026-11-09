@@ -235,6 +235,9 @@ namespace DCST4.Core.Pipeline
 
         private static long PixelDataSize(DicomDataset dataset)
         {
+            // A report or a document has no pixels to count.
+            if (!dataset.Contains(DicomTag.PixelData)) return 0;
+
             var pixelData = DicomPixelData.Create(dataset);
             long size = 0;
             for (var frame = 0; frame < pixelData.NumberOfFrames; frame++)

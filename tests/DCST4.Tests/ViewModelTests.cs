@@ -215,6 +215,25 @@ namespace DCST4.Tests
                 check($"{code}: a real run reaches the SCP", Scp.StoreCount == 1 && Scp.Received.Single().Dataset.GetString(DicomTag.Modality) == code, vm.LastRunText);
             }
 
+            // ------------------------------------------------ Patient naming for test-suite datasets
+            // The settings class is internal to the app. Only changed in memory, and put back: nothing here saves them.
+            var settings = (System.Configuration.ApplicationSettingsBase)typeof(SettingsDialog).Assembly.GetType("DCST4.Properties.Settings").GetProperty("Default").GetValue(null);
+            var savedNaming = settings["TestPatientNaming"];
+            try
+            {
+                Func<string> shownNaming = () => (string)((ComboBox)new SettingsDialog().FindName("TestPatientNaming")).SelectedValue;
+                settings["TestPatientNaming"] = "MarkedTestName";
+                check("Settings: the saved naming is selected", shownNaming() == "MarkedTestName", shownNaming());
+                settings["TestPatientNaming"] = "RegistrySwedishName";
+                check("Settings: the default is the Swedish name", shownNaming() == "RegistrySwedishName", shownNaming());
+                settings["TestPatientNaming"] = "nonsense";
+                check("Settings: an unreadable value shows the default", shownNaming() == "RegistrySwedishName", shownNaming());
+            }
+            finally
+            {
+                settings["TestPatientNaming"] = savedNaming;
+            }
+
             // ------------------------------------------------ Burned-in text
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
             vm.Rows = 64;

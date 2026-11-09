@@ -41,6 +41,13 @@ namespace DCST4.Core.TestData
             }
         }
 
+        /// <summary>A name where both surname and first name hold å, ä or ö, for character set tests.</summary>
+        public static string PickWithSwedishCharacters(Random random, string sex)
+        {
+            var male = sex == "M" || (sex != "F" && random.Next(2) == 0);
+            return Combine(random, SurnameSwedish, male ? MaleSwedish : FemaleSwedish);
+        }
+
         public static bool ContainsSwedishCharacter(string text) => text.Any(c => "åäöÅÄÖ".IndexOf(c) >= 0);
 
         /// <summary>The same name without diacritics: Åström^Märta becomes Astrom^Marta.</summary>

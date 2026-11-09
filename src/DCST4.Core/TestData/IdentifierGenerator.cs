@@ -4,6 +4,23 @@ using System.Globalization;
 
 namespace DCST4.Core.TestData
 {
+    /// <summary>Where the UIDs of a generated exam come from.</summary>
+    public interface IUidSource
+    {
+        /// <summary>A UID for this scope, for example "series/0". A deterministic source returns the same UID for the same scope.</summary>
+        string Uid(string scope);
+    }
+
+    /// <summary>A new unique UID every time, whatever the scope. What Generate &amp; Send uses.</summary>
+    public sealed class GeneratedUidSource : IUidSource
+    {
+        public static readonly GeneratedUidSource Instance = new GeneratedUidSource();
+
+        private GeneratedUidSource() { }
+
+        public string Uid(string scope) => IdentifierGenerator.Uid();
+    }
+
     /// <summary>Random identifiers in the form and length DICOM allows.</summary>
     public static class IdentifierGenerator
     {

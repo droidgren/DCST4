@@ -22,7 +22,7 @@ namespace DCST4.Core.Testing
         /// <summary>The UUID-derived arc of PS3.5 B.2, which needs no registered organisation root.</summary>
         public const string DefaultUidRoot = "2.25";
         /// <summary>Leaves room within the 64 characters of a UID for what is added after the root.</summary>
-        public const int MaxUidRootLength = 40;
+        public const int MaxUidRootLength = TestData.DeterministicUidSource.MaxRootLength;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string Name { get; set; }
