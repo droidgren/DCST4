@@ -231,7 +231,7 @@ namespace DCST4.Core.Generation.Datasets
         {
             foreach (var item in dataset.OrderBy(i => i.Tag.Group).ThenBy(i => i.Tag.Element))
             {
-                if (IsLeftOut(item.Tag) || IsPrivateSequence(item)) continue;
+                if (IsLeftOut(item.Tag) || IsPrivateSequence(item) || IsCountOfOneFrame(item)) continue;
 
                 writer.Write(item.Tag.Group);
                 writer.Write(item.Tag.IsPrivate ? (ushort)(item.Tag.Element & 0x00FF) : item.Tag.Element);
@@ -248,6 +248,10 @@ namespace DCST4.Core.Generation.Datasets
                 }
             }
         }
+
+        /// <summary>Absent means one frame, and a transcoder adds the tag, so the two must hash the same.</summary>
+        private static bool IsCountOfOneFrame(DicomItem item) =>
+            item.Tag == DicomTag.NumberOfFrames && item is DicomElement element && element.Get<int>(0) == 1;
 
         internal static bool IsLeftOut(DicomTag tag) =>
             tag.Group == 0x0002 || tag.Element == 0x0000

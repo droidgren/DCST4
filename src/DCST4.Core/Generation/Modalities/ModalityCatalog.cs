@@ -74,7 +74,7 @@ namespace DCST4.Core.Generation.Modalities
         {
             new ExamPreset { Name = "Brain T1", StudyDescription = "MR Brain", SeriesDescription = "t1_se_tra", ProtocolName = "Brain T1 SE", BodyPart = "BRAIN", FieldOfViewMm = 230, SliceThicknessMm = 5, DefaultImages = 24, ScanningSequence = "SE", SequenceVariant = "SK", ScanOptions = "SAT1", MrAcquisitionType = "2D", RepetitionTimeMs = 550, EchoTimeMs = 12, EchoTrainLength = 1, FlipAngle = 90 },
             new ExamPreset { Name = "Brain T2", StudyDescription = "MR Brain", SeriesDescription = "t2_tse_tra", ProtocolName = "Brain T2 TSE", BodyPart = "BRAIN", FieldOfViewMm = 230, SliceThicknessMm = 5, DefaultImages = 24, ScanningSequence = "SE", SequenceVariant = "SK\\SP", ScanOptions = "PFP", MrAcquisitionType = "2D", RepetitionTimeMs = 4500, EchoTimeMs = 95, EchoTrainLength = 15, FlipAngle = 150 },
-            new ExamPreset { Name = "Knee", StudyDescription = "MR Knee", SeriesDescription = "pd_tse_fs_sag", ProtocolName = "Knee PD FS", BodyPart = "KNEE", PatientPosition = "FFS", FieldOfViewMm = 160, SliceThicknessMm = 3, Orientation = SliceOrientation.Sagittal, DefaultImages = 28, ScanningSequence = "SE", SequenceVariant = "SK\\SP", ScanOptions = "FS", MrAcquisitionType = "2D", RepetitionTimeMs = 3200, EchoTimeMs = 35, EchoTrainLength = 7, FlipAngle = 150 },
+            new ExamPreset { Name = "Knee", Laterality = "R", StudyDescription = "MR Knee", SeriesDescription = "pd_tse_fs_sag", ProtocolName = "Knee PD FS", BodyPart = "KNEE", PatientPosition = "FFS", FieldOfViewMm = 160, SliceThicknessMm = 3, Orientation = SliceOrientation.Sagittal, DefaultImages = 28, ScanningSequence = "SE", SequenceVariant = "SK\\SP", ScanOptions = "FS", MrAcquisitionType = "2D", RepetitionTimeMs = 3200, EchoTimeMs = 35, EchoTrainLength = 7, FlipAngle = 150 },
             new ExamPreset { Name = "Spine", StudyDescription = "MR Lumbar Spine", SeriesDescription = "t2_tse_sag", ProtocolName = "L-Spine T2", BodyPart = "LSPINE", FieldOfViewMm = 300, SliceThicknessMm = 4, Orientation = SliceOrientation.Sagittal, DefaultImages = 15, ScanningSequence = "SE", SequenceVariant = "SK\\SP", ScanOptions = "PFP", MrAcquisitionType = "2D", RepetitionTimeMs = 3500, EchoTimeMs = 100, EchoTrainLength = 17, FlipAngle = 160 },
         };
 
@@ -113,7 +113,7 @@ namespace DCST4.Core.Generation.Modalities
         public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
         {
             new ExamPreset { Name = "Chest PA", StudyDescription = "Chest X-ray", SeriesDescription = "Chest PA", ProtocolName = "Chest PA", BodyPart = "CHEST", FieldOfViewMm = 430, Kvp = 125, TubeCurrentMa = 250, ExposureTimeMs = 10, ViewPosition = "PA", PatientOrientation = "L\\F" },
-            new ExamPreset { Name = "Hand", StudyDescription = "Hand X-ray", SeriesDescription = "Hand PA", ProtocolName = "Hand PA", BodyPart = "HAND", FieldOfViewMm = 240, Kvp = 50, TubeCurrentMa = 100, ExposureTimeMs = 40, ViewPosition = "PA", PatientOrientation = "L\\F" },
+            new ExamPreset { Name = "Hand", Laterality = "R", StudyDescription = "Hand X-ray", SeriesDescription = "Hand PA", ProtocolName = "Hand PA", BodyPart = "HAND", FieldOfViewMm = 240, Kvp = 50, TubeCurrentMa = 100, ExposureTimeMs = 40, ViewPosition = "PA", PatientOrientation = "L\\F" },
         };
 
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
@@ -202,6 +202,7 @@ namespace DCST4.Core.Generation.Modalities
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
             AddDigitalXRayTags(dataset, preset, context);
+            dataset.AddOrUpdate(DicomTag.PositionerType, "COLUMN");
             dataset.AddOrUpdate(new DicomSequence(DicomTag.AnatomicRegionSequence));
         }
     }
@@ -222,14 +223,14 @@ namespace DCST4.Core.Generation.Modalities
         {
             new ExamPreset { Name = "Coronary", StudyDescription = "XA Coronary", SeriesDescription = "Coronary LCA", ProtocolName = "Coronary", BodyPart = "HEART", FieldOfViewMm = 200, DefaultImages = 30, RadiationSetting = "GR", Kvp = 80, TubeCurrentMa = 600, ExposureTimeMs = 7, PositionerPrimaryAngle = -30, PositionerSecondaryAngle = 20 },
             new ExamPreset { Name = "Cerebral", StudyDescription = "XA Cerebral", SeriesDescription = "Cerebral ICA", ProtocolName = "Cerebral", BodyPart = "HEAD", FieldOfViewMm = 250, DefaultImages = 20, RadiationSetting = "GR", Kvp = 90, TubeCurrentMa = 300, ExposureTimeMs = 100 },
-            new ExamPreset { Name = "Peripheral", StudyDescription = "XA Peripheral", SeriesDescription = "Peripheral Leg", ProtocolName = "Peripheral", BodyPart = "LEG", FieldOfViewMm = 400, DefaultImages = 15, RadiationSetting = "GR", Kvp = 70, TubeCurrentMa = 400, ExposureTimeMs = 50 },
+            new ExamPreset { Name = "Peripheral", Laterality = "R", StudyDescription = "XA Peripheral", SeriesDescription = "Peripheral Leg", ProtocolName = "Peripheral", BodyPart = "LEG", FieldOfViewMm = 400, DefaultImages = 15, RadiationSetting = "GR", Kvp = 70, TubeCurrentMa = 400, ExposureTimeMs = 50 },
         };
 
         public override string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY", "SINGLE PLANE" };
 
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
-            AddFluoroscopyTags(dataset, preset, context);
+            AddFluoroscopyTags(dataset, preset, context, positionerAngles: true);
         }
     }
 
@@ -255,7 +256,7 @@ namespace DCST4.Core.Generation.Modalities
 
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
-            AddFluoroscopyTags(dataset, preset, context);
+            AddFluoroscopyTags(dataset, preset, context, positionerAngles: false);
         }
     }
 
@@ -288,9 +289,11 @@ namespace DCST4.Core.Generation.Modalities
             dataset.AddOrUpdate(DicomTag.PositionerPrimaryAngle, Ds(preset.PositionerPrimaryAngle));
             dataset.AddOrUpdate(DicomTag.OrganExposed, "BREAST");
             dataset.AddOrUpdate(new DicomSequence(DicomTag.AnatomicRegionSequence, CodeItem("SCT", "76752008", "Breast")));
-            dataset.AddOrUpdate(new DicomSequence(DicomTag.ViewCodeSequence, preset.ViewPosition == "CC"
+            var view = preset.ViewPosition == "CC"
                 ? CodeItem("SCT", "399162004", "cranio-caudal")
-                : CodeItem("SCT", "399368009", "medio-lateral oblique")));
+                : CodeItem("SCT", "399368009", "medio-lateral oblique");
+            view.Add(new DicomSequence(DicomTag.ViewModifierCodeSequence));
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.ViewCodeSequence, view));
         }
     }
 
@@ -308,7 +311,7 @@ namespace DCST4.Core.Generation.Modalities
         public override int DefaultColumns => 256;
         public override TimeSpan InstanceInterval => TimeSpan.FromMilliseconds(100);
         public override double? RescaleIntercept => 0;
-        public override string RescaleType => "BQML";
+        // The PET Image module has Units (0054,1001) and no Rescale Type.
         public override bool UsesFrameOfReference => true;
 
         public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
@@ -321,6 +324,8 @@ namespace DCST4.Core.Generation.Modalities
         {
             AddSliceGeometry(dataset, preset, context);
             AddIsotopeTags(dataset, preset, F18PositronFraction);
+            // Patient Position is only allowed here without Patient Orientation Code Sequence, which is Type 2 in this IOD.
+            dataset.Remove(DicomTag.PatientPosition);
             dataset.AddOrUpdate(DicomTag.Units, "BQML");
             dataset.AddOrUpdate(DicomTag.CountsSource, "EMISSION");
             dataset.AddOrUpdate(DicomTag.SeriesType, "STATIC", "IMAGE");
@@ -343,6 +348,7 @@ namespace DCST4.Core.Generation.Modalities
     /// </summary>
     public sealed class NmProfile : ModalityProfile
     {
+        public override bool KeepsNumberOfFrames => true;
         private const ushort OnlyWindowOrDetector = 1;
         private const string Tc99mWindowName = "TC99M";
 

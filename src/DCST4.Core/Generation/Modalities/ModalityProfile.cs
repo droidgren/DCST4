@@ -44,6 +44,8 @@ namespace DCST4.Core.Generation.Modalities
         public string ViewPosition { get; set; }
         public string PatientOrientation { get; set; }
         public string ImageLaterality { get; set; } = "U";
+        /// <summary>Laterality (0020,0060) of a paired body part. Null where no side applies, such as both lungs.</summary>
+        public string Laterality { get; set; }
 
         // US
         /// <summary>Image Type value 3, the clinical application.</summary>
@@ -133,6 +135,9 @@ namespace DCST4.Core.Generation.Modalities
         /// <summary>One bit per pixel, as in a binary segmentation.</summary>
         public virtual bool IsBinaryMask => false;
 
+        /// <summary>Whether the IOD has Number of Frames. fo-dicom writes the tag when pixel data is added, and single-frame IODs do not have it.</summary>
+        public virtual bool KeepsNumberOfFrames => IsMultiFrame;
+
         /// <summary>Frames are drawn when they are written, so that the whole object is never in memory at once.</summary>
         public virtual bool RendersFramesOnDemand => false;
 
@@ -205,7 +210,7 @@ namespace DCST4.Core.Generation.Modalities
         }
 
         /// <summary>X-Ray Image, X-Ray Acquisition and positioner tags shared by XA and RF.</summary>
-        protected static void AddFluoroscopyTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        protected static void AddFluoroscopyTags(DicomDataset dataset, ExamPreset preset, ImageContext context, bool positionerAngles)
         {
             var spacing = preset.FieldOfViewMm / Math.Max(context.Rows, context.Columns);
             dataset.AddOrUpdate(DicomTag.ImagerPixelSpacing, Ds(spacing), Ds(spacing));
@@ -217,8 +222,11 @@ namespace DCST4.Core.Generation.Modalities
             dataset.AddOrUpdate(DicomTag.ExposureTime, preset.ExposureTimeMs.ToString(CultureInfo.InvariantCulture));
             var milliampereSeconds = (int)Math.Round(preset.TubeCurrentMa * preset.ExposureTimeMs / 1000.0);
             dataset.AddOrUpdate(DicomTag.Exposure, milliampereSeconds.ToString(CultureInfo.InvariantCulture));
-            dataset.AddOrUpdate(DicomTag.PositionerPrimaryAngle, Ds(preset.PositionerPrimaryAngle));
-            dataset.AddOrUpdate(DicomTag.PositionerSecondaryAngle, Ds(preset.PositionerSecondaryAngle));
+            if (positionerAngles)
+            {
+                dataset.AddOrUpdate(DicomTag.PositionerPrimaryAngle, Ds(preset.PositionerPrimaryAngle));
+                dataset.AddOrUpdate(DicomTag.PositionerSecondaryAngle, Ds(preset.PositionerSecondaryAngle));
+            }
         }
 
         /// <summary>The tracer, and the Type 2 patient orientation sequences of the NM/PET Patient Orientation module, shared by PT and NM.</summary>
@@ -228,9 +236,12 @@ namespace DCST4.Core.Generation.Modalities
             {
                 { DicomTag.Radiopharmaceutical, preset.Radiopharmaceutical },
                 { DicomTag.RadionuclideTotalDose, Ds(preset.RadionuclideDoseBq) },
-                { DicomTag.RadionuclideHalfLife, Ds(preset.RadionuclideHalfLifeSeconds) },
             };
-            if (positronFraction != null) tracer.Add(DicomTag.RadionuclidePositronFraction, Ds(positronFraction.Value));
+            if (positronFraction != null)
+            {
+                tracer.Add(DicomTag.RadionuclideHalfLife, Ds(preset.RadionuclideHalfLifeSeconds));
+                tracer.Add(DicomTag.RadionuclidePositronFraction, Ds(positronFraction.Value));
+            }
             tracer.Add(new DicomSequence(DicomTag.RadionuclideCodeSequence));
 
             dataset.AddOrUpdate(new DicomSequence(DicomTag.RadiopharmaceuticalInformationSequence, tracer));

@@ -273,7 +273,7 @@ namespace DCST4.Tests
                 check($"{profile.Id}: manufacturer marks it as a test object", Text(dataset, DicomTag.Manufacturer) == "DCST4", null);
                 check($"{profile.Id}: file meta header does not name this computer", read.FileMetaInfo.SourceApplicationEntityTitle == "DCST4", read.FileMetaInfo.SourceApplicationEntityTitle);
 
-                var requiredTags = RequiredEverywhere.Concat(profile.IsImage ? ImageRequired : new DicomTag[0]);
+                var requiredTags = RequiredEverywhere.Where(t => profile.Id != "rt-structure-set" && profile.Id != "grayscale-presentation-state" || (t != DicomTag.ContentDate && t != DicomTag.ContentTime)).Concat(profile.IsImage ? ImageRequired : new DicomTag[0]);
                 if (Required.TryGetValue(profile.Id, out var extra)) requiredTags = requiredTags.Concat(extra);
                 var missing = requiredTags.Where(t => !dataset.Contains(t)).Select(t => t.ToString()).ToList();
                 check($"{profile.Id}: required attributes present", missing.Count == 0, string.Join(" ", missing));

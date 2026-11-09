@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.6.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.6.1-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -12,7 +12,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 ## Features
 
 - **Zero Dependencies:** Built on .NET 4.8 (included natively in Windows 10 and 11). No external runtime installation is required.
-- **Realistic exams:** CT, MR and PT stacks, CR, DX, US, XA, RF, MG and NM images, with the tags their IODs require, consistent slice geometry and believable timestamps.
+- **Realistic exams:** CT, MR and PT stacks, CR, DX, US, XA, RF, MG and NM images, built to their IODs and checked with outside validators, with consistent slice geometry and believable timestamps. See [Checking with another toolkit](#checking-with-another-toolkit) for what is still reported.
 - **Everything is automatic, and everything can be overridden:** patient, accession number, study ID, UIDs, date and time. The fields show what the next run will use.
 - **Additional tags:** add common tags with generated values, or any custom tag, including private ones, under **File > Settings**.
 - **Official test patients:** random Patient IDs come only from Skatteverket's list of test personnummer. Birth date and sex follow from the number.
@@ -330,7 +330,7 @@ Assume that a PACS cannot delete what it receives, and keep the volumes small. `
 
 **What is guaranteed:** the same seed, parameters, personnummer list and reference date give byte-identical files, within one DCST4 version, one fo-dicom and PureCodecs version, and the same Windows GDI+ and Consolas rendering. On another computer the UIDs, names and all non-pixel attributes still match, and the pixels match only if the rendering does. `manifest.json` records these versions. The reference date is fixed, so the same request gives the same result on any day.
 
-**The manifest** holds, for each object, the SOP Class and Instance UID, the transfer syntax, a SHA-256 of the whole file, a SHA-256 of each frame and a normalized hash of the other attributes. The frame hashes are taken from the raw frames before any encoding, so that no decoder is involved. The normalized hash leaves out the file meta group, Specific Character Set, Pixel Data, VRs and private sequences, and compares text as Unicode, so it survives a change of transfer syntax or character set. Private sequences are left out because Implicit VR returns them as unreadable bytes. The whole-file hash still covers them. An object that refers to an image, such as a Key Object Selection, gets one small CT image of its own first, marked `source-image` in the manifest.
+**The manifest** holds, for each object, the SOP Class and Instance UID, the transfer syntax, a SHA-256 of the whole file, a SHA-256 of each frame and a normalized hash of the other attributes. The frame hashes are taken from the raw frames before any encoding, so that no decoder is involved. The normalized hash leaves out the file meta group, Specific Character Set, Pixel Data, a Number of Frames of 1, VRs and private sequences, and compares text as Unicode, so it survives a change of transfer syntax or character set. Private sequences are left out because Implicit VR returns them as unreadable bytes. The whole-file hash still covers them. An object that refers to an image, such as a Key Object Selection, gets one small CT image of its own first, marked `source-image` in the manifest.
 
 **Compressed variants** are tried per bit depth, since PureCodecs is pre-1.0. `list-codecs` shows what works on this computer. What cannot be produced is reported as unavailable in the output and the manifest, and is not an error. JPEG Baseline is 8-bit only and JPEG Extended at most 12-bit. A lossy variant has Lossy Image Compression `01` with ratio and method, and Image Type `DERIVED`.
 
@@ -342,14 +342,16 @@ Assume that a PACS cannot delete what it receives, and keep the volumes small. `
 | CT         | Frame of Reference, Patient Position, slice geometry, KVP, Tube Current, Exposure Time, Convolution Kernel, Rescale −1024 HU                                                                                                                                                                                                                                                                                                                                                                                                               |
 | MR         | Frame of Reference, Patient Position, slice geometry, Scanning Sequence, Sequence Variant, Scan Options, TR, TE, Echo Train Length, Flip Angle, Field Strength, Imaging Frequency                                                                                                                                                                                                                                                                                                                                                          |
 | CR         | View Position, Imager Pixel Spacing, Patient Orientation, KVP, Exposure Time, Tube Current                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| DX         | As CR, plus Presentation Intent, Presentation LUT Shape, Pixel Intensity Relationship, Rescale, Detector Type, Image Laterality                                                                                                                                                                                                                                                                                                                                                                                                            |
+| DX         | As CR, plus Presentation Intent, Presentation LUT Shape, Pixel Intensity Relationship, Rescale, Detector Type, Image Laterality, Positioner Type                                                                                                                                                                                                                                                                                                                                                                                                            |
 | US         | Single-frame grayscale B-mode (MONOCHROME2, 8 bits): Image Type with application and `0001`, Transducer Data and Type, Depth of Scan Field, Mechanical and Thermal Index, Sequence of Ultrasound Regions with calibration in cm                                                                                                                                                                                                                                                                                                            |
-| XA, RF     | Single frame: Image Type with `SINGLE PLANE`, Imager Pixel Spacing, Pixel Intensity Relationship, Radiation Setting, KVP, Tube Current, Exposure Time, Exposure, Positioner Primary and Secondary Angle |
+| XA, RF     | Single frame: Image Type with `SINGLE PLANE`, Imager Pixel Spacing, Pixel Intensity Relationship, Radiation Setting, KVP, Tube Current, Exposure Time, Exposure, and for XA Positioner Primary and Secondary Angle |
 | MG         | As DX, For Presentation, plus Positioner Type, Organ Exposed, left or right CC or MLO view with Patient Orientation, and Anatomic Region and View Code Sequences |
-| PT         | Static stack with Frame of Reference, Patient Position and slice geometry, 16 bits: Units `BQML`, Counts Source, Series Type, Corrected Image, Decay Correction, Number of Slices, Image Index, Frame Reference Time, Actual Frame Duration, F-18 FDG in Radiopharmaceutical Information Sequence, Rescale |
+| PT         | Static stack with Frame of Reference and slice geometry, 16 bits: Units `BQML`, Counts Source, Series Type, Corrected Image, Decay Correction, Number of Slices, Image Index, Frame Reference Time, Actual Frame Duration, F-18 FDG in Radiopharmaceutical Information Sequence, Rescale |
 | NM         | Static image, one frame: Image Type with `STATIC` and `EMISSION`, Number of Frames, Frame Increment Pointer, Energy Window and Detector vectors and sequences, Tc-99m in Radiopharmaceutical Information Sequence, Counts Accumulated, Actual Frame Duration, Pixel Spacing |
 
 Window Center and Width are calculated from the stored pixel values, so the image and any burned-in text are readable when it opens.
+
+Number of Frames is only written where the IOD has it, which is NM and the multi-frame objects. A paired body part has Laterality: a side for Hand, Knee and Leg, and present but empty where no side applies, such as both lungs or an image with no body part.
 
 Image Comments is `https://github.com/droidgren/DCST4`. No standard tag means "project URL". Image Comments is free text that viewers often show, and unlike Retrieve URL (0008,1190) it does not tell any system to fetch something from the address.
 
@@ -493,6 +495,15 @@ The negotiation probe added in 1.5.0 was checked once by hand against DCMTK 3.7.
 - The role selection and extended negotiation items reached it and it answered none of them, which the matrix records as no reply.
 - It accepts any AE title by default, so the two AE title tests report the finding as described. It answered the unsupported abstract syntax by accepting the association and rejecting the context.
 
+The attributes of the generated objects were checked with two IOD validators in 1.6.1, on the 713 files of `matrix`: `dciodvfy` and `dcentvfy` from dicom3tools (snapshot 2026-09-27) and `validate_iods` from dicom-validator 0.9.0, against edition 2026d of the standard. Neither is part of `run-tests.ps1`. `dciodvfy` found errors in 439 files of the 1.6.0 output and finds them in 61 now. What is left:
+
+- Enhanced CT, Enhanced MR and Breast Tomosynthesis still lack attributes that both validators name, such as Acquisition Context Sequence and, for Tomosynthesis, View Code Sequence. X-Ray 3D Frame Type Sequence is also in the shared functional groups where it must be per frame.
+- DX has an empty Anatomic Region Sequence, 55 files, which `dciodvfy` rejects when Body Part Examined has a value. The tag is Type 2 and `validate_iods` accepts it.
+- `dciodvfy` asks for Frame of Reference on RT Structure Set, one file. The standard lists that module as user optional and `validate_iods` accepts it.
+- The empty Specific Character Set variant is an error in `dciodvfy`, as expected, two files.
+- `validate_iods` reports KVP, Exposure Time and Tube Current on DX and MG, and six functional group sequences on Segmentation, as unexpected. `dciodvfy` accepts them, and they are taken as false alarms without having been confirmed in the standard.
+- `dcentvfy` finds CT, MR and PT studies consistent across series and instances.
+
 The store, query and retrieve tests added in 1.6.0 were checked once by hand against DCMTK 3.7.1 `dcmqrscp` on the same computer:
 
 - Every object type, 21 in all, was accepted, found by C-FIND and came back by both C-GET and C-MOVE. All 42 retrieves were intact at every level. Every object with pixels came back byte-identical, and no attribute differed, including private tags and values at maximum length.
@@ -524,6 +535,18 @@ The check that a firewall really blocks C-MOVE was not done, since both ends wer
 | Objects sent and retrieved by a run | From the command line, `work-<time>` under `--out`. From the program, a temporary folder that is removed |
 
 ## Changelog
+
+### 1.6.1
+
+Fixed, after checking the generated objects with `dciodvfy` and dicom-validator:
+
+- Number of Frames is no longer written on single-frame images whose IOD does not have it, which also made XA, RF and US look like multi-frame images without a Frame Increment Pointer
+- Laterality on paired body parts: a side for Hand, Knee and Leg, present and empty where no side applies
+- PT no longer has Patient Position next to Patient Orientation Code Sequence, or Rescale Type
+- DX has Positioner Type, and MG has View Modifier Code Sequence
+- Attributes that the IOD does not have are removed: positioner angles on RF, Radionuclide Half Life on NM, and Content Date and Time on RT Structure Set and Presentation State
+
+Enhanced CT, Enhanced MR and Breast Tomosynthesis still lack some attributes. See [Checking with another toolkit](#checking-with-another-toolkit).
 
 ### 1.6.0
 
