@@ -98,7 +98,28 @@ namespace DCST4.Cli
                 return Refuse($"Cannot use the output folder {arguments.OutputFolder}: {ex.Message}");
             }
 
-            return await WithCancelKeyAsync(token => ExecuteAsync(profile, tests, arguments.OutputFolder, arguments.PatientNaming, token)).ConfigureAwait(false);
+            var options = new TestRunOptions
+            {
+                Seed = arguments.Seed,
+                SyntaxOverride = arguments.TransferSyntax,
+                IndexWaitSeconds = arguments.IndexWaitSeconds,
+                // Under --out and kept, so that what was sent and retrieved can be looked at afterwards.
+                WorkFolder = Path.Combine(arguments.OutputFolder, "work-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture)),
+            };
+
+            if (arguments.MatrixPath != null)
+            {
+                try
+                {
+                    options.Matrix = DCST4.Core.Capability.CapabilityMatrix.Load(arguments.MatrixPath);
+                }
+                catch (DCST4.Core.Capability.CapabilityFileException ex)
+                {
+                    return Refuse(ex.Message);
+                }
+            }
+
+            return await WithCancelKeyAsync(token => ExecuteAsync(profile, tests, arguments.OutputFolder, arguments.PatientNaming, options, token)).ConfigureAwait(false);
         }
 
         private static async Task<int> WithCancelKeyAsync(Func<CancellationToken, Task<int>> action)
@@ -167,7 +188,7 @@ namespace DCST4.Cli
             return RunExitCodes.Clean;
         }
 
-        private static async Task<int> ExecuteAsync(TargetProfile profile, System.Collections.Generic.IReadOnlyList<ITestCase> tests, string outputFolder, TestPatientNaming patientNaming, CancellationToken token)
+        private static async Task<int> ExecuteAsync(TargetProfile profile, System.Collections.Generic.IReadOnlyList<ITestCase> tests, string outputFolder, TestPatientNaming patientNaming, TestRunOptions options, CancellationToken token)
         {
             var runner = new TestRunner();
             runner.Progress += progress =>
@@ -178,7 +199,7 @@ namespace DCST4.Cli
                 }
             };
 
-            var report = await runner.RunAsync(profile, tests, token, patientNaming).ConfigureAwait(false);
+            var report = await runner.RunAsync(profile, tests, token, patientNaming, options).ConfigureAwait(false);
             Console.WriteLine(string.Join(", ", report.Summary.Where(p => p.Value > 0).Select(p => $"{p.Key} {p.Value}")) + (report.Cancelled ? " (cancelled)" : string.Empty));
 
             try
@@ -191,6 +212,7 @@ namespace DCST4.Cli
                     Console.WriteLine("Capability matrix: " + files.CapabilityJson);
                     Console.WriteLine("Capability matrix: " + files.CapabilityCsv);
                 }
+                if (files.ChainCsv != null) Console.WriteLine("Chain: " + files.ChainCsv);
             }
             catch (Exception ex) when (IsFileProblem(ex))
             {

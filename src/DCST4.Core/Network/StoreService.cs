@@ -19,6 +19,8 @@ namespace DCST4.Core.Network
         /// <summary>Why the send stopped early, or null if every image got a response.</summary>
         public string FatalError { get; set; }
         public bool Cancelled { get; set; }
+        /// <summary>What kind of thing <see cref="FatalError"/> was, for those that need more than its text.</summary>
+        public ConnectivityFailure FailureKind { get; set; }
         public int AssociationCount { get; set; }
         /// <summary>The transfer syntax actually used per SOP class, for the run summary.</summary>
         public string NegotiationSummary { get; set; }
@@ -57,7 +59,8 @@ namespace DCST4.Core.Network
             IEnumerable<SourceImage> images,
             bool allowFallback,
             Action<StoreResult> onResult,
-            CancellationToken token)
+            CancellationToken token,
+            AssociationTimeline timeline = null)
         {
             var outcome = new StoreSendOutcome();
             var pending = new ConcurrentDictionary<string, PendingImage>(StringComparer.Ordinal);
@@ -67,6 +70,10 @@ namespace DCST4.Core.Network
             long lastResponseAtMs = 0;
             var outstanding = 0;
             string rejection = null;
+            Exception sendFailure = null;
+            var timelineSync = new object();
+            var timelineRequests = new List<Action>();
+            var associationOpen = false;
 
             TimeoutWatch watch = null;
             try
@@ -75,16 +82,27 @@ namespace DCST4.Core.Network
                 client.ClientOptions.AssociationLingerTimeoutInMs = LingerWhileFeedingMs;
                 watch = new TimeoutWatch(client, token, options);
                 var responseWatch = watch;
+                timeline?.Attach(client);
 
                 client.AssociationAccepted += (s, e) =>
                 {
                     outcome.AssociationCount++;
                     RecordNegotiation(e.Association, acceptedBySopClass);
 
+                    // Requests queued before this point went out after it, and the timeline must say so.
+                    lock (timelineSync)
+                    {
+                        associationOpen = true;
+                        foreach (var record in timelineRequests) record();
+                        timelineRequests.Clear();
+                    }
+
                     var problem = FindUnacceptedSyntax(pending.Values.Select(p => p.Image), acceptedBySopClass);
+                    if (problem != null) outcome.FailureKind = ConnectivityFailure.ContextNotAccepted;
                     if (problem == null) return;
                     if (allowFallback)
                     {
+                        outcome.FailureKind = ConnectivityFailure.None;
                         outcome.FallbackWarning = problem + " Using the syntax the SCP accepted, as fallback is allowed.";
                         Logger.Warning("{warning}", outcome.FallbackWarning);
                     }
@@ -98,6 +116,7 @@ namespace DCST4.Core.Network
                 client.AssociationRejected += (s, e) =>
                 {
                     rejection = $"Association rejected: {e.Result}, source {e.Source}, reason {e.Reason}";
+                    outcome.FailureKind = ConnectivityFailure.AssociationRejected;
                     Logger.Warning("{rejection}", rejection);
                 };
                 client.AssociationReleased += (s, e) => Logger.Information("Association released");
@@ -136,9 +155,16 @@ namespace DCST4.Core.Network
                                 pending[image.SopInstanceUid] = entry;
 
                                 var request = new DicomCStoreRequest(image.File, DicomPriority.Medium);
+                                var dimseIndex = 0;
+                                DeferOrRun(timelineSync, timelineRequests, () => associationOpen, () => dimseIndex = timeline?.RecordRequest("C-STORE", image.SopClassUid) ?? 0);
                                 request.OnResponseReceived = (req, response) =>
                                 {
                                     var now = clock.ElapsedMilliseconds;
+                                    if (timeline != null && SyntaxUsedFor(image, acceptedBySopClass) != null)
+                                    {
+                                        var raw = response.Command.GetSingleValueOrDefault(DicomTag.Status, response.Status.Code);
+                                        timeline.RecordResponse(dimseIndex, "C-STORE", raw, StoreStatus.Describe(raw));
+                                    }
                                     var previous = Interlocked.Exchange(ref lastResponseAtMs, now);
                                     pending.TryRemove(image.SopInstanceUid, out _);
 
@@ -181,11 +207,15 @@ namespace DCST4.Core.Network
             }
             catch (Exception ex)
             {
+                sendFailure = ex;
                 outcome.FatalError = rejection ?? watch?.AbortReason ?? NetworkErrors.GetUserMessage(ex);
+                if (outcome.FailureKind == ConnectivityFailure.None) outcome.FailureKind = watch == null ? ConnectivityFailure.LocalConfiguration : EchoService.Classify(ex);
                 Logger.Error(ex, "C-STORE stopped: {reason}", outcome.FatalError);
             }
             finally
             {
+                var timedOut = watch?.TimedOut == true;
+                timeline?.Complete(sendFailure, token.IsCancellationRequested || timedOut || watch?.AbortReason != null, timedOut ? watch.Reason : watch?.AbortReason ?? "Cancelled");
                 watch?.Dispose();
             }
 
@@ -217,6 +247,15 @@ namespace DCST4.Core.Network
             return outcome;
         }
 
+        private static void DeferOrRun(object sync, List<Action> deferred, Func<bool> ready, Action action)
+        {
+            lock (sync)
+            {
+                if (ready()) action();
+                else deferred.Add(action);
+            }
+        }
+
         private static void ApplyEndState(StoreSendOutcome outcome, TimeoutWatch watch, CancellationToken token, string rejection)
         {
             if (token.IsCancellationRequested)
@@ -231,6 +270,7 @@ namespace DCST4.Core.Network
             else if (watch?.TimedOut == true)
             {
                 outcome.FatalError = watch.Reason + " (timed out)";
+                outcome.FailureKind = ConnectivityFailure.Timeout;
                 Logger.Warning("C-STORE stopped: {reason}", outcome.FatalError);
             }
             else if (rejection != null)

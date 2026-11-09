@@ -19,13 +19,14 @@ namespace DCST4.Core.Testing
         /// <summary>Raised on a background thread.</summary>
         public event Action<TestProgress> Progress;
 
-        public async Task<TestRunReport> RunAsync(TargetProfile profile, IReadOnlyList<ITestCase> tests, CancellationToken token, TestPatientNaming patientNaming = TestPatientNaming.RegistrySwedishName)
+        public async Task<TestRunReport> RunAsync(TargetProfile profile, IReadOnlyList<ITestCase> tests, CancellationToken token, TestPatientNaming patientNaming = TestPatientNaming.RegistrySwedishName, TestRunOptions options = null)
         {
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             if (tests == null) throw new ArgumentNullException(nameof(tests));
 
             var trimmed = profile.Trimmed();
-            var context = new TestContext(trimmed, patientNaming);
+            var session = new TestRunSession(options);
+            var context = new TestContext(trimmed, patientNaming, session);
             var report = new TestRunReport
             {
                 ToolVersion = ProductInfo.Version,
@@ -66,7 +67,27 @@ namespace DCST4.Core.Testing
             {
                 report.Summary[resultClass.ToString()] = report.Results.Count(r => r.Result == resultClass);
             }
+
+            if (session.SeedWasUsed) report.Seed = session.Seed;
+            if (session.Objects.Count > 0)
+            {
+                report.Chain = session.BuildChain();
+                RedactChain(report.Chain, trimmed.Endpoint.TlsClientCertThumbprint);
+            }
+            session.Cleanup();
             return report;
+        }
+
+        private static void RedactChain(List<ChainRow> chain, string thumbprint)
+        {
+            if (string.IsNullOrWhiteSpace(thumbprint)) return;
+            foreach (var row in chain)
+            {
+                foreach (var step in new[] { row.Accepted, row.Indexed, row.Retrievable, row.Intact, row.Committed }.Where(s => s != null))
+                {
+                    step.Explanation = step.Explanation?.Replace(thumbprint, CertificatePlaceholder);
+                }
+            }
         }
 
         private static async Task<TestResult> ExecuteOneAsync(ITestCase test, TestContext context, CancellationToken token)

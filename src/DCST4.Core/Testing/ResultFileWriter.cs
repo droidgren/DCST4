@@ -39,6 +39,8 @@ namespace DCST4.Core.Testing
         /// <summary>Null when the run has no capability matrix.</summary>
         public string CapabilityJson { get; set; }
         public string CapabilityCsv { get; set; }
+        /// <summary>Null when no store test ran.</summary>
+        public string ChainCsv { get; set; }
     }
 
     /// <summary>
@@ -80,7 +82,37 @@ namespace DCST4.Core.Testing
                 File.WriteAllText(paths.CapabilityJson, matrix.ToJson(), Utf8NoBom);
                 File.WriteAllText(paths.CapabilityCsv, matrix.ToCsv(), Utf8NoBom);
             }
+
+            if (report.Chain != null)
+            {
+                paths.ChainCsv = unique + "-chain.csv";
+                File.WriteAllText(paths.ChainCsv, ChainToCsv(report), Utf8NoBom);
+            }
             return paths;
+        }
+
+        /// <summary>One row per object type: the chain has no place in the CSV with one row per test.</summary>
+        public static string ChainToCsv(TestRunReport report)
+        {
+            var text = new StringBuilder();
+            AppendRow(text, new[] { "object_type", "display_name", "transfer_syntax", "accepted", "indexed", "retrievable", "intact", "committed", "explanation" });
+
+            string ResultOf(ChainStep step) => step == null ? string.Empty : step.Result.ToString();
+
+            foreach (var row in report.Chain)
+            {
+                var worst = new[] { row.Committed, row.Intact, row.Retrievable, row.Indexed, row.Accepted }
+                    .Where(s => s != null)
+                    .OrderBy(s => s.Result == TestResultClass.PASS ? 1 : 0)
+                    .FirstOrDefault();
+                AppendRow(text, new[]
+                {
+                    row.ObjectType, row.DisplayName, row.TransferSyntaxUid,
+                    ResultOf(row.Accepted), ResultOf(row.Indexed), ResultOf(row.Retrievable), ResultOf(row.Intact), ResultOf(row.Committed),
+                    worst?.Explanation,
+                });
+            }
+            return text.ToString();
         }
 
         public static string ToJson(TestRunReport report) => JsonSerializer.Serialize(report, ResultJson.Options);

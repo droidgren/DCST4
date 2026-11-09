@@ -100,6 +100,29 @@ namespace DCST4.Tests
 
             var temp = Path.Combine(Path.GetTempPath(), "DCST4Tests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(temp);
+
+            if (args.Length == 1 && args[0] == "retrieve")
+            {
+                try
+                {
+                    using (DicomServerFactory.Create<MockStorageScp>(Port))
+                    {
+                        RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _fail++;
+                    Console.WriteLine("  FAIL  harness exception: " + ex);
+                }
+                finally
+                {
+                    try { Directory.Delete(temp, true); } catch (IOException) { }
+                }
+                Console.WriteLine($"\n{_pass} passed, {_fail} failed");
+                return _fail == 0 ? 0 : 1;
+            }
+
             try
             {
                 TestPersonnummer();
@@ -130,6 +153,7 @@ namespace DCST4.Tests
                     TestSaving(temp).GetAwaiter().GetResult();
                     TestAdditionalTagDelivery(temp).GetAwaiter().GetResult();
                     TestDataTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                    RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                     ViewModelTests.Run(Port, ClosedPort, temp, (name, ok, detail) => Check(name, ok, detail));
                 }
                 TestTls().GetAwaiter().GetResult();
@@ -2009,6 +2033,11 @@ namespace DCST4.Tests
         {
             Scp.Reset();
             if (mode == "negotiation") Scp.ContextTable = NegotiationScript();
+            if (mode == "pacs")
+            {
+                Scp.KeepStored = true;
+                Scp.MoveDestinations["DCST4"] = Tuple.Create("127.0.0.1", 11113);
+            }
             if (mode == "mixed")
             {
                 Scp.StatusFor = i =>

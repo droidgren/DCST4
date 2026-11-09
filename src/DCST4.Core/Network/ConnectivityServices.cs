@@ -192,7 +192,7 @@ namespace DCST4.Core.Network
             }
         }
 
-        private static ConnectivityFailure Classify(Exception ex)
+        internal static ConnectivityFailure Classify(Exception ex)
         {
             if (ex is AggregateException aggregate)
             {

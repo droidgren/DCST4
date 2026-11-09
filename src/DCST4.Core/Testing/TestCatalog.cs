@@ -1,3 +1,4 @@
+using DCST4.Core.Generation.Datasets;
 using DCST4.Core.Testing.Cases;
 using System;
 using System.Collections.Generic;
@@ -10,14 +11,36 @@ namespace DCST4.Core.Testing
     {
         public const string SelectAll = "all";
 
-        public static IReadOnlyList<ITestCase> All { get; } = new ITestCase[]
+        public static IReadOnlyList<ITestCase> All { get; } = Create();
+
+        /// <summary>In the order they depend on each other: a query or a retrieve looks for what the store tests before it stored.</summary>
+        private static IReadOnlyList<ITestCase> Create()
         {
-            new CEchoTest(),
-            new NegotiationProbeTest(),
-            new UnknownCallingAeTest(),
-            new WrongCalledAeTest(),
-            new UnsupportedContextsTest(),
-        };
+            var tests = new List<ITestCase>
+            {
+                new CEchoTest(),
+                new NegotiationProbeTest(),
+                new UnknownCallingAeTest(),
+                new WrongCalledAeTest(),
+                new UnsupportedContextsTest(),
+            };
+
+            tests.AddRange(DatasetProfileCatalog.Default.Select(p => (ITestCase)new StoreObjectTest(p)));
+            tests.Add(new StoreObjectTest(DatasetProfileCatalog.Find("ct"), "ct-edge", EdgeCases.PrivateTags | EdgeCases.LongStrings | EdgeCases.NestedSequences));
+
+            tests.Add(new QueryIndexTest());
+            tests.Add(new QueryLevelsTest());
+            tests.Add(new QueryReturnKeysTest());
+            tests.Add(new QueryMatchingTest());
+            tests.Add(new RetrieveGetTest());
+            tests.Add(new RetrieveMoveTest());
+            tests.Add(new RetrieveMoveDiagnosticTest());
+            tests.Add(new VerifyIntegrityTest());
+            tests.Add(new DuplicateIdenticalTest());
+            tests.Add(new DuplicateModifiedTest());
+            tests.Add(new ConflictDemographicsTest());
+            return tests;
+        }
 
         /// <summary>
         /// Picks tests by a comma-separated list of ids, categories or "all", ignoring case, in catalog order.

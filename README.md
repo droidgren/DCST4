@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.5.1-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.6.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -26,6 +26,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
 - **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). Each run is saved as JSON and CSV for comparison over time. See [Testing a PACS](#testing-a-pacs).
 - **Capability matrix:** finds out from association negotiation alone, with no images sent, which SOP classes and transfer syntaxes a PACS supports, and compares that with what the vendor's Conformance Statement claims. See [What the PACS supports](#what-the-pacs-supports).
+- **Store, query and retrieve:** proves the chain accepted, indexed, retrievable and intact for each object type, with C-STORE, C-FIND, C-GET and C-MOVE. What comes back is compared with what was sent, level by level. See [Store, query and retrieve](#store-query-and-retrieve).
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
 - **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, Enhanced CT and MR, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
 
@@ -173,6 +174,8 @@ DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results
 
 `--tests` takes test ids, categories (`Capability`, `Integrity`, `Limits`, `Performance`) or `all`, separated by commas. `--log-dir` chooses another folder for the log. Ctrl+C cancels the run and saves what was finished. A second Ctrl+C ends the program at once. Cancelling while a connection is being opened can take as long as the connection timeout.
 
+**`all` and the `Integrity` category include tests that store objects on the destination**, and those objects may not be possible to delete. Check the profile before running them. `--seed`, `--matrix`, `--transfer-syntax` and `--index-wait` apply to those tests, see [Store, query and retrieve](#store-query-and-retrieve).
+
 | Exit code | Meaning                                                    |
 | --------- | ---------------------------------------------------------- |
 | 0         | No `FAIL` or `TOOL_ERROR`                                  |
@@ -184,7 +187,7 @@ DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results
 
 Each run writes `DCST4-run-<UTC time>.json` with full detail and a `.csv` with one row per result. Both are UTF-8 and independent of the computer's language settings, and they hold a schema version, the tool version, the destination and the start and end time. The client certificate thumbprint is never written to them.
 
-Two identical runs differ only in the times and durations, from the program or the command line alike.
+Two runs of the same tests with the same seed differ only in the times and durations, from the program or the command line alike. A run that generates data draws a new seed unless one is given, and writes it to the JSON file. Without generated data there is no seed, and two identical runs still differ only in the times.
 
 ### What the PACS supports
 
@@ -238,6 +241,59 @@ Only `Accepted` counts as a claim. The tab then lists what was **claimed but rej
 | `negotiation-unsupported-contexts`  | Proposes only an abstract syntax under the profile's UID root, which cannot exist | Rejected, or accepted with the context rejected: `EXPECTED_FAILURE`, and the Details say which. Context accepted: `FAIL` |
 
 A PACS that accepts an unknown AE title gets `FAIL` as a finding to report, with `finding` in the Details, and `DCST4.Cli.exe` then exits with 1. A-ABORT or a closed connection in place of a proper rejection is also `FAIL`, and says so. The two AE title tests first open an association with the profile's own titles, and give `INDETERMINATE` if that fails, since a rejection would then prove nothing.
+
+### Store, query and retrieve
+
+These tests prove, per object type, that what the PACS accepted can be found, can be fetched back and has not changed. They run in this order, and a later test works on what the earlier ones stored in the same run. A test without its input gives `INDETERMINATE` and says what was missing.
+
+**These tests store objects on the destination, and are ticked by default.** Assume that a PACS cannot delete them. Each object is small, 128 by 128 pixels and marked as a test image, but the duplicate and conflict tests also leave a changed object and a study with two patients behind.
+
+| Test                                 | What it answers                                                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `store-<type>`                       | One for each dataset profile except `tomosynthesis-large`, and `store-ct-edge` with private tags and values at maximum length. The Accepted step |
+| `query-index`                        | Is each stored instance found with C-FIND at IMAGE level? Waits for a system that indexes in the background. The Indexed step  |
+| `query-levels`                       | Which levels work under Patient Root and Study Root. PATIENT under Study Root should be refused                                |
+| `query-return-keys`                  | Which of a broad set of return keys come back populated, empty or not at all, and whether they match what was sent             |
+| `query-matching`                     | Wildcards, date ranges, case and Swedish characters, on one patient stored in both ISO_IR 100 and ISO_IR 192                    |
+| `retrieve-cget`, `retrieve-cmove`    | Does each object type come back? The Retrievable step, which passes if either way works                                        |
+| `retrieve-cmove-diagnostic`          | Why a C-MOVE does not arrive                                                                                                    |
+| `verify-integrity`                   | Is what came back what was sent? The Intact step                                                                                |
+| `duplicate-identical`                | The same SOP Instance UID sent twice                                                                                            |
+| `duplicate-modified`                 | The same SOP Instance UID with changed content: which version is kept                                                           |
+| `conflict-demographics`              | One Study Instance UID with two patients from the test personnummer list                                                        |
+
+**The transfer syntax** of each store test is chosen per object type: your choice if you made one and the object type allows it, then the first of Explicit VR, Implicit VR and the lossless compressions that the capability matrix says is accepted, otherwise Explicit VR. The matrix comes from `negotiation-probe` in the same run, the Capabilities tab, or `--matrix <file>`. Each store result records in `transferSyntaxSelectedBy` what chose it. A status of Success or Warning is `PASS`, a warning with its raw code. A refused object is `FAIL`, and `0x0122` or a context that was not accepted is `NOT_SUPPORTED`.
+
+**The Chain tab**, the `chain` section of the JSON file and `<run>-chain.csv` give one row per object type, with one result each for accepted, indexed, retrievable and intact, and a place for committed, which stays empty until Storage Commitment exists.
+
+**C-MOVE** makes the PACS connect back to this computer. Add the local AE title (`localScpAe` in the profile, default `DCST4`) on the PACS with this computer's address and the port (`localScpPort`, default 11113), and allow incoming TCP on the port. A PACS that does not know the AE title answers `0xA801`. One that knows it and cannot reach us gets an explanation that names the port and Windows Defender Firewall, a common cause on Windows. In these cases `retrieve-cmove` is `INDETERMINATE`, since it says nothing about the PACS, and `retrieve-cmove-diagnostic` is `FAIL`, so `DCST4.Cli.exe` exits with 1. A port that is already in use is `TOOL_ERROR`. The listener does not use TLS, even if the profile does.
+
+**What Intact checks.** Each retrieved object is compared with the copy that was sent and with the manifest, reported per level:
+
+| Level           | Result                                                                                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Transport       | All instances came back and the counts match                                                                                                                                   |
+| Identity        | Study, Series and SOP Instance UIDs are unchanged                                                                                                                              |
+| Attributes      | Tag by tag. A change recorded in Original Attributes Sequence (0400,0561) is a documented coercion. Without that it is a silent modification, and `FAIL`                        |
+| Pixel           | `ByteIdentical`, `LosslessEquivalent` (the same decoded pixels in another syntax), `LossyChanged` with the largest and mean absolute difference, or `Corrupt`                    |
+| Transfer syntax | What was sent, offered and returned. Whether a PACS transcodes on store or on retrieve can only be inferred from outside, and the explanation says what is known                |
+
+Reported separately under Attributes: private tags kept and dropped (a dropped one is `FAIL`), character set changes, truncated values, attributes the PACS added (not a failure), attributes sent empty and dropped, and the VR lost when a private element comes back as UN. A private sequence that comes back as UN bytes is marked as not compared.
+
+**Duplicates and conflicts.** A refusal with `0x0111`, or of the conflicting patient, is `EXPECTED_FAILURE`. For changed content the result says which version was kept, per attribute and pixels, and attributes of one version with pixels of the other is `FAIL`. Two patients kept in one study without any change is `FAIL` with `finding` in the Details, as a finding to report.
+
+```powershell
+DCST4.Cli.exe run --profile target.json --tests Integrity --out C:\Temp\results --seed 42 --index-wait 60
+```
+
+| Option                 | Meaning                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `--seed`               | Fixes the generated data. The same seed repeats the same UIDs, which on a real system are duplicates        |
+| `--matrix`             | A saved capability matrix to choose the transfer syntax from                                               |
+| `--transfer-syntax`    | Send everything in this syntax where the object type allows it: the names from `generate`                  |
+| `--index-wait`         | How long an object may take to appear in a query, in seconds. Default 30                                    |
+
+The command line keeps the files that were sent and retrieved under the `--out` folder in `work-<time>`. The program uses a temporary folder and removes it when the run ends. The folder holds only test data.
 
 ## Test datasets
 
@@ -312,12 +368,13 @@ src\DCST4.Core\     No WPF reference
     Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
   TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
   Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary, ExamSizeEstimator
-  Network\          Ping, C-ECHO, C-STORE, AssociationTimeline, AssociationNegotiation
+  Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
   Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
+  Verification\     IntegrityOracle and IntegrityReport: what came back against what was sent
   Output\           DICOM File-set and DICOMDIR
-  Testing\          TargetProfile, ITestCase, TestRunner, TestCatalog, TestResult, ResultFileWriter
-    Cases\          The test cases
-src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs, the Capabilities tab ViewModels\CapabilityViewModel.cs
+  Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestResult, ResultFileWriter
+    Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share
+src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
 tools\              List refresh script
@@ -328,6 +385,10 @@ The app and the command line are front-ends on the same engine in `Testing\`. To
 `AssociationTimeline` is built on `IDicomClient`, because fo-dicom's own event collector is internal. It settles how an association ended only after `SendAsync` is over, since `AssociationReleased` is also raised after an abort. C-ECHO and the negotiation tests are wired to it so far.
 
 `NegotiationProbe` runs each association through `EchoService.EchoAsync`, whose `configure` parameter decides what is proposed. It depends on how fo-dicom builds an association: a plain C-ECHO adds one context, Verification with Implicit VR, as ID 1, and `AdditionalPresentationContexts` follow unchanged, but a context identical to one already there is silently dropped. So Verification with Implicit VR is never proposed twice, and that cell of the matrix is answered by the C-ECHO's own context. After the A-ASSOCIATE-AC a context no longer holds what was proposed, so answers are paired with the plan by position. A role reply overwrites the proposed role, which is why the SCU role is proposed as null: it stays null only when no reply came. Later phases can choose a transfer syntax per object type from `CapabilityMatrix`.
+
+`TestRunSession` is how tests of one run depend on each other, in catalog order: store tests add a `StoredObjectRecord` with the manifest and the path of what was sent, query and retrieve tests add their step to it, and `TestRunner` turns the records into `TestRunReport.Chain`. Storage Commitment fits here: it reads the stored instances from the session and fills the `Committed` step of `ChainRow`. A store test gets its own seed from `TestRunSession.SeedFor(purpose)`, because a Patient ID follows from the seed alone and two purposes on one seed would put one Patient ID under two names.
+
+`DimseRunner` opens one association for one DIMSE request, with the same timeouts and endings everywhere. fo-dicom answers a request itself when no context was accepted, so the callbacks check `DimseExchange.ContextAccepted` before believing a status. C-GET proposes storage contexts in SCP role only for the SOP classes it expects, because there are more storage classes than the 128 an association can hold, and `RetrieveService` sets the SOP class on the command, because fo-dicom's retrieve requests are fixed to Study Root. In the mock SCP, a retrieve provider must not wait for a C-STORE response inside `OnCGetRequestAsync`, which fo-dicom runs in the loop that reads the PDUs, so the sub-operations go out on a task of their own.
 
 Generation knows nothing about sending. The two meet at `IImageSource`, which supplies images lazily so that a long stack does not sit in memory. That leaves room for:
 
@@ -367,11 +428,17 @@ Other ways to use it:
 # Write sample images as .dcm and .png, for a visual check
 .\tests\run-tests.ps1 -Render C:\Temp\samples
 
-# Run the mock SCP for trying the app by hand. "mixed" scripts warnings and failures. It stores nothing.
+# Run the mock SCP for trying the app by hand. "mixed" scripts warnings and failures. Without "pacs" below it keeps nothing.
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 mixed
 
 # The same, with a table of what is accepted, for looking at the Capabilities tab
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 negotiation
+
+# The same, but it keeps what it receives and answers C-FIND, C-GET and C-MOVE, with DCST4 at 127.0.0.1:11113 as the C-MOVE destination
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 pacs
+
+# Only the store, query and retrieve tests, which is quicker while working on them
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe retrieve
 ```
 
 JPEG Lossless streams are checked with a small decoder written from ITU T.81 (`LosslessJpegDecoder.cs`). fo-dicom's built-in decoder is not used as the reference, because it was seen returning 0 for the last pixel of a frame that this decoder and PureCodecs both decode correctly.
@@ -418,7 +485,14 @@ The negotiation probe added in 1.5.0 was checked once by hand against DCMTK 3.7.
 - The role selection and extended negotiation items reached it and it answered none of them, which the matrix records as no reply.
 - It accepts any AE title by default, so the two AE title tests report the finding as described. It answered the unsupported abstract syntax by accepting the association and rejecting the context.
 
-A comparison with Orthanc has not been done, since it was not available.
+The store, query and retrieve tests added in 1.6.0 were checked once by hand against DCMTK 3.7.1 `dcmqrscp` on the same computer:
+
+- Every object type, 21 in all, was accepted, found by C-FIND and came back by both C-GET and C-MOVE. All 42 retrieves were intact at every level. Every object with pixels came back byte-identical, and no attribute differed, including private tags and values at maximum length.
+- All query capability tests passed. `dcmqrscp` matches across character sets, is case sensitive and does not match `?` against a Swedish letter. An independent `findscu` found the same studies.
+- A second copy of an object was accepted with `0x0000` and the second version kept. Two patients under one Study Instance UID were kept as they were, which is reported as a finding.
+- A C-MOVE to an AE title it does not know gave `0xA801`, and the diagnostic said what to change.
+
+The check that a firewall really blocks C-MOVE was not done, since both ends were on the same computer. A comparison with Orthanc has not been done, since it was not available.
 
 ## Dependencies
 
@@ -438,8 +512,29 @@ A comparison with Orthanc has not been done, since it was not available.
 | Test results from the program      | `%LocalAppData%\DCST4\TestRuns\`, or the folder on the Tests tab |
 | Test results from the command line | The folder given with `--out`                                  |
 | Capability matrix of a run         | Next to its result files, as `<run>-capability.json` and `.csv` |
+| Chain summary of a run             | In the JSON file, and next to it as `<run>-chain.csv`          |
+| Objects sent and retrieved by a run | From the command line, `work-<time>` under `--out`. From the program, a temporary folder that is removed |
 
 ## Changelog
+
+### 1.6.0
+
+New:
+
+- C-STORE as test cases, one per object type, with the transfer syntax chosen from the capability matrix or by you, and the result mapped from the raw status
+- C-FIND tests: which levels work under Patient Root and Study Root, which return keys are populated, and matching with wildcards, date ranges, case and Swedish characters in ISO_IR 100 and ISO_IR 192
+- C-GET, with the objects coming back on the same association, and C-MOVE to a new local Storage SCP
+- A diagnostic test that explains why a C-MOVE does not arrive, when the PACS does not know our AE title or cannot reach our port, and names Windows Defender Firewall
+- Integrity check of what comes back against what was sent, per level: Transport, Identity, Attributes, Pixel and Transfer Syntax, with documented coercions told apart from silent modifications
+- Tests of a re-sent SOP Instance UID, identical and modified, and of one study with two patients
+- Chain tab, a `chain` section in the JSON file and `<run>-chain.csv`: accepted, indexed, retrievable and intact per object type
+- Local SCP AE title, port, UID root and transfer syntax for the store tests on the Tests tab, and `--seed`, `--matrix`, `--transfer-syntax` and `--index-wait` on the command line
+
+Changed:
+
+- The result files have schema version 3, with the seed, the chain, the integrity report and the query report
+- The store tests are ticked by default and included in `all` and in the `Integrity` category, so a run can store objects on the destination
+- Two runs give the same result files only with the same seed, if they generate data
 
 ### 1.5.1
 

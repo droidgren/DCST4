@@ -315,6 +315,19 @@
                             <Button DockPanel.Dock="Right" Content="..." Width="26" Margin="4,0,0,0" Click="BrowseTestResultsFolderButton_Click" IsEnabled="{Binding IsIdle}" ToolTip="Select the folder"/>
                             <TextBox Text="{Binding TestSuite.ResultsFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsEnabled="{Binding IsIdle}"/>
                         </DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,2,4" IsEnabled="{Binding IsIdle}">
+                            <TextBlock Text="Local SCP AET:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBox Text="{Binding LocalScpAe, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="100" VerticalAlignment="Center"
+                                     ToolTip="The AE title the PACS sends C-MOVE objects to. The PACS must have it, with this computer's address and the port"/>
+                            <TextBlock Text="Port:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <TextBox Text="{Binding LocalScpPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center"
+                                     ToolTip="Where this computer listens during a C-MOVE test. Windows Defender Firewall must allow it"/>
+                            <TextBlock Text="UID root:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <TextBox Text="{Binding TestUidRoot, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" VerticalAlignment="Center"
+                                     ToolTip="UIDs of the objects the store tests send start with this"/>
+                            <TextBlock Text="Store tests send in:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <ComboBox ItemsSource="{Binding TestSuite.StoreSyntaxChoices}" SelectedItem="{Binding TestSuite.SelectedStoreSyntax, Mode=TwoWay}" Width="260" VerticalAlignment="Center"/>
+                        </StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="230"/>
@@ -392,6 +405,51 @@
                             </Grid>
                         </Grid>
                     </DockPanel>
+                </TabItem>
+                <TabItem Header="Chain">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="4"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <DataGrid ItemsSource="{Binding TestSuite.Chain.Rows}" SelectedItem="{Binding TestSuite.Chain.SelectedRow, Mode=TwoWay}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#FFE0E0E0" SelectionMode="Single"
+                                  ClipboardCopyMode="IncludeHeader" Background="White">
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Worst}" Value="NOT_SUPPORTED">
+                                            <Setter Property="Background" Value="#FFFFF4C2"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Worst}" Value="FAIL">
+                                            <Setter Property="Background" Value="#FFFAD4D0"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Worst}" Value="TOOL_ERROR">
+                                            <Setter Property="Background" Value="#FFFAD4D0"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Worst}" Value="TIMEOUT">
+                                            <Setter Property="Background" Value="#FFE6E6E6"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Worst}" Value="INDETERMINATE">
+                                            <Setter Property="Background" Value="#FFE6E6E6"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.RowStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Object type" Binding="{Binding ObjectType}" Width="250"/>
+                                <DataGridTextColumn Header="Transfer syntax" Binding="{Binding TransferSyntax}" Width="190"/>
+                                <DataGridTextColumn Header="Accepted" Binding="{Binding Accepted}" Width="110"/>
+                                <DataGridTextColumn Header="Indexed" Binding="{Binding Indexed}" Width="110"/>
+                                <DataGridTextColumn Header="Retrievable" Binding="{Binding Retrievable}" Width="110"/>
+                                <DataGridTextColumn Header="Intact" Binding="{Binding Intact}" Width="110"/>
+                                <DataGridTextColumn Header="Committed" Binding="{Binding Committed}" Width="110"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Center" Height="4" Background="Transparent"/>
+                        <TextBox Grid.Row="2" Text="{Binding TestSuite.Chain.SelectedRow.Detail, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#FFF0F0F0"/>
+                    </Grid>
                 </TabItem>
                 <TabItem Header="Capabilities">
                     <DockPanel>

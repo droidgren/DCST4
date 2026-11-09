@@ -9,7 +9,7 @@ namespace DCST4.Cli
     {
         public const string Usage =
             "Usage:\n" +
-            "  DCST4.Cli.exe run --profile <file> --tests <ids|category|all> --out <folder> [--patient-naming <name>] [--log-dir <folder>]\n" +
+            "  DCST4.Cli.exe run --profile <file> --tests <ids|category|all> --out <folder> [options of run]\n" +
             "  DCST4.Cli.exe generate --dataset <id> --out <folder> [options below]\n" +
             "  DCST4.Cli.exe list-datasets\n" +
             "  DCST4.Cli.exe list-codecs [--log-dir <folder>]\n" +
@@ -18,6 +18,12 @@ namespace DCST4.Cli
             "  --tests            Comma-separated test ids or categories, for example c-echo, negotiation-probe or Capability.\n" +
             "  --log-dir          Where to write the log. Default: %LocalAppData%\\DCST4\\Logs\n" +
             "  --patient-naming   RegistrySwedishName (default) or MarkedTestName, which gives DCST4^TEST^<number>.\n" +
+            "\n" +
+            "Options of run for the tests that store objects:\n" +
+            "  --seed <n>                       Fixes the generated data. The same seed repeats the same UIDs, which are duplicates on a real system\n" +
+            "  --matrix <file>                  A saved capability matrix to choose the transfer syntax from\n" +
+            "  --transfer-syntax <name or UID>  Send everything in this syntax where the object type allows it\n" +
+            "  --index-wait <seconds>           How long an object may take to appear in a query. Default 30\n" +
             "\n" +
             "Options of generate:\n" +
             "  --seed <n>  --uid-root <root>  --patients <n>  --studies <n>  --series <n>  --instances <n>\n" +
@@ -33,6 +39,10 @@ namespace DCST4.Cli
         public string OutputFolder { get; private set; }
         public string LogFolder { get; private set; }
         public TestPatientNaming PatientNaming { get; private set; } = TestPatientNaming.RegistrySwedishName;
+        public int? Seed { get; private set; }
+        public string MatrixPath { get; private set; }
+        public FellowOakDicom.DicomTransferSyntax TransferSyntax { get; private set; }
+        public int IndexWaitSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultIndexWaitSeconds;
 
         public static string PatientNamingError(string value) =>
             $"Unknown patient naming '{value}'. Use {nameof(TestPatientNaming.RegistrySwedishName)} or {nameof(TestPatientNaming.MarkedTestName)}.";
@@ -66,6 +76,32 @@ namespace DCST4.Cli
                             return null;
                         }
                         parsed.PatientNaming = naming;
+                        break;
+                    case "--seed":
+                        if (!int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var seed))
+                        {
+                            error = $"--seed must be a whole number, not '{value}'.";
+                            return null;
+                        }
+                        parsed.Seed = seed;
+                        break;
+                    case "--matrix": parsed.MatrixPath = value; break;
+                    case "--transfer-syntax":
+                        var syntax = DCST4.Core.Generation.Datasets.CompressionCatalog.Find(value);
+                        if (syntax == null)
+                        {
+                            error = $"Unknown transfer syntax '{value}'. Use explicit, implicit, a name from list-codecs, or a Transfer Syntax UID.";
+                            return null;
+                        }
+                        parsed.TransferSyntax = syntax.Syntax;
+                        break;
+                    case "--index-wait":
+                        if (!int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var wait))
+                        {
+                            error = $"--index-wait must be a number of seconds, not '{value}'.";
+                            return null;
+                        }
+                        parsed.IndexWaitSeconds = wait;
                         break;
                     default:
                         error = $"Unknown option {name}.";

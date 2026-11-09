@@ -400,6 +400,49 @@
                 </Section>
 
                 <!-- ===================================================================== -->
+                <Section Tag="Store, query and retrieve">
+                    <Paragraph Style="{StaticResource H1}">Store, query and retrieve</Paragraph>
+                    <Paragraph>
+                        These tests store small, marked test objects on the destination and check that it can find them,
+                        return them and return them unchanged. <Bold>Assume that a PACS cannot delete what it receives.</Bold>
+                        The tests are ticked by default, so make sure the destination under <Bold>Server</Bold> is the one you
+                        mean before you click <Bold>Run tests</Bold>. Untick the store tests to run only the others.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">The Chain tab</Paragraph>
+                    <Paragraph>
+                        One row per object type. Each step has its own result, and a step that did not run shows a dash:
+                        <Bold>Accepted</Bold> by C-STORE, <Bold>Indexed</Bold> so that C-FIND finds it, <Bold>Retrievable</Bold>
+                        by C-GET or C-MOVE, and <Bold>Intact</Bold> when compared with what was sent. Select a row for the
+                        explanations. <Bold>Committed</Bold> is for Storage Commitment, which is not there yet.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Before C-MOVE works</Paragraph>
+                    <Paragraph>
+                        C-MOVE makes the PACS connect back to this computer. On the <Bold>Tests</Bold> tab, <Bold>Local SCP AET</Bold>
+                        and <Bold>Port</Bold> say how. Add that AE title on the PACS with this computer's address and the port,
+                        and allow incoming TCP on the port. On Windows, Windows Defender Firewall is a common reason why
+                        nothing arrives, and the test <Bold>C-MOVE: can the system reach this computer?</Bold> says what it
+                        found. Such a problem gives INDETERMINATE on the C-MOVE test, since it says nothing about the PACS.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">What Intact means</Paragraph>
+                    <Paragraph>
+                        Each retrieved object is compared with the copy that was sent, level by level: <Bold>Transport</Bold>
+                        (everything came back), <Bold>Identity</Bold> (the UIDs are unchanged), <Bold>Attributes</Bold> (tag by
+                        tag), <Bold>Pixel</Bold> and <Bold>Transfer syntax</Bold>. A change that Original Attributes Sequence
+                        records is a documented coercion, and is not a failure. A change that nothing records is a silent
+                        modification. Private tags kept or dropped, character set changes and truncated values are reported
+                        separately. Pixels are byte-identical, lossless-equivalent (the same pixels in another syntax), lossy
+                        changed (with the largest and mean difference) or corrupt.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Duplicates and conflicts</Paragraph>
+                    <Paragraph>
+                        Three tests send the same SOP Instance UID again, with identical and with changed content, and
+                        one study with two different patients. A refusal is EXPECTED_FAILURE. For the changed content the
+                        result says which version was kept. Keeping two patients in one study without any change or warning
+                        is FAIL, as a finding to report. These tests leave those objects on the destination.
+                    </Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
                 <Section Tag="Command line and datasets">
                     <Paragraph Style="{StaticResource H1}">Command line and test datasets</Paragraph>
                     <Paragraph>DCST4.Cli.exe is in the program's folder.</Paragraph>

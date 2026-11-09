@@ -642,7 +642,7 @@ namespace DCST4.Tests
             help.UpdateLayout();
             try
             {
-                check("All the topics are listed", help.Topics.Count == 16, help.Topics.Count.ToString());
+                check("All the topics are listed", help.Topics.Count == 17, help.Topics.Count.ToString());
                 check("Topic titles are unique", help.Topics.Select(t => t.Title).Distinct().Count() == help.Topics.Count, null);
                 check("Estimated size is explained", new System.Windows.Documents.TextRange(help.Topics[2].Section.ContentStart, help.Topics[2].Section.ContentEnd).Text.Contains("Estimated size"), null);
 
@@ -727,6 +727,29 @@ namespace DCST4.Tests
             check("App and command line: same JSON apart from times", normalizedApp == normalizedCli, "\n  app: " + normalizedApp + "\n  cli: " + normalizedCli);
             check("App and command line: same CSV apart from times", TestSuiteTests.NormalizeCsv(appCsv) == TestSuiteTests.NormalizeCsv(cliCsv), "\n  app: " + appCsv + "\n  cli: " + cliCsv);
             check("App and command line: the comparison had content", normalizedApp.Contains("\"PASS\"") && normalizedApp.Contains("0x0000") && normalizedApp.Contains("A-RELEASE-RP") && normalizedApp.Contains("Comparison"), normalizedApp);
+
+            // ------------------------------------------------ the chain, in the view model
+            h.Messages.Clear();
+            Scp.Reset();
+            Scp.KeepStored = true;
+            Scp.MoveDestinations["DCST4"] = Tuple.Create("127.0.0.1", 41215);
+            vm.LocalScpPort = 41215;
+            foreach (var choice in suite.Choices) choice.IsSelected = new[] { "store-ct", "query-index", "retrieve-cget", "retrieve-cmove", "verify-integrity" }.Contains(choice.Test.Id);
+            await h.Execute(vm.RunTestsCommand);
+            check("Chain: one row per object type", suite.Chain.Rows.Count == 1 && suite.Chain.Rows[0].ObjectType.Length > 0, suite.Chain.Rows.Count.ToString());
+            var chainRow = suite.Chain.Rows.Single();
+            check("Chain: every step PASS, none invented", chainRow.Accepted == "PASS" && chainRow.Indexed == "PASS" && chainRow.Retrievable == "PASS" && chainRow.Intact == "PASS" && chainRow.Committed == "-", chainRow.Detail);
+            check("Chain: the detail explains it, level by level", chainRow.Detail.Contains("C-GET") && chainRow.Detail.Contains("C-MOVE") && chainRow.Detail.Contains("Attributes: PASS"), chainRow.Detail);
+            check("Chain: the JSON holds the same", File.ReadAllText(suite.LastResultFiles.Json, Encoding.UTF8).Contains("\"chain\""), null);
+            check("Chain: the CSV is written", suite.LastResultFiles.ChainCsv != null && File.Exists(suite.LastResultFiles.ChainCsv), null);
+
+            foreach (var choice in suite.Choices) choice.IsSelected = choice.Test.Id == "c-echo";
+            await h.Execute(vm.RunTestsCommand);
+            check("Chain: a run without store tests clears it", suite.Chain.Rows.Count == 0, suite.Chain.Rows.Count.ToString());
+
+            suite.SelectedStoreSyntax = suite.StoreSyntaxChoices[1];
+            check("Store syntax: the list starts with the matrix and has the choices", suite.StoreSyntaxChoices[0].Syntax == null && suite.StoreSyntaxChoices.Count > 2 && suite.SelectedStoreSyntax.Syntax != null, null);
+            suite.SelectedStoreSyntax = suite.StoreSyntaxChoices[0];
 
             // ------------------------------------------------ closed port, from the view model
             h.Messages.Clear();
