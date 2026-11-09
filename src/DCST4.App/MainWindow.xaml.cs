@@ -1,12 +1,14 @@
+using DCST4.Infrastructure;
 using DCST4.Properties;
 using DCST4.ViewModels;
+using Serilog;
 using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
+using System.Threading;
 using System.Windows;
 using System.Windows.Input;
 
@@ -17,6 +19,7 @@ namespace DCST4
         public static readonly RoutedUICommand HelpRoutedCommand = new RoutedUICommand("Help", "Help", typeof(MainWindow));
 
         private readonly MainViewModel _viewModel;
+        private readonly CancellationTokenSource _closing = new CancellationTokenSource();
 
         public MainWindow()
         {
@@ -27,8 +30,8 @@ namespace DCST4
             CommandBindings.Add(new CommandBinding(HelpRoutedCommand, (s, e) => ShowHelp()));
             InputBindings.Add(new KeyBinding(HelpRoutedCommand, Key.F1, ModifierKeys.None));
 
-            var version = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            Title = $"{AppInfo.DisplayName} v{version}";
+            Title = $"{AppInfo.DisplayName} v{AppInfo.CurrentVersion}";
+            ContentRendered += ShowUpdateWindowIfNewVersion;
 
             // Keep the newest row and log line in view while a run is going.
             ((INotifyCollectionChanged)_viewModel.Results).CollectionChanged += (s, e) =>
@@ -52,8 +55,26 @@ namespace DCST4
 
         protected override void OnClosed(EventArgs e)
         {
+            _closing.Cancel();
             Settings.Default.Save();
             base.OnClosed(e);
+        }
+
+        /// <summary>Only a new version is ever shown. Anything that goes wrong here stays in the log.</summary>
+        private async void ShowUpdateWindowIfNewVersion(object sender, EventArgs e)
+        {
+            try
+            {
+                var update = await StartupUpdateCheck.FindNewVersionAsync(
+                    Settings.Default.ShowUpdateWindowAtStartup, new UpdateChecker(AppInfo.CurrentVersion), _closing.Token);
+                if (update == null || _closing.IsCancellationRequested) return;
+
+                new UpdateAvailableWindow(update, AppInfo.CurrentVersion) { Owner = this }.Show();
+            }
+            catch (Exception ex)
+            {
+                Log.ForContext<MainWindow>().Warning(ex, "Could not show the new version window");
+            }
         }
 
         private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)

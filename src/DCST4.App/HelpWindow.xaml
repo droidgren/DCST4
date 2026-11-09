@@ -69,7 +69,8 @@
             <Paragraph>Each run gets a new EX folder and nothing is overwritten. Saving again to the same folder adds to the same DICOMDIR. Each file is saved before it is sent, so it exists even if sending fails, and the DICOMDIR is written when the run ends, also if it stopped early.</Paragraph>
 
             <Paragraph Style="{StaticResource H}">Version check</Paragraph>
-            <Paragraph>Opening Help &gt; About asks GitHub for the latest release and shows the result in the window, with a link if there is a new version. Nothing is downloaded or installed. If GitHub cannot be reached, for example on a closed network, the window says so and the program carries on.</Paragraph>
+            <Paragraph>When the program starts it asks GitHub for the latest release, and opens a window if there is a new version, with a link and the release notes. You only see this window when a new version was found: if GitHub cannot be reached, for example on a closed network, the program carries on and says nothing. To turn it off, untick the box on the Updates tab under File &gt; Settings, and nothing is sent at startup.</Paragraph>
+            <Paragraph>Opening Help &gt; About also asks GitHub and shows the result in the window, including if the check failed. Nothing is downloaded or installed.</Paragraph>
 
             <Paragraph Style="{StaticResource H}">Logs and settings</Paragraph>
             <Paragraph>The Log tab shows this program's messages, and the complete log is in File &gt; Open log directory (%LocalAppData%\DCST4\Logs). Settings are stored in %LocalAppData%\DCST4\user.config.</Paragraph>

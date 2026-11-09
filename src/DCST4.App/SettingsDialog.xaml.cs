@@ -48,6 +48,7 @@ namespace DCST4
             LogDataPDUs.IsChecked = s.Client_LogDataPDUs;
             NewValuesAfterRun.IsChecked = s.NewValuesAfterRun;
             BurnInText.IsChecked = s.BurnInText;
+            ShowUpdateWindowAtStartup.IsChecked = s.ShowUpdateWindowAtStartup;
 
             var burnedIn = BurnedInTagCatalog.Parse(s.BurnInTags);
             _burnInTags = BurnedInTagCatalog.All.Select(t => new BurnInTagChoice { Tag = t, IsChecked = burnedIn.Contains(t) }).ToList();
@@ -92,6 +93,7 @@ namespace DCST4
             s.Client_LogDataPDUs = LogDataPDUs.IsChecked == true;
             s.NewValuesAfterRun = NewValuesAfterRun.IsChecked == true;
             s.BurnInText = BurnInText.IsChecked == true;
+            s.ShowUpdateWindowAtStartup = ShowUpdateWindowAtStartup.IsChecked == true;
             s.BurnInTags = BurnedInTagCatalog.Format(_burnInTags.Where(c => c.IsChecked).Select(c => c.Tag));
             s.AdditionalTags = AdditionalTagSetting.Serialize(
                 _commonTags.Where(c => c.IsChecked).Select(c => c.Common.Tag).Concat(_customTags).Select(AdditionalTagSetting.From));

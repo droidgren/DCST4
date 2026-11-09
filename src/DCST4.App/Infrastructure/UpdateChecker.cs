@@ -28,6 +28,8 @@ namespace DCST4.Infrastructure
         /// <summary>The tag as published, without a leading v. Only set for a new version.</summary>
         public string LatestVersion { get; set; }
         public Uri ReleaseUri { get; set; }
+        /// <summary>The release's description as written on GitHub, in Markdown. Only set for a new version, and may be empty.</summary>
+        public string ReleaseNotes { get; set; }
     }
 
     /// <summary>Asks GitHub for the newest release and compares it with this version.</summary>
@@ -43,6 +45,9 @@ namespace DCST4.Infrastructure
 
             [DataMember(Name = "html_url")]
             public string HtmlUrl { get; set; }
+
+            [DataMember(Name = "body")]
+            public string Body { get; set; }
         }
 
         private readonly string _currentVersion;
@@ -133,6 +138,7 @@ namespace DCST4.Infrastructure
                 Outcome = UpdateCheckOutcome.NewVersion,
                 LatestVersion = release.TagName.Trim().TrimStart('v', 'V'),
                 ReleaseUri = SafeReleaseUri(release.HtmlUrl),
+                ReleaseNotes = release.Body,
             };
         }
 

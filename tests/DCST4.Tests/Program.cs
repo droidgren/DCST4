@@ -24,6 +24,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -348,7 +349,9 @@ namespace DCST4.Tests
             Check("ISO_IR 192 accepts the same name", errors(polish, 1, 1, DicomCharacterSets.Utf8).Count == 0);
             var swedish = new IdentityOverrides { PatientName = "Åström^Märta" };
             Check("Empty character set blocks a manual å and names the field", errors(swedish, 1, 1, DicomCharacterSets.Empty).Any(e => e.Contains("Patient Name") && e.Contains("Basic ASCII")));
-            Check("Empty character set accepts plain ASCII", errors(new IdentityOverrides { PatientName = "Astrom^Marta" }, 1, 1, DicomCharacterSets.Empty).Count == 0, string.Join("; ", errors(new IdentityOverrides { PatientName = "Astrom^Marta" }, 1, 1, DicomCharacterSets.Empty)));
+            // As the app does for this character set. Otherwise the random referring physician may have an å.
+            var plainAscii = new IdentityOverrides { PatientName = "Astrom^Marta", AutoValuesInBasicAscii = true };
+            Check("Empty character set accepts plain ASCII", errors(plainAscii, 1, 1, DicomCharacterSets.Empty).Count == 0, string.Join("; ", errors(plainAscii, 1, 1, DicomCharacterSets.Empty)));
             Check("Unknown character set is blocked", errors(null, 1, 1, "ISO_IR 6").Any(e => e.Contains("Unsupported")));
 
             Check("Invalid UID is blocked and named", errors(new IdentityOverrides { StudyInstanceUid = "1.2.abc" }, 1, 1, DicomCharacterSets.Latin1).Any(e => e.Contains("Study Instance UID")));
@@ -1544,8 +1547,9 @@ namespace DCST4.Tests
             }
         }
 
-        private static string ReleaseJson(string tag, string url = "https://github.com/droidgren/DCST4/releases/tag/x") =>
-            "{\"id\":1,\"tag_name\":\"" + tag + "\",\"html_url\":\"" + url + "\",\"draft\":false,\"assets\":[{\"name\":\"a\"}]}";
+        private static string ReleaseJson(string tag, string url = "https://github.com/droidgren/DCST4/releases/tag/x", string jsonBody = null) =>
+            "{\"id\":1,\"tag_name\":\"" + tag + "\",\"html_url\":\"" + url + "\",\"draft\":false,\"assets\":[{\"name\":\"a\"}]"
+            + (jsonBody == null ? string.Empty : ",\"body\":\"" + jsonBody + "\"") + "}";
 
         private static async Task TestUpdateChecker()
         {
@@ -1632,6 +1636,49 @@ namespace DCST4.Tests
                 await pending;
                 Check("About: closing the window ends the check quietly", closing.UpdateStatus.StartsWith("Checking"), closing.UpdateStatus);
             }
+
+            // ------------------------------------------------ The release notes
+            var withNotes = await Check110(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.2.0", jsonBody: "## New\\r\\n* First \\u00c5")));
+            Check("Notes come with a new version, line breaks included", withNotes.ReleaseNotes == "## New\r\n* First Å", withNotes.ReleaseNotes);
+            Check("No body: no notes", string.IsNullOrEmpty(found.ReleaseNotes), found.ReleaseNotes);
+            var sameWithNotes = await Check110(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.1.0", jsonBody: "text")));
+            Check("Up to date: no notes", sameWithNotes.ReleaseNotes == null, sameWithNotes.ReleaseNotes);
+
+            var markdown = "# Release Notes\r\n\r\n> **Test images only.**\r\n\r\n## New Features\n* **Bold** and `code`\n- Dash\n\n| A | B |\n| -- | :-: |\n| 1 | 2 |\n\n## Downloads\n* DCST4.msi\n\n**Full Changelog**: x";
+            var plain = ReleaseNotesText.ToPlainText(markdown).Replace("\r\n", "\n");
+            Check("Notes: Markdown becomes plain text", plain == "Release Notes\n\nTest images only.\n\nNew Features\n• Bold and code\n• Dash\n\n| A | B |\n| 1 | 2 |", plain);
+            Check("Notes: a line that only mentions Downloads is kept", ReleaseNotesText.ToPlainText("Downloads").Length > 0);
+            Check("Notes: nothing gives nothing", ReleaseNotesText.ToPlainText(null).Length == 0 && ReleaseNotesText.ToPlainText("  \n ").Length == 0);
+
+            // ------------------------------------------------ The check at startup
+            Task<UpdateCheckResult> AtStartup(HttpMessageHandler handler, bool enabled = true, TimeSpan? timeout = null, CancellationToken token = default(CancellationToken)) =>
+                StartupUpdateCheck.FindNewVersionAsync(enabled, new UpdateChecker("1.1.0", handler: handler, timeout: timeout), token);
+
+            var startupFound = await AtStartup(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.2.0", jsonBody: "notes")));
+            Check("Startup: a new version is reported, with notes", startupFound?.LatestVersion == "1.2.0" && startupFound.ReleaseNotes == "notes", startupFound?.LatestVersion);
+
+            Check("Startup: silent when up to date", await AtStartup(StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.1.0"))) == null);
+            Check("Startup: silent on 404", await AtStartup(StubHandler.Answering(HttpStatusCode.NotFound, "{}")) == null);
+            Check("Startup: silent on 500", await AtStartup(StubHandler.Answering(HttpStatusCode.InternalServerError, "oops")) == null);
+            Check("Startup: silent on malformed JSON", await AtStartup(StubHandler.Answering(HttpStatusCode.OK, "<html>proxy login</html>")) == null);
+            Check("Startup: silent with no network", await AtStartup(new StubHandler((r, t) => { throw new HttpRequestException("No route to host"); })) == null);
+            Check("Startup: silent on an unexpected exception", await AtStartup(new StubHandler((r, t) => { throw new NotSupportedException("Odd proxy"); })) == null);
+            Check("Startup: silent on timeout", await AtStartup(new StubHandler(async (r, t) => { await Task.Delay(Timeout.Infinite, t); return null; }), timeout: TimeSpan.FromMilliseconds(100)) == null);
+
+            using (var cts = new CancellationTokenSource())
+            {
+                var pending = AtStartup(new StubHandler(async (r, t) => { await Task.Delay(Timeout.Infinite, t); return null; }), timeout: TimeSpan.FromSeconds(30), token: cts.Token);
+                cts.Cancel();
+                Check("Startup: closing the program ends the check quietly", await pending == null);
+            }
+
+            var turnedOff = StubHandler.Answering(HttpStatusCode.OK, ReleaseJson("1.2.0"));
+            Check("Startup: turned off, no window", await AtStartup(turnedOff, enabled: false) == null);
+            Check("Startup: turned off, nothing is sent", turnedOff.LastRequest == null);
+
+            // Settings is internal to the app, and Settings.Default would read the real user.config.
+            var defaultValue = typeof(AboutViewModel).Assembly.GetType("DCST4.Properties.Settings").GetProperty("ShowUpdateWindowAtStartup").GetCustomAttribute<System.Configuration.DefaultSettingValueAttribute>()?.Value;
+            Check("Startup: the window is on by default", defaultValue == "True", defaultValue);
         }
 
         private static async Task TestTls()

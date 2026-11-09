@@ -15,7 +15,7 @@ namespace DCST4.ViewModels
         /// <param name="updateChecker">Replaces the real check in tests.</param>
         public AboutViewModel(UpdateChecker updateChecker = null)
         {
-            _updateChecker = updateChecker ?? new UpdateChecker(CurrentVersion);
+            _updateChecker = updateChecker ?? new UpdateChecker(AppInfo.CurrentVersion);
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -23,9 +23,7 @@ namespace DCST4.ViewModels
 
         private static Assembly Assembly => Assembly.GetExecutingAssembly();
 
-        private static string CurrentVersion => Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? Assembly.GetName().Version.ToString();
-
-        public string Version => "Version " + CurrentVersion;
+        public string Version => "Version " + AppInfo.CurrentVersion;
         public string Company => Assembly.GetCustomAttribute<AssemblyCompanyAttribute>()?.Company ?? string.Empty;
         public string Copyright => Assembly.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright ?? string.Empty;
 

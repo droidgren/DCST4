@@ -105,6 +105,10 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue(Core.Generation.BurnedInTagCatalog.DefaultKeywords)]
         public string BurnInTags { get => (string)this[nameof(BurnInTags)]; set => this[nameof(BurnInTags)] = value; }
 
+        /// <summary>Check GitHub at startup and open a window if there is a new version. Off: nothing is sent at startup.</summary>
+        [UserScopedSetting, DefaultSettingValue("True")]
+        public bool ShowUpdateWindowAtStartup { get => (bool)this[nameof(ShowUpdateWindowAtStartup)]; set => this[nameof(ShowUpdateWindowAtStartup)] = value; }
+
         // ------------------------------------------------------------ Output
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool SendImages { get => (bool)this[nameof(SendImages)]; set => this[nameof(SendImages)] = value; }
