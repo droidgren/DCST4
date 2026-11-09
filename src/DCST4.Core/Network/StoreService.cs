@@ -241,23 +241,7 @@ namespace DCST4.Core.Network
 
         private static void RecordNegotiation(DicomAssociation association, ConcurrentDictionary<string, DicomTransferSyntax[]> acceptedBySopClass)
         {
-            Logger.Information("Association accepted: {calling} -> {called}, max PDU {pdu}",
-                association.CallingAE, association.CalledAE, association.MaximumPDULength);
-
-            foreach (var context in association.PresentationContexts)
-            {
-                var proposed = string.Join(", ", context.GetTransferSyntaxes().Select(t => t.UID.Name));
-                if (context.Result == DicomPresentationContextResult.Accept)
-                {
-                    Logger.Information("Presentation context {id} {sopClass}: proposed [{proposed}], accepted {accepted}",
-                        context.ID, context.AbstractSyntax.Name, proposed, context.AcceptedTransferSyntax?.UID.Name);
-                }
-                else
-                {
-                    Logger.Warning("Presentation context {id} {sopClass}: proposed [{proposed}], NOT accepted: {result}",
-                        context.ID, context.AbstractSyntax.Name, proposed, context.Result);
-                }
-            }
+            AssociationNegotiation.Log(Logger, association);
 
             foreach (var group in association.PresentationContexts.GroupBy(c => c.AbstractSyntax.UID))
             {

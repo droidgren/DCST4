@@ -134,6 +134,47 @@ namespace DCST4
             }
         }
 
+        private void BrowseTestResultsFolderButton_Click(object sender, RoutedEventArgs e)
+        {
+            using (var dialog = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Select the folder for test results",
+                SelectedPath = _viewModel.TestSuite.ResultsFolder,
+            })
+            {
+                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    _viewModel.TestSuite.ResultsFolder = dialog.SelectedPath;
+                }
+            }
+        }
+
+        private void OpenTestResultsFolderButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var folder = _viewModel.TestSuite.ResultsFolder.Trim();
+                Directory.CreateDirectory(folder);
+                Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+            }
+            catch (Exception ex) when (!(ex is OutOfMemoryException))
+            {
+                MessageBox.Show(this, "Failed to open the results folder:\n" + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void SaveTargetProfileButton_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "Save the destination as a target profile",
+                Filter = "Target profile (*.json)|*.json",
+                DefaultExt = ".json",
+                FileName = "target-profile.json",
+            };
+            if (dialog.ShowDialog(this) == true) _viewModel.SaveTargetProfile(dialog.FileName);
+        }
+
         private void CopyLogButton_Click(object sender, RoutedEventArgs e)
         {
             var lines = LogList.SelectedItems.Count > 0

@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.2.2-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.3.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -23,6 +23,8 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Full response logging:** status code, state, description, Error Comment, Offending Element and time for every image, including warnings and vendor-specific codes.
 - **Save to disk:** instead of, or in addition to, sending, as a DICOM File-set with a DICOMDIR that viewers can open.
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
+- **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). The first test is C-ECHO, and each run is saved as JSON and CSV for comparison over time. See [Testing a PACS](#testing-a-pacs).
+- **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
 
 
 ## Install
@@ -41,7 +43,7 @@ The installer installs for the current user only, by default to `%LOCALAPPDATA%\
 
 1. Download the ZIP file from the [latest release](../../releases/latest).
 2. Extract the files to a folder of your choice.
-3. Run `DCST4.exe`.
+3. Run `DCST4.exe`. The command line version `DCST4.Cli.exe` is in the same folder. Keep both next to the `libs` folder.
 
 ### Microsoft SmartScreen warning
 
@@ -127,6 +129,60 @@ DICOM limits each part of a file name to 8 upper-case characters with no extensi
 
 Each run gets a new `EX` folder, so nothing is overwritten. Saving again to the same folder adds to the same DICOMDIR, which is rebuilt from all files in the File-set when each run ends, also if the run was cancelled or sending failed. Each record states its own Specific Character Set, so exams in ISO_IR 100 and ISO_IR 192 can share a DICOMDIR. A record for an exam with an empty Specific Character Set leaves the tag out.
 
+## Testing a PACS
+
+A test run is a set of tests against one destination. The result of each test is one of these, never just pass or fail:
+
+| Result             | Meaning                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| `PASS`             | The system did what the test expects.                                                 |
+| `FAIL`             | It answered, refused or broke off in a way the test does not accept.                  |
+| `NOT_SUPPORTED`    | It said it does not support this, for example by not accepting the SOP class.         |
+| `EXPECTED_FAILURE` | It refused something it is supposed to refuse.                                        |
+| `TIMEOUT`          | No connection, association or response within the timeout.                            |
+| `INDETERMINATE`    | The test could not reach a verdict, for example because the run was cancelled.        |
+| `TOOL_ERROR`       | A bug or local problem in DCST4, such as a missing client certificate. Not the PACS's fault. |
+
+### In the program
+
+Open the **Tests** tab below the exam settings, tick the tests and click **Run tests**. They run against the destination entered under Server. Select a row to see its explanation and protocol timeline. **Cancel** stops the run, and what was finished is still saved.
+
+### On the command line
+
+**Save profile as JSON...** on the Tests tab writes the destination to a file, or you can write one yourself. Only `endpoint` is required:
+
+```json
+{
+  "name": "Test PACS",
+  "endpoint": { "host": "pacs.example.org", "port": 104, "callingAe": "DCST4", "calledAe": "PACS" },
+  "network": { "connectionTimeoutSeconds": 10, "associationTimeoutSeconds": 10, "responseTimeoutSeconds": 60 },
+  "localScpAe": "DCST4",
+  "localScpPort": 11113,
+  "uidRoot": "2.25"
+}
+```
+
+For TLS, add `"useTls": true` to `endpoint`, and optionally `"tlsIgnoreCertErrors": true` and `"tlsClientCertThumbprint"`.
+
+```powershell
+DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results
+```
+
+`--tests` takes test ids, categories (`Capability`, `Integrity`, `Limits`, `Performance`) or `all`, separated by commas. `--log-dir` chooses another folder for the log. Ctrl+C cancels the run and saves what was finished. A second Ctrl+C ends the program at once. Cancelling while a connection is being opened can take as long as the connection timeout.
+
+| Exit code | Meaning                                                    |
+| --------- | ---------------------------------------------------------- |
+| 0         | No `FAIL` or `TOOL_ERROR`                                  |
+| 1         | At least one `FAIL` or `TOOL_ERROR`                        |
+| 2         | Bad arguments, an unusable profile or results that could not be saved |
+| 130       | Cancelled                                                  |
+
+### Result files
+
+Each run writes `DCST4-run-<UTC time>.json` with full detail and a `.csv` with one row per result. Both are UTF-8 and independent of the computer's language settings, and they hold a schema version, the tool version, the destination and the start and end time. The client certificate thumbprint is never written to them.
+
+Two identical runs differ only in the times and durations, from the program or the command line alike.
+
 ## Generated tags
 
 | Group      | Values                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -166,12 +222,19 @@ src\DCST4.Core\     No WPF reference
   Generation\       Exam request, identity, modality profiles, pixel renderer, image builder
   TestData\         Test personnummer, names, identifiers
   Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary
-  Network\          Ping, C-ECHO, C-STORE
+  Network\          Ping, C-ECHO, C-STORE, AssociationTimeline, AssociationNegotiation
   Output\           DICOM File-set and DICOMDIR
-src\DCST4.App\      WPF app
+  Testing\          TargetProfile, ITestCase, TestRunner, TestCatalog, TestResult, ResultFileWriter
+    Cases\          The test cases
+src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs
+src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
 tools\              List refresh script
 ```
+
+The app and the command line are front-ends on the same engine in `Testing\`. To add a test, implement `ITestCase` in `Testing\Cases\` and add it to `TestCatalog.All`, and it appears in both. Its `Id` must stay the same across versions, because result files are compared by it. Change `TestRunReport.CurrentSchemaVersion` when the result files change.
+
+`AssociationTimeline` is built on `IDicomClient`, because fo-dicom's own event collector is internal. It settles how an association ended only after `SendAsync` is over, since `AssociationReleased` is also raised after an abort. C-ECHO is wired to it so far.
 
 Generation knows nothing about sending. The two meet at `IImageSource`, which supplies images lazily so that a long stack does not sit in memory. That leaves room for:
 
@@ -199,7 +262,7 @@ If you encounter any bugs or have an idea for a new feature, please open an issu
 .\tests\run-tests.ps1
 ```
 
-A console harness in the same style as DMWLT4's, running the real code against a mock Storage SCP. Exit code 0 means all checks passed.
+A console harness in the same style as DMWLT4's, running the real code against a mock Storage SCP. Exit code 0 means all checks passed. The run fails if it changes `%LocalAppData%\DCST4\user.config`.
 
 Other ways to use it:
 
@@ -245,15 +308,32 @@ DCMTK has no IOD validator, so this does not prove that every attribute an IOD r
 | fo-dicom 5.2.6           | DICOM                                                        | MS-PL      |
 | FoDicom.PureCodecs 0.5.1 | JPEG Lossless encoder. Managed code, no native DLL. Pre-1.0. | MS-PL      |
 | Serilog                  | Logging                                                      | Apache-2.0 |
+| System.Text.Json         | Target profiles and result files. Comes with fo-dicom.       | MIT        |
 
 ## Files
 
-| What                 | Where                              |
-| -------------------- | ---------------------------------- |
-| Settings             | `%LocalAppData%\DCST4\user.config` |
-| Log, kept for 7 days | `%LocalAppData%\DCST4\Logs\`       |
+| What                               | Where                                                          |
+| ---------------------------------- | -------------------------------------------------------------- |
+| Settings                           | `%LocalAppData%\DCST4\user.config`                             |
+| Log, kept for 7 days               | `%LocalAppData%\DCST4\Logs\`, `Cli-*.log` for the command line |
+| Test results from the program      | `%LocalAppData%\DCST4\TestRuns\`, or the folder on the Tests tab |
+| Test results from the command line | The folder given with `--out`                                  |
 
 ## Changelog
+
+### 1.3.0
+
+New:
+
+- Command line program `DCST4.Cli.exe`, which runs tests from a JSON target profile and returns an exit code that scripts can use
+- Tests tab, for selecting and running tests and seeing each result with its protocol timeline
+- First test: C-ECHO, with the results `PASS`, `FAIL`, `NOT_SUPPORTED`, `TIMEOUT`, `INDETERMINATE` and `TOOL_ERROR`
+- Each test run is saved as JSON and CSV, with a schema version so that later versions can compare them
+- Save the destination as a JSON target profile. Saved destination profiles work as before
+
+Changed:
+
+- `tests\run-tests.ps1` now fails, rather than warns, if the run changes `user.config`
 
 ### 1.2.2
 

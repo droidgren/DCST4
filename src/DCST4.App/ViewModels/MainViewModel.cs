@@ -2,6 +2,7 @@ using DCST4.Core.Generation;
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Network;
 using DCST4.Core.Pipeline;
+using DCST4.Core.Testing;
 using DCST4.Infrastructure;
 using DCST4.Models;
 using DCST4.Properties;
@@ -11,6 +12,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -189,6 +191,8 @@ namespace DCST4.ViewModels
         #region Properties - Identifiers
         public ObservableCollection<IdentityFieldViewModel> IdentityFields { get; } = new ObservableCollection<IdentityFieldViewModel>();
 
+        public TestSuiteViewModel TestSuite { get; } = new TestSuiteViewModel();
+
         public IdentityFieldViewModel PatientNameField { get; }
         public IdentityFieldViewModel PatientIdField { get; }
         public IdentityFieldViewModel BirthDateField { get; }
@@ -307,6 +311,7 @@ namespace DCST4.ViewModels
         public ICommand PingCommand { get; }
         public ICommand DicomEchoCommand { get; }
         public ICommand RunCommand { get; }
+        public ICommand RunTestsCommand { get; }
         public ICommand CancelCommand { get; }
         public ICommand NewValuesCommand { get; }
         public ICommand SaveProfileCommand { get; }
@@ -343,6 +348,7 @@ namespace DCST4.ViewModels
             DicomEchoCommand = new RelayCommand(async _ => await RunBusyAsync(DoEchoAsync), _ => !IsBusy);
             PingCommand = new RelayCommand(async _ => await RunBusyAsync(ct => DoPingAsync(), cancellable: false), _ => !IsBusy);
             RunCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunAsync), _ => !IsBusy);
+            RunTestsCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunTestsAsync), _ => !IsBusy);
             CancelCommand = new RelayCommand(_ => CancelOperation(), _ => _cts != null && !_cts.IsCancellationRequested);
             NewValuesCommand = new RelayCommand(_ => GenerateNewValues(), _ => !IsBusy);
             SaveProfileCommand = new RelayCommand(_ => SaveProfile(), _ => !IsBusy);
@@ -752,6 +758,96 @@ namespace DCST4.ViewModels
             Endpoint = BuildEndpoint(),
             Network = BuildNetworkOptions(),
         };
+        #endregion
+
+        #region Tests
+        /// <summary>The current destination fields as a profile. Local SCP and UID root have no fields yet and keep their defaults.</summary>
+        public TargetProfile BuildTargetProfile() => new TargetProfile
+        {
+            Name = ProfileName?.Trim(),
+            Endpoint = BuildEndpoint(),
+            Network = BuildNetworkOptions(),
+        };
+
+        /// <summary>Saves the current destination fields for use with DCST4.Cli.exe.</summary>
+        public void SaveTargetProfile(string path)
+        {
+            var profile = BuildTargetProfile();
+            var problem = profile.Validate();
+            if (problem != null)
+            {
+                ShowMessage(problem, MessageBoxImage.Warning, null);
+                return;
+            }
+
+            try
+            {
+                profile.Save(path);
+                _logger.Information("Saved target profile to {path}", path);
+                StatusText = "Profile saved to " + path;
+            }
+            catch (TargetProfileException ex)
+            {
+                _logger.Warning(ex, "Could not save the target profile");
+                ShowMessage(ex.Message, MessageBoxImage.Warning, null);
+            }
+        }
+
+        private async Task DoRunTestsAsync(CancellationToken token)
+        {
+            var profile = BuildTargetProfile();
+            var problem = profile.Validate();
+            if (problem == null && TestSuite.SelectedTests.Count == 0) problem = "Select at least one test.";
+            if (problem == null && string.IsNullOrWhiteSpace(TestSuite.ResultsFolder)) problem = "Enter a folder for the results.";
+            if (problem != null)
+            {
+                ShowMessage(problem, MessageBoxImage.Warning, null);
+                return;
+            }
+
+            var tests = TestSuite.SelectedTests;
+            var folder = TestSuite.ResultsFolder.Trim();
+
+            TestSuite.Rows.Clear();
+            TestSuite.SelectedRow = null;
+            TestSuite.LastResultFiles = null;
+            ProgressValue = 0;
+            ProgressMaximum = Math.Max(1, tests.Count);
+            LastRunText = string.Empty;
+            StatusText = $"Running {tests.Count} test(s) against {profile.Endpoint.CalledAe}...";
+
+            var runner = new TestRunner();
+            runner.Progress += progress => _dispatcher.BeginInvoke(new Action(() => ShowTestProgress(progress)), DispatcherPriority.Background);
+            var report = await runner.RunAsync(profile, tests, token);
+
+            // Let the rows queued by the background thread land before the summary replaces the status.
+            await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+
+            LastRunText = string.Join(", ", report.Summary.Where(p => p.Value > 0).Select(p => $"{p.Key} {p.Value}"));
+            var ending = report.Cancelled ? "Tests cancelled." : "Tests finished.";
+            try
+            {
+                TestSuite.LastResultFiles = await Task.Run(() => ResultFileWriter.Write(report, folder));
+                StatusText = $"{ending} Results saved in {folder}";
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException)
+            {
+                _logger.Error(ex, "Could not write the test results to {folder}", folder);
+                StatusText = $"{ending} The results could not be saved: {ex.Message}";
+            }
+        }
+
+        private void ShowTestProgress(TestProgress progress)
+        {
+            if (progress.Stage == TestProgressStage.Started)
+            {
+                StatusText = $"Test {progress.Index + 1} of {progress.Total}: {progress.Test.Name}";
+                return;
+            }
+
+            TestSuite.Rows.Add(new TestResultRow(progress.Result));
+            ProgressValue = progress.Index + 1;
+        }
         #endregion
 
         #region Log

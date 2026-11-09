@@ -17,6 +17,13 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DCST4.Core\DCST4.Core.csproj" />
     <ProjectReference Include="..\..\src\DCST4.App\DCST4.App.csproj" />
+    <!-- Only so that it gets built. The tests start it from its own output folder, where its DLLs are in libs\. -->
+    <ProjectReference Include="..\..\src\DCST4.Cli\DCST4.Cli.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WPF looks for the main window's icon in the running exe, which here is the harness. -->
+    <Resource Include="..\..\src\DCST4.App\DCST4.ico" Link="DCST4.ico" />
   </ItemGroup>
 
   <ItemGroup>

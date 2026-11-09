@@ -2,6 +2,7 @@ using DCST4.Core.Generation;
 using DCST4.Core.Network;
 using DCST4.Core.Pipeline;
 using DCST4.Core.TestData;
+using DCST4.Core.Testing;
 using DCST4.Models;
 using DCST4.ViewModels;
 using FellowOakDicom;
@@ -11,9 +12,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace DCST4.Tests
@@ -73,7 +78,7 @@ namespace DCST4.Tests
             }
         }
 
-        public static void Run(int port, Action<string, bool, string> check)
+        public static void Run(int port, int closedPort, string temp, Action<string, bool, string> check)
         {
             Exception failure = null;
             var thread = new Thread(() =>
@@ -82,7 +87,11 @@ namespace DCST4.Tests
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
                 dispatcher.InvokeAsync(async () =>
                 {
-                    try { await RunAll(port, check); }
+                    try
+                    {
+                        await RunAll(port, check);
+                        await RunTestSuite(port, closedPort, temp, check);
+                    }
                     catch (Exception ex) { failure = ex; }
                     finally { dispatcher.InvokeShutdown(); }
                 });
@@ -548,6 +557,213 @@ namespace DCST4.Tests
             vm.DeleteProfileCommand.Execute(null);
             check("Confirmed delete removes it", vm.Profiles.Count == 1 && vm.Profiles[0].Name == "Another", vm.Profiles.Count.ToString());
             check("Delete saved to disk at once", h.Saves == 3, h.Saves.ToString());
+        }
+
+        /// <summary>The Tests tab, and that it gives the same result files as the command line.</summary>
+        private static async Task RunTestSuite(int port, int closedPort, string temp, Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nTests tab");
+            var h = new Harness(port);
+            var vm = h.Vm;
+            var suite = vm.TestSuite;
+            var folder = Path.Combine(temp, "tab");
+            suite.ResultsFolder = Path.Combine(folder, "app");
+            vm.ProfileName = "Comparison";
+
+            check("The list holds the catalog, ticked", suite.Choices.Count == TestCatalog.All.Count && suite.Choices.All(c => c.IsSelected), suite.Choices.Count.ToString());
+
+            // ------------------------------------------------ the same content as the command line
+            Scp.Reset();
+            await h.Execute(vm.RunTestsCommand);
+            check("Run: no dialog", h.Messages.Count == 0, string.Join("; ", h.Messages));
+            check("Run: one row with the result", suite.Rows.Count == 1 && suite.Rows[0].Result == TestResultClass.PASS && suite.Rows[0].Status == "0x0000", suite.Rows.Count.ToString());
+            check("Run: the row holds the timeline", suite.Rows[0].Timeline.Count == 6, null);
+            check("Run: went through the busy state and is idle again", !vm.IsBusy && vm.RunTestsCommand.CanExecute(null), null);
+            check("Run: progress reached the end", vm.ProgressValue == 1 && vm.ProgressMaximum == 1, vm.ProgressValue.ToString());
+            check("Run: files written", suite.LastResultFiles != null && File.Exists(suite.LastResultFiles.Json) && File.Exists(suite.LastResultFiles.Csv), vm.StatusText);
+            check("Run: status names the folder", vm.StatusText.Contains(suite.ResultsFolder), vm.StatusText);
+
+            var appJson = File.ReadAllText(suite.LastResultFiles.Json, Encoding.UTF8);
+            var appCsv = File.ReadAllText(suite.LastResultFiles.Csv, Encoding.UTF8);
+
+            var profilePath = Path.Combine(folder, "from-the-app.json");
+            vm.SaveTargetProfile(profilePath);
+            check("Save as JSON: the file is there", File.Exists(profilePath) && h.Messages.Count == 0, string.Join("; ", h.Messages));
+            var saved = TargetProfile.Load(profilePath);
+            check("Save as JSON: the destination fields", saved.Endpoint.Host == "127.0.0.1" && saved.Endpoint.Port == port && saved.Endpoint.CalledAe == "MOCKSCP" && saved.Name == "Comparison", saved.Endpoint.Host);
+
+            var cliFolder = Path.Combine(folder, "cli");
+            Scp.Reset();
+            var cli = await TestSuiteTests.RunCli("run", "--profile", profilePath, "--tests", "c-echo", "--out", cliFolder, "--log-dir", Path.Combine(folder, "logs"));
+            check("Command line: exit code 0", cli.ExitCode == 0, cli.Output);
+            var cliJson = File.ReadAllText(Directory.GetFiles(cliFolder, "*.json").Single(), Encoding.UTF8);
+            var cliCsv = File.ReadAllText(Directory.GetFiles(cliFolder, "*.csv").Single(), Encoding.UTF8);
+
+            var normalizedApp = TestSuiteTests.NormalizeJson(appJson);
+            var normalizedCli = TestSuiteTests.NormalizeJson(cliJson);
+            check("App and command line: same JSON apart from times", normalizedApp == normalizedCli, "\n  app: " + normalizedApp + "\n  cli: " + normalizedCli);
+            check("App and command line: same CSV apart from times", TestSuiteTests.NormalizeCsv(appCsv) == TestSuiteTests.NormalizeCsv(cliCsv), "\n  app: " + appCsv + "\n  cli: " + cliCsv);
+            check("App and command line: the comparison had content", normalizedApp.Contains("\"PASS\"") && normalizedApp.Contains("0x0000") && normalizedApp.Contains("A-RELEASE-RP") && normalizedApp.Contains("Comparison"), normalizedApp);
+
+            // ------------------------------------------------ closed port, from the view model
+            h.Messages.Clear();
+            vm.ServerPort = closedPort;
+            await h.Execute(vm.RunTestsCommand);
+            check("Closed port: TIMEOUT or FAIL", suite.Rows.Count == 1 && (suite.Rows[0].Result == TestResultClass.FAIL || suite.Rows[0].Result == TestResultClass.TIMEOUT), suite.Rows.Count.ToString());
+            check("Closed port: clear message", suite.Rows[0].Explanation.Contains("127.0.0.1:" + closedPort) && !suite.Rows[0].Explanation.Contains("One or more errors") && !suite.Rows[0].Explanation.Contains("Ett eller flera fel"), suite.Rows[0].Explanation);
+            check("Closed port: no dialog during a run", h.Messages.Count == 0, string.Join("; ", h.Messages));
+            vm.ServerPort = port;
+
+            // ------------------------------------------------ what the Echo button shows
+            h.Messages.Clear();
+            vm.ServerPort = closedPort;
+            await h.Execute(vm.DicomEchoCommand);
+            check("Echo button: a failure still opens a dialog", h.Messages.Count == 1 && h.Messages[0].StartsWith("C-ECHO to 127.0.0.1:"), string.Join("; ", h.Messages));
+            vm.ServerPort = port;
+
+            // ------------------------------------------------ refused before running
+            h.Messages.Clear();
+            Scp.Reset();
+            vm.ServerAET = new string('A', 17);
+            await h.Execute(vm.RunTestsCommand);
+            check("Invalid destination: blocked with a message", h.Messages.Count == 1 && h.Messages[0].Contains("Called AET") && Scp.AssociationCount == 0, string.Join("; ", h.Messages));
+            vm.ServerAET = "MOCKSCP";
+
+            h.Messages.Clear();
+            suite.Choices[0].IsSelected = false;
+            await h.Execute(vm.RunTestsCommand);
+            check("Nothing ticked: blocked with a message", h.Messages.Count == 1 && h.Messages[0].Contains("Select") && Scp.AssociationCount == 0, string.Join("; ", h.Messages));
+            suite.Choices[0].IsSelected = true;
+
+            // ------------------------------------------------ cancel
+            h.Messages.Clear();
+            Scp.Reset();
+            Scp.EchoDelayMs = 5000;
+            var cancelled = false;
+            await h.Execute(vm.RunTestsCommand, () =>
+            {
+                if (!cancelled && Scp.EchoCount == 1 && vm.CancelCommand.CanExecute(null))
+                {
+                    cancelled = true;
+                    vm.CancelCommand.Execute(null);
+                }
+            });
+            check("Cancel: uses the existing command", cancelled, null);
+            check("Cancel: the result is INDETERMINATE", suite.Rows.Count == 1 && suite.Rows[0].Result == TestResultClass.INDETERMINATE, suite.Rows.Count.ToString());
+            check("Cancel: status says so and files are written", vm.StatusText.StartsWith("Tests cancelled") && suite.LastResultFiles != null, vm.StatusText);
+            check("Cancel: no dialog", h.Messages.Count == 0, string.Join("; ", h.Messages));
+            Scp.Reset();
+
+            // ------------------------------------------------ a folder that cannot be used
+            var notAFolder = Path.Combine(folder, "a-file");
+            File.WriteAllText(notAFolder, "not a folder");
+            suite.ResultsFolder = notAFolder;
+            h.Messages.Clear();
+            await h.Execute(vm.RunTestsCommand);
+            check("Unusable folder: the status says so, not a crash", vm.StatusText.Contains("could not be saved") && suite.LastResultFiles == null && !vm.IsBusy, vm.StatusText);
+            suite.ResultsFolder = Path.Combine(folder, "app");
+
+            // ------------------------------------------------ profiles saved by earlier versions
+            const string oldXml = "<?xml version=\"1.0\" encoding=\"utf-16\"?><ArrayOfConnectionProfile xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">"
+                + "<ConnectionProfile><Name>From 1.2</Name><CallingAET>OLDCALL</CallingAET><ServerAET>OLDPACS</ServerAET><ServerHost>old-host</ServerHost><ServerPort>4242</ServerPort><UseTLS>true</UseTLS><TlsIgnoreCertErrors>false</TlsIgnoreCertErrors><TlsClientCertThumbprint>AA11</TlsClientCertThumbprint></ConnectionProfile></ArrayOfConnectionProfile>";
+            var old = ConnectionProfile.Deserialize(oldXml).Single();
+            check("Old profile: still reads", old.Name == "From 1.2" && old.ServerPort == 4242, old.Name);
+            var roundTripped = ConnectionProfile.Deserialize(ConnectionProfile.Serialize(new[] { old })).Single();
+            check("Old profile: format has no new fields", typeof(ConnectionProfile).GetProperties().Length == 8 && roundTripped.TlsClientCertThumbprint == "AA11", typeof(ConnectionProfile).GetProperties().Length.ToString());
+
+            vm.Profiles.Add(old);
+            vm.SelectedProfile = old;
+            var fromOld = vm.BuildTargetProfile();
+            check("Old profile: becomes a target profile", fromOld.Endpoint.Host == "old-host" && fromOld.Endpoint.Port == 4242 && fromOld.Endpoint.CallingAe == "OLDCALL" && fromOld.Endpoint.CalledAe == "OLDPACS" && fromOld.Endpoint.UseTls && fromOld.Endpoint.TlsClientCertThumbprint == "AA11", fromOld.Endpoint.Host);
+            check("Old profile: defaults fill the rest, and it is valid", fromOld.LocalScpAe == TargetProfile.DefaultLocalScpAe && fromOld.UidRoot == TargetProfile.DefaultUidRoot && fromOld.Validate() == null, fromOld.Validate());
+
+            await CheckTestsTabLayout(port, check);
+        }
+
+        private sealed class BindingErrorListener : TraceListener
+        {
+            public readonly List<string> Errors = new List<string>();
+            public override void Write(string message) { }
+            public override void WriteLine(string message) => Errors.Add(message);
+        }
+
+        /// <summary>
+        /// Lays out the real main window content with the Tests tab open, without showing the window: closing it would save the
+        /// settings, and showing it would start the update check. If DCST4_TESTS_TAB_PNG is set, the result is written there as a picture.
+        /// </summary>
+        private static async Task CheckTestsTabLayout(int port, Action<string, bool, string> check)
+        {
+            var listener = new BindingErrorListener();
+            PresentationTraceSources.Refresh();
+            PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
+            PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
+
+            try
+            {
+                var window = new MainWindow();
+                var vm = (MainViewModel)window.DataContext;
+                vm.ShowMessage = (message, icon, title) => { };
+                vm.SaveSettings = () => { };
+                vm.ServerHost = "127.0.0.1";
+                vm.ServerPort = port;
+                vm.ServerAET = "MOCKSCP";
+                vm.CallingAET = "DCST4";
+                vm.ProfileName = string.Empty;
+                vm.TestSuite.ResultsFolder = @"C:\Temp\DCST4 results";
+
+                var content = (FrameworkElement)window.Content;
+                window.Content = null;
+                content.DataContext = vm;
+
+                var tabs = LogicalTreeHelper.GetChildren(content).OfType<Grid>().SelectMany(g => g.Children.OfType<TabControl>()).Single(t => t.Items.OfType<TabItem>().Any(i => (string)i.Header == "Log"));
+                var testsTab = tabs.Items.OfType<TabItem>().Single(i => (string)i.Header == "Tests");
+                tabs.SelectedItem = testsTab;
+
+                Scp.Reset();
+                vm.TestSuite.Rows.Clear();
+                vm.TestSuite.Rows.Add(new TestResultRow(new TestResult
+                {
+                    TestId = "c-echo",
+                    Name = "C-ECHO (Verification)",
+                    Category = TestCategory.Capability,
+                    Result = TestResultClass.PASS,
+                    DurationMs = 12,
+                    Explanation = "127.0.0.1:" + port + " answered C-ECHO with status 0x0000 (Success).",
+                    StatusCodes = { new DimseStatusRecord { Operation = "C-ECHO", Code = "0x0000" } },
+                    Timeline =
+                    {
+                        new ProtocolEvent { OffsetMs = 0, Direction = ProtocolEvent.Sent, Type = "A-ASSOCIATE-RQ", Detail = "Calling AE DCST4, called AE MOCKSCP" },
+                        new ProtocolEvent { OffsetMs = 8, Direction = ProtocolEvent.Received, Type = "A-ASSOCIATE-AC", Detail = "Max PDU 262144" },
+                        new ProtocolEvent { OffsetMs = 9, Direction = ProtocolEvent.Sent, Type = "C-ECHO-RQ", Detail = "Verification SOP Class" },
+                        new ProtocolEvent { OffsetMs = 11, Direction = ProtocolEvent.Received, Type = "C-ECHO-RSP", Status = "0x0000", Detail = "Success" },
+                    },
+                }));
+                vm.TestSuite.SelectedRow = vm.TestSuite.Rows[0];
+
+                const int width = 1150, height = 820;
+                content.Measure(new Size(width, height));
+                content.Arrange(new Rect(0, 0, width, height));
+                content.UpdateLayout();
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+
+                check("Tests tab: is laid out", testsTab.IsSelected && content.ActualWidth > 0, null);
+                var problems = listener.Errors.Where(e => e.Contains("TestSuite") || e.Contains("Timeline") || e.Contains("Explanation") || e.Contains("Choices")).ToList();
+                check("Tests tab: every binding resolves", problems.Count == 0, string.Join("\n", problems));
+
+                var picture = Environment.GetEnvironmentVariable("DCST4_TESTS_TAB_PNG");
+                if (!string.IsNullOrEmpty(picture))
+                {
+                    var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                    bitmap.Render(content);
+                    var encoder = new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                    using (var stream = File.Create(picture)) encoder.Save(stream);
+                }
+            }
+            finally
+            {
+                PresentationTraceSources.DataBindingSource.Listeners.Remove(listener);
+            }
         }
     }
 }
