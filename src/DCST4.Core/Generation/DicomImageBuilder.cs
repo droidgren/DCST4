@@ -20,6 +20,9 @@ namespace DCST4.Core.Generation
 
         /// <summary>A pixel at or above this level is set in a binary mask. Low enough for the watermark to show in the mask.</summary>
         private const int BinaryMaskThreshold = 60;
+        /// <summary>The gray levels of the disc that PixelRenderer draws for the slice marker.</summary>
+        private const int BinaryMaskDiscMin = 110;
+        private const int BinaryMaskDiscMax = 130;
         private const int BitsPerByte = 8;
 
         private static readonly string SoftwareVersion = typeof(DicomImageBuilder).GetTypeInfo().Assembly.GetName().Version.ToString(3);
@@ -246,7 +249,7 @@ namespace DCST4.Core.Generation
                 var rendered = frame == 0 ? first : RenderFrame(request, imageIndex, frame, lines);
                 for (var pixel = 0; pixel < pixelsPerFrame; pixel++)
                 {
-                    if (rendered.Data[pixel] < BinaryMaskThreshold) continue;
+                    if (!IsInBinaryMask(rendered.Data[pixel])) continue;
                     var bit = frame * pixelsPerFrame + pixel;
                     packed[bit / BitsPerByte] |= (byte)(1 << (bit % BitsPerByte));
                 }
@@ -263,6 +266,10 @@ namespace DCST4.Core.Generation
             dataset.AddOrUpdate(DicomTag.NumberOfFrames, frames);
             dataset.AddOrUpdate(new DicomOtherByte(DicomTag.PixelData, new MemoryByteBuffer(packed)));
         }
+
+        /// <summary>The disc is left out, or the part of the watermark that crosses it would disappear into a solid area.</summary>
+        private static bool IsInBinaryMask(byte level) =>
+            level >= BinaryMaskThreshold && (level < BinaryMaskDiscMin || level > BinaryMaskDiscMax);
 
         /// <summary>Patient's Age (AS) at the study date, or null if the birth date is unknown or later than the study.</summary>
         public static string PatientAge(string birthDate, DateTime studyDate)

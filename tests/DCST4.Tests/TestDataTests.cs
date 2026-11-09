@@ -484,7 +484,9 @@ namespace DCST4.Tests
                 var depth1 = dataset.GetSequence(DicomTag.RequestAttributesSequence).Items[0];
                 var depth2 = depth1.GetSequence(DicomTag.ScheduledProtocolCodeSequence).Items[0];
                 var depth3 = depth2.GetSequence(DicomTag.ProtocolContextSequence).Items[0];
-                check($"{label}: standard sequences nested three levels", Text(depth3, DicomTag.CodeValue) == "DCST4-3", Text(depth3, DicomTag.CodeValue));
+                check($"{label}: standard sequences nested three levels", Text(depth3, DicomTag.TextValue) == "DCST4-3", Text(depth3, DicomTag.TextValue));
+                // Found by DCMTK's drtdump: items of Protocol Context Sequence are content items.
+                check($"{label}: the nested content item is complete", Text(depth3, DicomTag.ValueType) == "TEXT" && depth3.Contains(DicomTag.ConceptNameCodeSequence), null);
             }
 
             var withPrivate = Generate(new TestDatasetRequest { ProfileId = "ct", Rows = 64, Columns = 64, EdgeCases = EdgeCases.PrivateTags }).Images[0].File.Dataset;
