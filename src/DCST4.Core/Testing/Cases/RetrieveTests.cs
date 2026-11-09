@@ -89,7 +89,7 @@ namespace DCST4.Core.Testing.Cases
             result.Details["retrieved"] = Fixtures.Int(passed);
             Fixtures.Set(result, worst, firstBad != null
                 ? $"{Fixtures.Int(passed)} of {Fixtures.Int(records.Count)} object types came back whole. {firstBad.DisplayName}: {step(firstBad).Explanation}"
-                : $"All {Fixtures.Int(records.Count)} object types came back whole.");
+                : $"{Fixtures.Int(records.Count)} of {Fixtures.Int(records.Count)} object types came back whole.");
         }
     }
 

@@ -67,7 +67,7 @@ namespace DCST4.Core.Network
 
             if (delivered >= expected && expected > 0 && outcome.ResponseSaysSuccess)
             {
-                return Make(MoveDiagnosisKind.Delivered, $"All {Int(delivered)} instances reached the local Storage SCP on port {Int(localPort)}.");
+                return Make(MoveDiagnosisKind.Delivered, $"{Int(delivered)} of {Int(expected)} instances reached the local Storage SCP on port {Int(localPort)}.");
             }
 
             if (delivered == 0 && incoming.Count == 0)

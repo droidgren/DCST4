@@ -52,7 +52,7 @@ namespace DCST4.Core.Testing.Cases
             var firstBad = report.Sets.FirstOrDefault(s => s.Result == worst && worst != TestResultClass.PASS);
             var explanation = firstBad != null
                 ? $"{Fixtures.Int(whole)} of {Fixtures.Int(report.Sets.Count)} retrieves were intact. {firstBad.ObjectType} by {firstBad.Method}: {Describe(firstBad, worst)}"
-                : $"All {Fixtures.Int(report.Sets.Count)} retrieves were intact.";
+                : $"{Fixtures.Int(report.Sets.Count)} of {Fixtures.Int(report.Sets.Count)} retrieves were intact.";
             Fixtures.Set(result, worst, explanation);
             return Task.FromResult(result);
         }

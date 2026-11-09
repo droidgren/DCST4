@@ -91,7 +91,7 @@ namespace DCST4.Core.Testing.Cases
             var trouble = records.FirstOrDefault(r => r.Indexed.Result == worst && worst != TestResultClass.PASS);
             Fixtures.Set(result, worst, trouble != null
                 ? $"{Fixtures.Int(found)} of {Fixtures.Int(records.Count)} object types were found. {trouble.DisplayName}: {trouble.Indexed.Explanation}"
-                : $"All {Fixtures.Int(records.Count)} object types were found with C-FIND at IMAGE level.");
+                : $"{Fixtures.Int(records.Count)} of {Fixtures.Int(records.Count)} object types were found with C-FIND at IMAGE level.");
             return result;
         }
 
@@ -118,7 +118,7 @@ namespace DCST4.Core.Testing.Cases
             }
 
             return missing == 0
-                ? ChainStep.Of(TestResultClass.PASS, $"All {Fixtures.Int(total)} instances were found.")
+                ? ChainStep.Of(TestResultClass.PASS, $"{Fixtures.Int(total)} of {Fixtures.Int(total)} instances were found.")
                 : ChainStep.Of(TestResultClass.FAIL, $"{Fixtures.Int(missing)} of {Fixtures.Int(total)} instances were accepted but could not be found within {Fixtures.Int(context.Session.Options.IndexWaitSeconds)} s.");
         }
     }
