@@ -1,109 +1,553 @@
 <Window x:Class="DCST4.HelpWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Width="680"
-        Height="640"
+        Height="650"
+        Width="900"
+        MinHeight="300"
+        MinWidth="500"
         WindowStartupLocation="CenterOwner">
-    <FlowDocumentScrollViewer VerticalScrollBarVisibility="Auto">
-        <FlowDocument FontFamily="Segoe UI" FontSize="13" PagePadding="20" TextAlignment="Left">
-            <FlowDocument.Resources>
-                <Style x:Key="H" TargetType="Paragraph">
-                    <Setter Property="FontSize" Value="16"/>
-                    <Setter Property="FontWeight" Value="SemiBold"/>
-                    <Setter Property="Foreground" Value="#FF1F3A5F"/>
-                    <Setter Property="Margin" Value="0,14,0,4"/>
+    <Window.Resources>
+        <Style x:Key="H1" TargetType="Paragraph">
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,18,0,6"/>
+            <Setter Property="Foreground" Value="#FF1F3A5F"/>
+        </Style>
+        <Style x:Key="H2" TargetType="Paragraph">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,12,0,4"/>
+        </Style>
+        <Style x:Key="Note" TargetType="Paragraph">
+            <Setter Property="Background" Value="#FFF3F6FA"/>
+            <Setter Property="BorderBrush" Value="#FFB8C7DA"/>
+            <Setter Property="BorderThickness" Value="3,0,0,0"/>
+            <Setter Property="Padding" Value="8,4"/>
+        </Style>
+        <Style TargetType="List">
+            <Setter Property="Margin" Value="0,4,0,8"/>
+            <Setter Property="Padding" Value="20,0,0,0"/>
+        </Style>
+        <Style TargetType="Table">
+            <Setter Property="CellSpacing" Value="0"/>
+            <Setter Property="BorderBrush" Value="#FFD0D7E0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Margin" Value="0,4,0,8"/>
+        </Style>
+        <Style TargetType="TableCell">
+            <Setter Property="BorderBrush" Value="#FFD0D7E0"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="6,3"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <ListBox x:Name="TopicList" Grid.Column="0" BorderThickness="0" Background="#FFF5F7FA" Padding="0,8"
+                 SelectionChanged="TopicList_SelectionChanged">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Padding" Value="12,6"/>
                 </Style>
-            </FlowDocument.Resources>
+            </ListBox.ItemContainerStyle>
+        </ListBox>
 
-            <Paragraph Style="{StaticResource H}">Quick start</Paragraph>
-            <List>
-                <ListItem><Paragraph>Enter the server's AE title, host and port under Server. Try Ping and Dicom Echo.</Paragraph></ListItem>
-                <ListItem><Paragraph>Under Exam, select the modality (CT, MR, CR, DX, US, XA, RF, MG, PT or NM) and exam type, and how many images you want. 1 series with 1 image gives a single test image.</Paragraph></ListItem>
-                <ListItem><Paragraph>Click Generate &amp; Send, and follow each image in the Results tab.</Paragraph></ListItem>
-                <ListItem><Paragraph>Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text under File &gt; Settings first.</Paragraph></ListItem>
-            </List>
+        <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="#FFE1E6EC"/>
 
-            <Paragraph Style="{StaticResource H}">Burned-in text</Paragraph>
-            <Paragraph>By default the images have no burned-in patient details. Under File &gt; Settings, on the Burned-in text tab, you can turn on a black text box in the upper left corner of each image and tick which tags it shows. The values are read from the image's own tags. Burned In Annotation is YES when text is drawn, otherwise NO. The diagonal TEST IMAGE watermark is always there.</Paragraph>
+        <FlowDocumentScrollViewer x:Name="Viewer" Grid.Column="2" IsToolBarVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <FlowDocument x:Name="HelpDocument" FontFamily="Segoe UI" FontSize="13" PagePadding="24,8,24,24"
+                          TextAlignment="Left" LineHeight="20">
 
-            <Paragraph Style="{StaticResource H}">Auto and manual values</Paragraph>
-            <Paragraph>Everything on the Identifiers tab is generated by default, and the fields show what the next run will use. Untick Auto to enter your own value. Auto values are drawn when the program starts and when you click New values, and they stay on screen after a run so you can look the exam up in PACS. The values a run used are also written to the Log tab.</Paragraph>
-            <Paragraph>Running again without New values uses the same patient, accession number and Study UID, so the images arrive as a new series in the same study, also if you changed modality or exam type. Series numbers start at 1 again, and an Auto Study Date/Time is the time of each run. Click New values to start a separate study. To draw new values after every run instead, tick Draw new Auto values after each run under File &gt; Settings.</Paragraph>
-            <Paragraph>A manual Series UID requires exactly one series, and a manual SOP Instance UID exactly one image, because these must be unique.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Getting started">
+                    <Paragraph Style="{StaticResource H1}">Getting started</Paragraph>
+                    <Paragraph>
+                        DICOM C-Store Tester generates test images and sends them to a PACS or other DICOM storage
+                        server with C-STORE. It can also save them to disk, and test what a PACS supports.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">A first exam in four steps</Paragraph>
+                    <List MarkerStyle="Decimal">
+                        <ListItem><Paragraph>Under <Bold>Server</Bold>, enter the server's <Bold>AET</Bold>, <Bold>IP/Hostname</Bold> and <Bold>Port</Bold>. Try <Bold>Ping</Bold> and <Bold>Dicom Echo</Bold>.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Under <Bold>Exam</Bold>, select the modality (CT, MR, CR, DX, US, XA, RF, MG, PT or NM) and exam type, and how many images you want. 1 series with 1 image gives a single test image. <Bold>Estimated size</Bold> shows how much data that is.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Click <Bold>Generate &amp; Send</Bold>, and follow each image in the <Bold>Results</Bold> tab.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text under <Bold>File &gt; Settings</Bold> first.</Paragraph></ListItem>
+                    </List>
+                    <Paragraph Style="{StaticResource Note}">
+                        Assume that images cannot be deleted from a PACS once they are stored. Check the destination,
+                        and keep the number of images small.
+                    </Paragraph>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Additional tags</Paragraph>
-            <Paragraph>Under File &gt; Settings, on the Additional tags tab, you can add tags on top of the fixed fields. Each one gets a row on the Identifiers tab, where you can untick Auto and type a value for the session.</Paragraph>
-            <Paragraph>Common tags are ticked in a list, and Auto generates their values. A custom tag is entered as (0008,1070), 00081070 or a keyword such as OperatorsName, and Auto uses the default value you enter. An empty default sends the tag empty. Separate several values with a backslash where the tag allows it.</Paragraph>
-            <Paragraph>A private tag, one with an odd group number, also needs a private creator and a VR. A custom tag can replace a generated value such as Manufacturer, but not one that would break the image or remove its marking as a test image. The message says why when a tag cannot be added.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Connection">
+                    <Paragraph Style="{StaticResource H1}">Connection</Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="140"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>Calling AET</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The AE title of this program. Many servers only accept AE titles they have been configured for.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>AET</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The called AE title of the server.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>IP/Hostname</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Address of the server.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Port</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>DICOM port of the server.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Use TLS</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Encrypt the connection. See <Italic>TLS</Italic> below.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource H2}">Testing the connection</Paragraph>
+                    <List>
+                        <ListItem><Paragraph><Bold>Ping</Bold> checks that the host answers on the network (ICMP). Some networks block ping, so a failed ping does not have to mean that DICOM fails.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Dicom Echo</Bold> sends a C-ECHO. It succeeds only if the server accepts the association and answers with status Success. The time is shown.</Paragraph></ListItem>
+                    </List>
+                    <Paragraph Style="{StaticResource H2}">Profiles</Paragraph>
+                    <Paragraph>A profile stores the Calling AET, the server's AET, host and port and the TLS options under a name.</Paragraph>
+                    <List>
+                        <ListItem><Paragraph><Bold>Save:</Bold> type a name in the <Bold>Profile</Bold> box and click <Bold>Save</Bold>. A profile with that name is updated.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Use:</Bold> pick a profile in the list. Its values are copied into the fields.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Delete:</Bold> pick or type the name and click <Bold>Delete</Bold>. You are asked to confirm.</Paragraph></ListItem>
+                    </List>
+                    <Paragraph Style="{StaticResource Note}">
+                        Changing a field after picking a profile does not change the profile. Click <Bold>Save</Bold> again to store the change.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">TLS</Paragraph>
+                    <Paragraph>Tick <Bold>Use TLS</Bold> to connect with TLS. The server must listen for TLS on the given port. <Bold>TLS options...</Bold> has these settings:</Paragraph>
+                    <List>
+                        <ListItem><Paragraph><Bold>Accept self-signed or invalid server certificates.</Bold> Use only for testing, because the server's identity is then not verified.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Client certificate.</Bold> For a server that requires one. <Bold>Select...</Bold> picks a certificate with a private key from your personal certificate store, and <Bold>Clear</Bold> removes it.</Paragraph></ListItem>
+                    </List>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Patient IDs</Paragraph>
-            <Paragraph>Random Patient IDs only ever come from Skatteverket's official list of test personnummer, built into the program. Birth date and sex are taken from the number. The list also holds future dates and people born in the 1890s, so random selection is limited to the age range below the fields, 0 to 100 by default.</Paragraph>
-            <Paragraph>If you enter a Patient ID that is not on the list, the program warns you. It is still used, but make sure it is not a real person's number.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Creating an exam">
+                    <Paragraph Style="{StaticResource H1}">Creating an exam</Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="170"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>Modality</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>CT, MR, CR, DX, US, XA, RF, MG, PT or NM. Choosing one sets its usual matrix, bit depth and exam type.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Exam type</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Sets the descriptions, body part, modality-specific tags and usual number of images.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Series</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Number of series. A run can have at most 100,000 images in total.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Images per series</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Number of images in each series. The total is shown next to the field.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Rows x Columns</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The matrix, 64 to 4096.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Bits stored</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The list shows what the selected modality's IOD allows.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Character set</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Specific Character Set. See <Italic>Character sets</Italic>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Transfer syntax</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Implicit VR, Explicit VR or JPEG Lossless. See <Italic>Transfer syntax and fallback</Italic>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>How much data the whole exam will be. It updates as you change the fields above.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource H2}">Estimated size</Paragraph>
+                    <List>
+                        <ListItem><Paragraph>Implicit and Explicit VR: calculated from the matrix, bit depth and number of images.</Paragraph></ListItem>
+                        <ListItem><Paragraph>JPEG Lossless: one sample image is compressed in the background and the result is multiplied by the number of images, since the size depends on the picture. <Italic>calculating...</Italic> is shown meanwhile. The test images compress far better than real ones.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Italic>at most</Italic> means that no sample could be made, so the uncompressed size is shown as the upper limit.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>-</Bold> means that a value is outside its allowed range.</Paragraph></ListItem>
+                    </List>
+                    <Paragraph>The DICOMDIR of a saved File-set is not counted.</Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Running</Paragraph>
+                    <List>
+                        <ListItem><Paragraph>Under <Bold>Output</Bold>, tick <Bold>Send to server</Bold>, <Bold>Save to disk</Bold> or both.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Generate &amp; Send</Bold> starts the run. It reads Generate &amp; Save when only saving.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Cancel</Bold> stops the run.</Paragraph></ListItem>
+                    </List>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Names with å, ä, ö</Paragraph>
-            <Paragraph>About 40% of random names contain å, ä or ö. Select the Specific Character Set under Exam: ISO_IR 100 (Latin-1), ISO_IR 192 (UTF-8) or Empty value. A manual value that the selected set cannot represent stops the run with a message, rather than being sent wrong.</Paragraph>
-            <Paragraph>Empty value sends the tag with zero length, which means Basic ASCII (ISO 646). Random names then lose their å, ä and ö, so Åström becomes Astrom. A strict validator may object to the empty tag, since Specific Character Set should have a value when it is present.</Paragraph>
-            <Paragraph>If the viewer shows Ã¥ instead of å, the system has read UTF-8 text as Latin-1. With burned-in text turned on, the text in the image shows what was intended.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Identifiers and Auto values">
+                    <Paragraph Style="{StaticResource H1}">Identifiers and Auto values</Paragraph>
+                    <Paragraph>
+                        Everything on the <Bold>Identifiers</Bold> tab is generated by default, and the fields show what
+                        the next run will use. Untick <Bold>Auto</Bold> to enter your own value. Auto values are drawn
+                        when the program starts and when you click <Bold>New values</Bold>, and they stay on screen after
+                        a run so you can look the exam up in PACS. The values a run used are also written to the
+                        <Bold>Log</Bold> tab.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Running again</Paragraph>
+                    <Paragraph>
+                        Running again without <Bold>New values</Bold> uses the same patient, accession number and Study
+                        UID, so the images arrive as a new series in the same study, also if you changed modality or exam
+                        type. Series numbers start at 1 again, and an Auto Study Date/Time is the time of each run. Click
+                        <Bold>New values</Bold> to start a separate study. To draw new values after every run instead, tick
+                        <Bold>Draw new Auto values after each run</Bold> under <Bold>File &gt; Settings</Bold>.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource Note}">
+                        A manual Series UID requires exactly one series, and a manual SOP Instance UID exactly one image,
+                        because these must be unique.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Patient IDs</Paragraph>
+                    <Paragraph>
+                        Random Patient IDs only ever come from Skatteverket's official list of test personnummer, built
+                        into the program. Birth date and sex are taken from the number. The list also holds future dates
+                        and people born in the 1890s, so random selection is limited to the age range below the fields,
+                        0 to 100 by default.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource Note}">
+                        If you enter a Patient ID that is not on the list, the program warns you. It is still used, but
+                        make sure it is not a real person's number.
+                    </Paragraph>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Transfer syntax and fallback</Paragraph>
-            <Paragraph>The images are sent in the selected transfer syntax. fo-dicom also always proposes Implicit VR in a presentation context of its own, as DICOM expects. Each context is shown in the Log tab with the server's answer.</Paragraph>
-            <Paragraph>If the server does not accept the selected syntax, the run stops with an error and nothing is sent, so a test of JPEG Lossless can not pass by accident. Tick Allow fallback to Implicit VR to send as Implicit VR instead, as a real modality would. The run then finishes with a warning, and the Syntax used column shows what was really sent.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Additional tags">
+                    <Paragraph Style="{StaticResource H1}">Additional tags</Paragraph>
+                    <Paragraph>
+                        Under <Bold>File &gt; Settings</Bold>, on the <Bold>Additional tags</Bold> tab, you can add tags on
+                        top of the fixed fields. Each one gets a row on the <Bold>Identifiers</Bold> tab, where you can
+                        untick <Bold>Auto</Bold> and type a value for the session.
+                    </Paragraph>
+                    <List>
+                        <ListItem><Paragraph><Bold>Common tags</Bold> are ticked in a list, and Auto generates their values.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Custom tags</Bold> are entered as (0008,1070), 00081070 or a keyword such as OperatorsName, and Auto uses the default value you enter. An empty default sends the tag empty. Separate several values with a backslash where the tag allows it.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Private tags</Bold>, those with an odd group number, also need a private creator and a VR.</Paragraph></ListItem>
+                    </List>
+                    <Paragraph>
+                        A custom tag can replace a generated value such as Manufacturer, but not one that would break the
+                        image or remove its marking as a test image. The message says why when a tag cannot be added.
+                    </Paragraph>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Reading the results</Paragraph>
-            <Table CellSpacing="4">
-                <Table.Columns>
-                    <TableColumn Width="110"/>
-                    <TableColumn/>
-                </Table.Columns>
-                <TableRowGroup>
-                    <TableRow><TableCell><Paragraph>Success</Paragraph></TableCell><TableCell><Paragraph>Status 0x0000. The server has taken responsibility for the image.</Paragraph></TableCell></TableRow>
-                    <TableRow Background="#FFFFF4C2"><TableCell><Paragraph>Warning</Paragraph></TableCell><TableCell><Paragraph>Stored, but the server changed or dropped something. For example 0xB000 coercion, 0xB006 elements discarded, 0xB007 data set does not match the SOP class.</Paragraph></TableCell></TableRow>
-                    <TableRow Background="#FFFAD4D0"><TableCell><Paragraph>Failure</Paragraph></TableCell><TableCell><Paragraph>Not stored. For example 0xA7xx out of resources, 0xA9xx data set does not match, 0xCxxx cannot understand. The run continues with the next image.</Paragraph></TableCell></TableRow>
-                    <TableRow Background="#FFE6E6E6"><TableCell><Paragraph>NotSent</Paragraph></TableCell><TableCell><Paragraph>No response for this image, for example because the association was rejected, aborted or timed out. The description says why.</Paragraph></TableCell></TableRow>
-                </TableRowGroup>
-            </Table>
-            <Paragraph>Vendor-specific codes keep their real value in the Status column. The status bar shows the totals and throughput of the last run. Images never generated because the run stopped early have no row, but are counted as not sent in the totals.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Character sets">
+                    <Paragraph Style="{StaticResource H1}">Character sets</Paragraph>
+                    <Paragraph>About 40% of random names contain å, ä or ö. Select the <Bold>Character set</Bold> under <Bold>Exam</Bold>:</Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="140"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>ISO_IR 100</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Latin-1.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>ISO_IR 192</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>UTF-8.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Empty value</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Sends the tag with zero length, which means Basic ASCII (ISO 646). Random names then lose their å, ä and ö, so Åström becomes Astrom. A strict validator may object to the empty tag, since Specific Character Set should have a value when it is present.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph>A manual value that the selected set cannot represent stops the run with a message, rather than being sent wrong.</Paragraph>
+                    <Paragraph Style="{StaticResource Note}">
+                        If the viewer shows Ã¥ instead of å, the system has read UTF-8 text as Latin-1. With burned-in text
+                        turned on, the text in the image shows what was intended.
+                    </Paragraph>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Running tests against a PACS</Paragraph>
-            <Paragraph>On the Tests tab below the exam settings, tick the tests and click Run tests. They run against the destination entered under Server. Select a row to see its explanation and the steps of the association, with the raw status of each response. Cancel stops the run, and what was finished is still saved.</Paragraph>
-            <Table CellSpacing="4">
-                <Table.Columns>
-                    <TableColumn Width="130"/>
-                    <TableColumn/>
-                </Table.Columns>
-                <TableRowGroup>
-                    <TableRow><TableCell><Paragraph>PASS</Paragraph></TableCell><TableCell><Paragraph>The system did what the test expects.</Paragraph></TableCell></TableRow>
-                    <TableRow Background="#FFFAD4D0"><TableCell><Paragraph>FAIL</Paragraph></TableCell><TableCell><Paragraph>It answered, refused or broke off in a way the test does not accept.</Paragraph></TableCell></TableRow>
-                    <TableRow Background="#FFFFF4C2"><TableCell><Paragraph>NOT_SUPPORTED</Paragraph></TableCell><TableCell><Paragraph>It said it does not support this, for example by not accepting the SOP class.</Paragraph></TableCell></TableRow>
-                    <TableRow><TableCell><Paragraph>EXPECTED_FAILURE</Paragraph></TableCell><TableCell><Paragraph>It refused something it is supposed to refuse.</Paragraph></TableCell></TableRow>
-                    <TableRow Background="#FFE6E6E6"><TableCell><Paragraph>TIMEOUT</Paragraph></TableCell><TableCell><Paragraph>No connection, association or response within the timeout under File &gt; Settings.</Paragraph></TableCell></TableRow>
-                    <TableRow Background="#FFE6E6E6"><TableCell><Paragraph>INDETERMINATE</Paragraph></TableCell><TableCell><Paragraph>The test could not reach a verdict, for example because the run was cancelled.</Paragraph></TableCell></TableRow>
-                    <TableRow Background="#FFFAD4D0"><TableCell><Paragraph>TOOL_ERROR</Paragraph></TableCell><TableCell><Paragraph>A bug or local problem in this program, such as a missing client certificate. Not the fault of the PACS.</Paragraph></TableCell></TableRow>
-                </TableRowGroup>
-            </Table>
-            <Paragraph>Each run is saved as a JSON file with full detail and a CSV file with one row per result, in the folder on the tab. The client certificate thumbprint is never written to them.</Paragraph>
-            <Paragraph>The same tests can run from the command line with DCST4.Cli.exe, which is in the program's folder. Click Save profile as JSON to write the destination to a file, and then run: DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results. The exit code is 0 with no FAIL or TOOL_ERROR, 1 with at least one of those, 2 for bad arguments or an unusable profile, and 130 if cancelled with Ctrl+C.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Burned-in text">
+                    <Paragraph Style="{StaticResource H1}">Burned-in text</Paragraph>
+                    <Paragraph>
+                        By default the images have no burned-in patient details. Under <Bold>File &gt; Settings</Bold>, on
+                        the <Bold>Burned-in text</Bold> tab, you can turn on a black text box in the upper left corner of
+                        each image and tick which tags it shows. The values are read from the image's own tags.
+                    </Paragraph>
+                    <Paragraph>
+                        Burned In Annotation is YES when text is drawn, otherwise NO. The diagonal TEST IMAGE watermark is
+                        always there.
+                    </Paragraph>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">What the PACS supports</Paragraph>
-            <Paragraph>The negotiation probe on the Tests tab finds out what the destination supports from association negotiation alone. No images are sent. For each SOP class it proposes every transfer syntax in a presentation context of its own, split over several associations since one can hold at most 128 contexts.</Paragraph>
-            <Paragraph>The result is on the Capabilities tab, one row per SOP class and one column per transfer syntax. Rest the mouse on a cell to see the full answer, and on a column heading for the full name. Save as JSON or CSV writes the table, and every run also saves it next to the result files. The tab also shows what the destination identified itself as and its maximum PDU length.</Paragraph>
-            <Paragraph>Load claimed reads a JSON file of what the vendor's Conformance Statement claims, in the same layout as the saved matrix, and lists what was claimed but rejected, accepted but not claimed, and claimed but never answered.</Paragraph>
-            <Paragraph>Three more tests check refusals: an unknown calling AE title, a wrong called AE title, and an association with only unsupported contexts. EXPECTED_FAILURE means the destination refused as it should. A destination that accepts an unknown AE title gets FAIL, as a finding to report and not as a fault in this program.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Transfer syntax and fallback">
+                    <Paragraph Style="{StaticResource H1}">Transfer syntax and fallback</Paragraph>
+                    <Paragraph>
+                        The images are sent in the selected transfer syntax. fo-dicom also always proposes Implicit VR in
+                        a presentation context of its own, as DICOM expects. Each context is shown in the
+                        <Bold>Log</Bold> tab with the server's answer.
+                    </Paragraph>
+                    <Paragraph>
+                        If the server does not accept the selected syntax, the run stops with an error and nothing is
+                        sent, so a test of JPEG Lossless can not pass by accident.
+                    </Paragraph>
+                    <Paragraph>
+                        Tick <Bold>Allow fallback to Implicit VR</Bold> to send as Implicit VR instead, as a real modality
+                        would. The run then finishes with a warning, and the <Bold>Syntax used</Bold> column shows what
+                        was really sent.
+                    </Paragraph>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Test datasets</Paragraph>
-            <Paragraph>DCST4.Cli.exe can write reproducible test data: DCST4.Cli.exe generate --dataset ct --out C:\Temp\ct --seed 42. The same seed gives the same files, with a manifest.json of hashes that can be compared later. DCST4.Cli.exe list-datasets shows the dataset types, which include multi-frame images, reports, documents and presentation states, and list-codecs shows which compressions work.</Paragraph>
-            <Paragraph>Patient IDs always come from the list of test personnummer. The name is a Swedish name by default. To mark every test patient as DCST4^TEST^number instead, choose it on the Identifiers tab under File &gt; Settings, or use --patient-naming MarkedTestName on the command line. This setting does not affect Generate &amp; Send. No test on the Tests tab uses datasets yet, so it has no visible effect in the program until one does.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Saving to disk">
+                    <Paragraph Style="{StaticResource H1}">Saving to disk</Paragraph>
+                    <Paragraph>
+                        Tick <Bold>Save to disk</Bold>, with or without <Bold>Send to server</Bold>. The folder becomes a
+                        DICOM File-set that viewers can open: a DICOMDIR at the top, and the images in
+                        DICOM\EX000001\S001\IM0001 in the selected transfer syntax. DICOM limits these names to 8
+                        characters and no extension, so the folders do not show patient details. The
+                        <Bold>Saved to</Bold> column shows where each image went.
+                    </Paragraph>
+                    <List>
+                        <ListItem><Paragraph>Each run gets a new EX folder and nothing is overwritten.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Saving again to the same folder adds to the same DICOMDIR.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Each file is saved before it is sent, so it exists even if sending fails.</Paragraph></ListItem>
+                        <ListItem><Paragraph>The DICOMDIR is written when the run ends, also if it stopped early.</Paragraph></ListItem>
+                    </List>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Saving to disk</Paragraph>
-            <Paragraph>Tick Save to disk, with or without Send to server. The folder becomes a DICOM File-set that viewers can open: a DICOMDIR at the top, and the images in DICOM\EX000001\S001\IM0001 in the selected transfer syntax. DICOM limits these names to 8 characters and no extension, so the folders do not show patient details. The Saved to column shows where each image went.</Paragraph>
-            <Paragraph>Each run gets a new EX folder and nothing is overwritten. Saving again to the same folder adds to the same DICOMDIR. Each file is saved before it is sent, so it exists even if sending fails, and the DICOMDIR is written when the run ends, also if it stopped early.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Reading the results">
+                    <Paragraph Style="{StaticResource H1}">Reading the results</Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="110"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>Success</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Status 0x0000. The server has taken responsibility for the image.</Paragraph></TableCell></TableRow>
+                            <TableRow Background="#FFFFF4C2"><TableCell><Paragraph><Bold>Warning</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Stored, but the server changed or dropped something. For example 0xB000 coercion, 0xB006 elements discarded, 0xB007 data set does not match the SOP class.</Paragraph></TableCell></TableRow>
+                            <TableRow Background="#FFFAD4D0"><TableCell><Paragraph><Bold>Failure</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Not stored. For example 0xA7xx out of resources, 0xA9xx data set does not match, 0xCxxx cannot understand. The run continues with the next image.</Paragraph></TableCell></TableRow>
+                            <TableRow Background="#FFE6E6E6"><TableCell><Paragraph><Bold>NotSent</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>No response for this image, for example because the association was rejected, aborted or timed out. The description says why.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph>
+                        Vendor-specific codes keep their real value in the <Bold>Status</Bold> column. The status bar shows
+                        the totals and throughput of the last run. Images never generated because the run stopped early
+                        have no row, but are counted as not sent in the totals.
+                    </Paragraph>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Version check</Paragraph>
-            <Paragraph>When the program starts it asks GitHub for the latest release, and opens a window if there is a new version, with a link and the release notes. You only see this window when a new version was found: if GitHub cannot be reached, for example on a closed network, the program carries on and says nothing. To turn it off, untick the box on the Updates tab under File &gt; Settings, and nothing is sent at startup.</Paragraph>
-            <Paragraph>Opening Help &gt; About also asks GitHub and shows the result in the window, including if the check failed. Nothing is downloaded or installed.</Paragraph>
+                <!-- ===================================================================== -->
+                <Section Tag="Running tests">
+                    <Paragraph Style="{StaticResource H1}">Running tests against a PACS</Paragraph>
+                    <Paragraph>
+                        On the <Bold>Tests</Bold> tab below the exam settings, tick the tests and click <Bold>Run tests</Bold>.
+                        They run against the destination entered under <Bold>Server</Bold>. Select a row to see its
+                        explanation and the steps of the association, with the raw status of each response.
+                        <Bold>Cancel</Bold> stops the run, and what was finished is still saved.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Results</Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="150"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>PASS</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The system did what the test expects.</Paragraph></TableCell></TableRow>
+                            <TableRow Background="#FFFAD4D0"><TableCell><Paragraph><Bold>FAIL</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>It answered, refused or broke off in a way the test does not accept.</Paragraph></TableCell></TableRow>
+                            <TableRow Background="#FFFFF4C2"><TableCell><Paragraph><Bold>NOT_SUPPORTED</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>It said it does not support this, for example by not accepting the SOP class.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>EXPECTED_FAILURE</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>It refused something it is supposed to refuse.</Paragraph></TableCell></TableRow>
+                            <TableRow Background="#FFE6E6E6"><TableCell><Paragraph><Bold>TIMEOUT</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>No connection, association or response within the timeout under <Bold>File &gt; Settings</Bold>.</Paragraph></TableCell></TableRow>
+                            <TableRow Background="#FFE6E6E6"><TableCell><Paragraph><Bold>INDETERMINATE</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The test could not reach a verdict, for example because the run was cancelled.</Paragraph></TableCell></TableRow>
+                            <TableRow Background="#FFFAD4D0"><TableCell><Paragraph><Bold>TOOL_ERROR</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>A bug or local problem in this program, such as a missing client certificate. Not the fault of the PACS.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource H2}">Result files</Paragraph>
+                    <Paragraph>
+                        Each run is saved as a JSON file with full detail and a CSV file with one row per result, in the
+                        folder on the tab. The client certificate thumbprint is never written to them.
+                    </Paragraph>
+                </Section>
 
-            <Paragraph Style="{StaticResource H}">Logs and settings</Paragraph>
-            <Paragraph>The Log tab shows this program's messages, and the complete log is in File &gt; Open log directory (%LocalAppData%\DCST4\Logs). The command line program logs to Cli files in the same folder. Settings are stored in %LocalAppData%\DCST4\user.config.</Paragraph>
-        </FlowDocument>
-    </FlowDocumentScrollViewer>
+                <!-- ===================================================================== -->
+                <Section Tag="What the PACS supports">
+                    <Paragraph Style="{StaticResource H1}">What the PACS supports</Paragraph>
+                    <Paragraph>
+                        The negotiation probe on the <Bold>Tests</Bold> tab finds out what the destination supports from
+                        association negotiation alone. No images are sent. For each SOP class it proposes every transfer
+                        syntax in a presentation context of its own, split over several associations since one can hold
+                        at most 128 contexts.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">The Capabilities tab</Paragraph>
+                    <Paragraph>
+                        One row per SOP class and one column per transfer syntax. Rest the mouse on a cell to see the full
+                        answer, and on a column heading for the full name. <Bold>Save as JSON</Bold> and
+                        <Bold>Save as CSV</Bold> write the table, and every run also saves it next to the result files.
+                        The tab also shows what the destination identified itself as and its maximum PDU length.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Comparing with the Conformance Statement</Paragraph>
+                    <Paragraph>
+                        <Bold>Load claimed</Bold> reads a JSON file of what the vendor's Conformance Statement claims, in
+                        the same layout as the saved matrix, and lists what was claimed but rejected, accepted but not
+                        claimed, and claimed but never answered.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Tests of refusals</Paragraph>
+                    <Paragraph>
+                        Three more tests check an unknown calling AE title, a wrong called AE title, and an association
+                        with only unsupported contexts. EXPECTED_FAILURE means the destination refused as it should. A
+                        destination that accepts an unknown AE title gets FAIL, as a finding to report and not as a fault
+                        in this program.
+                    </Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
+                <Section Tag="Command line and datasets">
+                    <Paragraph Style="{StaticResource H1}">Command line and test datasets</Paragraph>
+                    <Paragraph>DCST4.Cli.exe is in the program's folder.</Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Running tests</Paragraph>
+                    <Paragraph>
+                        Click <Bold>Save profile as JSON</Bold> on the <Bold>Tests</Bold> tab to write the destination to a
+                        file, and then run:
+                    </Paragraph>
+                    <Paragraph FontFamily="Consolas">DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results</Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="90"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>Exit code 0</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>No FAIL or TOOL_ERROR.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>1</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>At least one FAIL or TOOL_ERROR.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>2</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Bad arguments, an unusable profile or results that could not be saved.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>130</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Cancelled with Ctrl+C.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource H2}">Test datasets</Paragraph>
+                    <Paragraph>DCST4.Cli.exe can write reproducible test data:</Paragraph>
+                    <Paragraph FontFamily="Consolas">DCST4.Cli.exe generate --dataset ct --out C:\Temp\ct --seed 42</Paragraph>
+                    <Paragraph>
+                        The same seed gives the same files, with a manifest.json of hashes that can be compared later.
+                        <Italic>DCST4.Cli.exe list-datasets</Italic> shows the dataset types, which include multi-frame
+                        images, reports, documents and presentation states, and <Italic>list-codecs</Italic> shows which
+                        compressions work.
+                    </Paragraph>
+                    <Paragraph>
+                        Patient IDs always come from the list of test personnummer. The name is a Swedish name by default.
+                        To mark every test patient as DCST4^TEST^number instead, choose it on the
+                        <Bold>Identifiers</Bold> tab under <Bold>File &gt; Settings</Bold>, or use
+                        <Italic>--patient-naming MarkedTestName</Italic> on the command line.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource Note}">
+                        This naming setting does not affect Generate &amp; Send. No test on the Tests tab uses datasets
+                        yet, so it has no visible effect in the program until one does.
+                    </Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
+                <Section Tag="Settings">
+                    <Paragraph Style="{StaticResource H1}">Settings</Paragraph>
+                    <Paragraph>Open <Bold>File &gt; Settings</Bold>. Changes are applied with <Bold>OK</Bold>, and <Bold>Cancel</Bold> discards them.</Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="210"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>Network: Connection timeout</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>How long to wait for the TCP connection (default 10 s).</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Network: Association timeout</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>How long to wait for the server to accept or reject the association (default 10 s).</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Network: Response (DIMSE) timeout</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>How long to wait for each response to a C-ECHO or C-STORE request (default 60 s, 0 = no limit).</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Identifiers</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Whether to draw new Auto values after each run, and the patient name in test-suite datasets.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Burned-in text</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>See <Italic>Burned-in text</Italic>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Additional tags</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>See <Italic>Additional tags</Italic>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Logging: Log DIMSE Datasets</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Write every request and response dataset to the log.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Logging: Log Data PDUs</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Write the low-level network messages to the log. Produces a lot of output.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Updates</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Show a window at startup when a new version is available. See below.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource H2}">Version check</Paragraph>
+                    <Paragraph>
+                        When the program starts it asks GitHub for the latest release, and opens a window if there is a
+                        new version, with a link and the release notes. You only see this window when a new version was
+                        found: if GitHub cannot be reached, for example on a closed network, the program carries on and
+                        says nothing. To turn it off, untick the box on the <Bold>Updates</Bold> tab, and nothing is sent
+                        at startup.
+                    </Paragraph>
+                    <Paragraph>
+                        Opening <Bold>Help &gt; About</Bold> also asks GitHub and shows the result in the window, including
+                        if the check failed. Nothing is downloaded or installed.
+                    </Paragraph>
+                    <Paragraph>Settings are stored in <Italic>%LocalAppData%\DCST4\user.config</Italic>.</Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
+                <Section Tag="Troubleshooting and logs">
+                    <Paragraph Style="{StaticResource H1}">Troubleshooting and logs</Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="230"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>Could not connect</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Wrong host or port, the service is not running, or a firewall blocks the port. Try Ping, then check the port.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Association rejected</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The server does not accept the Calling AET, or the called AET is wrong. Check both, and the server's list of allowed senders.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>The SCP did not accept ...</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The server does not take the selected transfer syntax for this SOP class. The message says what it did accept. Choose another syntax, or tick <Bold>Allow fallback to Implicit VR</Bold>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>... (timed out)</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The server did not answer in time. Increase the timeouts under <Bold>File &gt; Settings</Bold> if the server is slow.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Some images got no response</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The association ended before every image was answered. Those images are marked NotSent. Check them in PACS before sending them again.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Run not started</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>A value is missing or not valid. The message names the field.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Remote certificate is invalid</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The server's TLS certificate is not trusted or does not match the host name. Install the CA certificate, or for testing tick <Italic>Accept self-signed or invalid server certificates</Italic> under <Bold>TLS options...</Bold>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Wrong special characters (Ã¥ instead of å)</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>See <Italic>Character sets</Italic>.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource H2}">Logs</Paragraph>
+                    <Paragraph>
+                        The <Bold>Log</Bold> tab shows this program's messages. The complete log is in
+                        <Bold>File &gt; Open log directory</Bold> (<Italic>%LocalAppData%\DCST4\Logs</Italic>). A new file is
+                        started each day and the last 7 are kept. The command line program logs to Cli files in the same
+                        folder. Attach the log when you report a problem.
+                    </Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
+                <Section Tag="Keyboard shortcuts">
+                    <Paragraph Style="{StaticResource H1}">Keyboard shortcuts</Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="140"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>F1</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Open this help.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Esc</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Close this help, or close a dialog without saving.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Enter</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>OK in a dialog.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Ctrl+C</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Copy the selected rows of a results table, with the column headings.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                </Section>
+            </FlowDocument>
+        </FlowDocumentScrollViewer>
+    </Grid>
 </Window>
