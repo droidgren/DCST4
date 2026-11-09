@@ -89,11 +89,17 @@ namespace DCST4.Core.Generation.Datasets
 
         private static void AddNestedSequences(DicomDataset dataset)
         {
+            // Protocol Context Sequence holds content items, which need a value type and a concept name.
             var innermost = new DicomDataset
             {
-                { DicomTag.CodeValue, "DCST4-3" },
-                { DicomTag.CodingSchemeDesignator, "99DCST4" },
-                { DicomTag.CodeMeaning, "Third level" },
+                { DicomTag.ValueType, "TEXT" },
+                new DicomSequence(DicomTag.ConceptNameCodeSequence, new DicomDataset
+                {
+                    { DicomTag.CodeValue, "DCST4-4" },
+                    { DicomTag.CodingSchemeDesignator, "99DCST4" },
+                    { DicomTag.CodeMeaning, "Third level" },
+                }),
+                { DicomTag.TextValue, "DCST4-3" },
             };
             var protocol = new DicomDataset
             {

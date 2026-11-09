@@ -341,10 +341,14 @@ Version 1.0.0 was checked once by hand with DCMTK 3.7.0. This is not part of `ru
 
 DCMTK has no IOD validator, so this does not prove that every attribute an IOD requires is present. Those are checked against a list in the tests, not by an outside tool.
 
-The dataset profiles added in 1.4.0 were checked once by hand with DCMTK 3.7.1, on the 74 files that `matrix` writes to its `datasets` folder:
+The dataset profiles added in 1.4.0 were checked once by hand with DCMTK 3.7.1, on 362 files covering every profile in both uncompressed syntaxes, the character set and edge-case variants, every codec on single-frame and multi-frame images, odd matrices and several patients:
 
-- `dcmftest` and `dcmdump` pass with no warnings. The first run found fragments of odd length from the HTJ2K encoder, which are now padded and covered by a check in the tests.
-- `dcmdjpeg`, `dcmdjpls` and `dcmdrle` decode the lossless JPEG, JPEG-LS and RLE variants at 8, 12 and 16 bits and RGB to pixels identical to the raw frames. DCMTK has no JPEG 2000 or HTJ2K decoder, so those were checked only with PureCodecs' own decoder.
+- `dcmftest`, `dcmdump` and `dcm2xml` pass with no warnings. The first run found fragments of odd length from the HTJ2K encoder, which are now padded and covered by a check in the tests.
+- `dsrdump`, `drtdump`, `dcmpschk` and `dcmdecap` read the SR, Key Object, RT Structure Set, Presentation State and PDF objects. `drtdump` found a nested edge-case item without its required attributes, which is fixed. Its remaining remark is the empty Specific Character Set of that variant. `dcmpschk` rejects Swedish letters only in ISO_IR 192, because DCMTK's VR checker does not support that character set.
+- `dcmdjpeg`, `dcmdjpls` and `dcmdrle` decode the 48 lossless JPEG, JPEG-LS and RLE files to pixels identical to the manifest's frames. Decoded lossy files have a PSNR of 42 dB or more. DCMTK has no JPEG 2000 or HTJ2K decoder, so those were checked only with PureCodecs' own decoder.
+- After `dcmconv` rewrites every uncompressed file as Implicit VR, Explicit VR, Deflated and UTF-8, the normalized hash and the frame hashes still match the manifest.
+- `dcmmkdir` builds the same record types as DCST4's DICOMDIR for all 21 profiles, and `dcm2img` renders every image DCMTK has a codec for.
+- 75 sends from DCST4 to `storescp` on the same computer give 288 received objects that match the manifest, in every syntax, and so does a 660 MB object. `storescu` sent the 214 uncompressed files. It could not send the compressed ones with the options used, since its negotiation settled on Explicit VR.
 
 ## Dependencies
 
