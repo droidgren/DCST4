@@ -348,7 +348,7 @@ The dataset profiles added in 1.4.0 were checked once by hand with DCMTK 3.7.1, 
 - `dcmdjpeg`, `dcmdjpls` and `dcmdrle` decode the 48 lossless JPEG, JPEG-LS and RLE files to pixels identical to the manifest's frames. Decoded lossy files have a PSNR of 42 dB or more. DCMTK has no JPEG 2000 or HTJ2K decoder, so those were checked only with PureCodecs' own decoder.
 - After `dcmconv` rewrites every uncompressed file as Implicit VR, Explicit VR, Deflated and UTF-8, the normalized hash and the frame hashes still match the manifest.
 - `dcmmkdir` builds the same record types as DCST4's DICOMDIR for all 21 profiles, and `dcm2img` renders every image DCMTK has a codec for.
-- 75 sends from DCST4 to `storescp` on the same computer give 288 received objects that match the manifest, in every syntax, and so does a 660 MB object. `storescu` sent the 214 uncompressed files. It could not send the compressed ones with the options used, since its negotiation settled on Explicit VR.
+- 80 sends from DCST4 to `storescp` on the same computer give 288 received objects that match the manifest, in every syntax, and so does a 660 MB object. `storescu` sent the 214 uncompressed files. It could not send the compressed ones with the options used, since its negotiation settled on Explicit VR.
 
 ## Dependencies
 
