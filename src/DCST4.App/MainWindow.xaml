@@ -195,6 +195,10 @@
                             <Label Grid.Row="3" Grid.Column="3" Content="Transfer syntax:"/>
                             <ComboBox Grid.Row="3" Grid.Column="4" ItemsSource="{Binding TransferSyntaxes}" SelectedItem="{Binding SelectedTransferSyntax, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"/>
 
+                            <Label Grid.Row="4" Content="Estimated size:"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding EstimatedSizeText}" Foreground="#FF505050" VerticalAlignment="Center"
+                                       ToolTip="The whole exam as sent or saved, not counting a DICOMDIR. For JPEG Lossless, one sample image is compressed and the result multiplied by the number of images."/>
+
                             <CheckBox Grid.Row="4" Grid.Column="4" Content="Allow fallback to Implicit VR" Margin="0,4,0,0"
                                       IsChecked="{Binding AllowFallback, Mode=TwoWay}" IsEnabled="{Binding FallbackIsRelevant}"
                                       ToolTip="Off: the run stops with an error if the server does not accept the selected syntax. On: send as Implicit VR instead, as a real modality would, and flag it."/>

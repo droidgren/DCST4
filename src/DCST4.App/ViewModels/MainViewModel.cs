@@ -29,10 +29,17 @@ namespace DCST4.ViewModels
     {
         private const int MaxLogLines = 5000;
         private const string StudyDateTimeFormat = "yyyy-MM-dd HH:mm:ss";
+        private const string NoSizeEstimate = "-";
+        private const int SizeMeasureDelayMs = 300;
 
         private readonly ILogger _logger = Log.ForContext<MainViewModel>();
         private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
         private readonly DispatcherTimer _logTimer;
+        private readonly DispatcherTimer _sizeTimer;
+        private CancellationTokenSource _sizeCts;
+        private int _sizeSequence;
+        private string _measuredSizeKey;
+        private long _measuredImageBytes;
         private CancellationTokenSource _cts;
         private int _previewSeed = Environment.TickCount;
         private string _previewStudyUid;
@@ -148,13 +155,17 @@ namespace DCST4.ViewModels
         public string TotalImagesText => $"{Math.Max(0, (long)_seriesCount * _imagesPerSeries)} images in total";
 
         private int _rows;
-        public int Rows { get => _rows; set { _rows = value; OnPropertyChanged(); Settings.Default.Rows = value; } }
+        public int Rows { get => _rows; set { _rows = value; OnPropertyChanged(); Settings.Default.Rows = value; RefreshSizeEstimate(); } }
 
         private int _columns;
-        public int Columns { get => _columns; set { _columns = value; OnPropertyChanged(); Settings.Default.Columns = value; } }
+        public int Columns { get => _columns; set { _columns = value; OnPropertyChanged(); Settings.Default.Columns = value; RefreshSizeEstimate(); } }
 
         private int _bitsStored;
-        public int BitsStored { get => _bitsStored; set { _bitsStored = value; OnPropertyChanged(); Settings.Default.BitsStored = value; } }
+        public int BitsStored { get => _bitsStored; set { _bitsStored = value; OnPropertyChanged(); Settings.Default.BitsStored = value; RefreshSizeEstimate(); } }
+
+        private string _estimatedSizeText = NoSizeEstimate;
+        /// <summary>The size of the whole exam, as shown in the Exam box.</summary>
+        public string EstimatedSizeText { get => _estimatedSizeText; private set { _estimatedSizeText = value; OnPropertyChanged(); } }
 
         private string _characterSet;
         /// <summary>As shown in the list and saved in the settings. <see cref="CharacterSetTagValue"/> is what goes in the image.</summary>
@@ -173,6 +184,7 @@ namespace DCST4.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(FallbackIsRelevant));
                 Settings.Default.TransferSyntax = value.Syntax.UID.UID;
+                RefreshSizeEstimate();
             }
         }
 
@@ -321,6 +333,9 @@ namespace DCST4.ViewModels
 
         public MainViewModel()
         {
+            _sizeTimer = new DispatcherTimer(DispatcherPriority.Normal, _dispatcher) { Interval = TimeSpan.FromMilliseconds(SizeMeasureDelayMs) };
+            _sizeTimer.Tick += async (s, e) => await MeasureSampleImageAsync();
+
             Action changed = RefreshPreview;
             PatientNameField = new IdentityFieldViewModel("Patient Name", "Surname^Firstname. Auto: invented Swedish name, sometimes with å, ä or ö.", changed);
             PatientIdField = new IdentityFieldViewModel("Patient ID", "Auto: from Skatteverket's official test personnummer.", changed);
@@ -534,6 +549,7 @@ namespace DCST4.ViewModels
                 // E.g. nobody on the list within the age range.
                 IdentityMessage = ex.Message;
                 _identity = null;
+                RefreshSizeEstimate();
                 return;
             }
 
@@ -570,6 +586,7 @@ namespace DCST4.ViewModels
                 problems.AddRange(ExamValidator.Warnings(new ExamRequest { Identity = _identity }));
             }
             IdentityMessage = problems.Count == 0 ? null : string.Join(" ", problems);
+            RefreshSizeEstimate();
         }
 
         private List<string> ReadOverrides(out IdentityOverrides overrides)
@@ -661,6 +678,103 @@ namespace DCST4.ViewModels
                 return new List<AdditionalTagSetting>();
             }
         }
+        #endregion
+
+        #region Size estimate
+        /// <summary>Updates the size in the Exam box. Series, images and the settings get here through <see cref="RefreshPreview"/>.</summary>
+        private void RefreshSizeEstimate()
+        {
+            if (_loading) return;
+
+            CancelSizeMeasurement();
+            var request = BuildRequest();
+            var uncompressed = ExamSizeEstimator.UncompressedImageBytes(request);
+            if (uncompressed == null)
+            {
+                EstimatedSizeText = NoSizeEstimate;
+                return;
+            }
+
+            var syntax = _selectedTransferSyntax.Syntax;
+            if (!syntax.IsEncapsulated)
+            {
+                ShowEstimate(uncompressed.Value, request);
+            }
+            else if (SizeKey(request, syntax) == _measuredSizeKey)
+            {
+                ShowEstimate(_measuredImageBytes, request);
+            }
+            else if (request.Identity == null)
+            {
+                ShowUpperLimit(uncompressed.Value, request);
+            }
+            else
+            {
+                EstimatedSizeText = "calculating...";
+                _sizeTimer.Start();
+            }
+        }
+
+        private void CancelSizeMeasurement()
+        {
+            _sizeTimer.Stop();
+            _sizeSequence++;
+            _sizeCts?.Cancel();
+        }
+
+        private async Task MeasureSampleImageAsync()
+        {
+            _sizeTimer.Stop();
+            var request = BuildRequest();
+            var syntax = _selectedTransferSyntax.Syntax;
+            var uncompressed = ExamSizeEstimator.UncompressedImageBytes(request);
+            if (uncompressed == null || request.Identity == null) return;
+
+            var sequence = ++_sizeSequence;
+            var cts = new CancellationTokenSource();
+            _sizeCts = cts;
+            long? measured = null;
+            try
+            {
+                measured = await Task.Run(() => ExamSizeEstimator.MeasureImageBytes(request, syntax, cts.Token), cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Whatever fo-dicom or a codec throws must not take the program down: this is only a figure on the screen.
+                _logger.Warning(ex, "Could not measure a sample image for the size estimate");
+            }
+            finally
+            {
+                if (ReferenceEquals(_sizeCts, cts)) _sizeCts = null;
+                cts.Dispose();
+            }
+
+            if (sequence != _sizeSequence) return;
+            if (measured == null)
+            {
+                ShowUpperLimit(uncompressed.Value, request);
+                return;
+            }
+
+            _measuredSizeKey = SizeKey(request, syntax);
+            _measuredImageBytes = measured.Value;
+            ShowEstimate(measured.Value, request);
+        }
+
+        private void ShowEstimate(long imageBytes, ExamRequest request) =>
+            EstimatedSizeText = "about " + ExamSizeEstimator.Format(imageBytes * request.TotalImages);
+
+        private void ShowUpperLimit(long imageBytes, ExamRequest request) =>
+            EstimatedSizeText = "at most " + ExamSizeEstimator.Format(imageBytes * request.TotalImages);
+
+        /// <summary>What the size of a compressed image depends on. The number of images is not part of it.</summary>
+        private static string SizeKey(ExamRequest request, FellowOakDicom.DicomTransferSyntax syntax) => string.Join("|",
+            request.Modality.Code, request.Rows, request.Columns, request.BitsStored, syntax.UID.UID,
+            request.BurnedInTags == null ? string.Empty : string.Join(",", request.BurnedInTags));
         #endregion
 
         #region Run

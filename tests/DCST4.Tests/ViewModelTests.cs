@@ -91,6 +91,8 @@ namespace DCST4.Tests
                     try
                     {
                         await RunAll(port, check);
+                        await RunSizeEstimate(port, check);
+                        RunHelpWindow(check);
                         await RunTestSuite(port, closedPort, temp, check);
                     }
                     catch (Exception ex) { failure = ex; }
@@ -580,6 +582,106 @@ namespace DCST4.Tests
         }
 
         /// <summary>The Tests tab, and that it gives the same result files as the command line.</summary>
+        private static async Task RunSizeEstimate(int port, Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nEstimated size");
+            var h = new Harness(port);
+            var vm = h.Vm;
+
+            Func<int, string> about = images => "about " + ExamSizeEstimator.Format((ExamSizeEstimator.HeaderBytes + 512 * 512 * 2) * images);
+            vm.Rows = 512;
+            vm.Columns = 512;
+            check("One image", vm.EstimatedSizeText == about(1), vm.EstimatedSizeText);
+            vm.SeriesCount = 4;
+            check("Follows the number of series", vm.EstimatedSizeText == about(4), vm.EstimatedSizeText);
+            vm.ImagesPerSeries = 10;
+            check("Follows the number of images", vm.EstimatedSizeText == about(40), vm.EstimatedSizeText);
+
+            vm.Rows = 10;
+            check("Out-of-range rows: no number", vm.EstimatedSizeText == "-", vm.EstimatedSizeText);
+            vm.Rows = 256;
+            check("Follows the rows", vm.EstimatedSizeText == "about " + ExamSizeEstimator.Format((ExamSizeEstimator.HeaderBytes + 256 * 512 * 2) * 40L), vm.EstimatedSizeText);
+            vm.Rows = 512;
+
+            vm.SelectedTransferSyntax = TransferSyntaxOption.JpegLossless;
+            check("JPEG Lossless: starts by calculating", vm.EstimatedSizeText == "calculating...", vm.EstimatedSizeText);
+
+            Func<Task> measured = async () =>
+            {
+                var sw = Stopwatch.StartNew();
+                while (vm.EstimatedSizeText == "calculating..." && sw.Elapsed < TimeSpan.FromSeconds(30)) await Task.Delay(20);
+            };
+            await measured();
+            var jpegForty = vm.EstimatedSizeText;
+            check("JPEG Lossless: reaches a size", jpegForty.StartsWith("about ", StringComparison.Ordinal) && jpegForty != about(40), jpegForty);
+
+            vm.SeriesCount = 8;
+            check("JPEG Lossless: the number of images needs no new sample", vm.EstimatedSizeText.StartsWith("about ", StringComparison.Ordinal) && vm.EstimatedSizeText != jpegForty, vm.EstimatedSizeText);
+
+            vm.Columns = 600;
+            check("JPEG Lossless: a new matrix needs a new sample", vm.EstimatedSizeText == "calculating...", vm.EstimatedSizeText);
+            vm.Columns = 512;
+            await measured();
+            check("JPEG Lossless: a change while waiting still ends in a size", vm.EstimatedSizeText.StartsWith("about ", StringComparison.Ordinal), vm.EstimatedSizeText);
+
+            vm.MinAge = 500;
+            vm.Rows = 256;
+            check("JPEG Lossless with no identity: the upper limit", vm.EstimatedSizeText.StartsWith("at most ", StringComparison.Ordinal), vm.EstimatedSizeText);
+            vm.MinAge = 0;
+            check("Identity back: measures again", vm.EstimatedSizeText == "calculating...", vm.EstimatedSizeText);
+            await measured();
+            vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
+            check("Back to uncompressed: calculated at once", vm.EstimatedSizeText == "about " + ExamSizeEstimator.Format((ExamSizeEstimator.HeaderBytes + 256 * 512 * 2) * 80L), vm.EstimatedSizeText);
+        }
+
+        private static void RunHelpWindow(Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nHelp window");
+            var help = new HelpWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000, ShowActivated = false, ShowInTaskbar = false };
+            help.Show();
+            help.UpdateLayout();
+            try
+            {
+                check("All the topics are listed", help.Topics.Count == 16, help.Topics.Count.ToString());
+                check("Topic titles are unique", help.Topics.Select(t => t.Title).Distinct().Count() == help.Topics.Count, null);
+                check("Estimated size is explained", new System.Windows.Documents.TextRange(help.Topics[2].Section.ContentStart, help.Topics[2].Section.ContentEnd).Text.Contains("Estimated size"), null);
+
+                var viewer = FindVisualChild<FlowDocumentScrollViewer>(help);
+                var scroller = FindVisualChild<ScrollViewer>(viewer);
+                check("The document has a scroll bar", scroller != null && scroller.ScrollableHeight > 0, null);
+
+                var last = -1.0;
+                var ascending = true;
+                foreach (var topic in help.Topics)
+                {
+                    help.ShowTopic(topic.Title);
+                    help.UpdateLayout();
+                    ascending &= scroller.VerticalOffset >= last;
+                    last = scroller.VerticalOffset;
+                }
+                check("Each topic scrolls further down the document", ascending && last > 0, last.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+                help.ShowTopic(help.Topics[0].Title);
+                help.UpdateLayout();
+                check("The first topic goes back to the top", scroller.VerticalOffset == 0, scroller.VerticalOffset.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+            finally
+            {
+                help.Close();
+            }
+        }
+
+        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                var found = child as T ?? FindVisualChild<T>(child);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
         private static async Task RunTestSuite(int port, int closedPort, string temp, Action<string, bool, string> check)
         {
             Console.WriteLine("\nTests tab");

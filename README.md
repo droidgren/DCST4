@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.5.1-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -19,6 +19,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Swedish names:** about 40% contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192. An empty Specific Character Set (Basic ASCII) is also available, and random names then lose their diacritics.
 - **Optional burned-in text:** turn on a text box in the pixels and choose which tags it shows, so you can compare them with the tags in the viewer. It is off by default.
 - **Configurable images:** number of series and images, matrix from 64 to 4096, and 8 to 16 bits stored as the modality allows.
+- **Estimated size:** the Exam box shows how much data the whole exam will be, and updates as you change the settings.
 - **Transfer syntaxes:** Implicit VR LE, Explicit VR LE, JPEG Lossless (Process 14 SV1).
 - **Full response logging:** status code, state, description, Error Comment, Offending Element and time for every image, including warnings and vendor-specific codes.
 - **Save to disk:** instead of, or in addition to, sending, as a DICOM File-set with a DICOMDIR that viewers can open.
@@ -56,12 +57,12 @@ The program is not digitally signed, so you may see a **Windows protected your P
 ## Usage
 
 1. Enter the server's AE title, host and port. Try **Ping** and **Dicom Echo**.
-2. On the **Exam** tab, select modality and exam type, and how many images you want. 1 series with 1 image gives a single test image.
+2. On the **Exam** tab, select modality and exam type, and how many images you want. 1 series with 1 image gives a single test image. **Estimated size** shows how much data that is. For Implicit and Explicit VR it is calculated. For JPEG Lossless, one sample image is compressed in the background and the result multiplied by the number of images. A saved File-set's DICOMDIR is not counted.
 3. Optionally, enter your own values on the **Identifiers** tab by unticking **Auto**.
 4. Click **Generate & Send** and follow each image in **Results**.
 5. Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text first.
 
-F1 in the program opens the help.
+F1 in the program opens the help, with a list of topics on the left.
 
 ### When Auto values change
 
@@ -310,7 +311,7 @@ src\DCST4.Core\     No WPF reference
     Objects\        Objects without pixels: SR, KOS, GSPS, PDF, RT Structure Set
     Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
   TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
-  Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary
+  Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary, ExamSizeEstimator
   Network\          Ping, C-ECHO, C-STORE, AssociationTimeline, AssociationNegotiation
   Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
   Output\           DICOM File-set and DICOMDIR
@@ -439,6 +440,16 @@ A comparison with Orthanc has not been done, since it was not available.
 | Capability matrix of a run         | Next to its result files, as `<run>-capability.json` and `.csv` |
 
 ## Changelog
+
+### 1.5.1
+
+New:
+
+- Estimated size in the Exam box, which updates as the number of series and images, matrix, bit depth, modality or transfer syntax changes. For JPEG Lossless, one sample image is compressed in the background
+
+Changed:
+
+- The help is rewritten, with a list of topics on the left as in DMWLT4, and new topics on the connection, settings, troubleshooting and keyboard shortcuts
 
 ### 1.5.0
 

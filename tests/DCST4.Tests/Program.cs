@@ -108,6 +108,7 @@ namespace DCST4.Tests
                 TestValidation();
                 TestGeneration();
                 TestPixelDataSizes(temp);
+                TestSizeEstimate();
                 TestManualOverrides();
                 TestJpegRoundTrip();
                 TestAdditionalTags();
@@ -668,6 +669,79 @@ namespace DCST4.Tests
             Check("Catalog: the default keywords are the saved form", BurnedInTagCatalog.Format(BurnedInTagCatalog.Default) != null && BurnedInTagCatalog.Parse(BurnedInTagCatalog.DefaultKeywords).Count == 8);
             Check("Catalog: unknown keywords are ignored", BurnedInTagCatalog.Parse("PatientID;Nonsense;Rows").SequenceEqual(new[] { DicomTag.PatientID }));
             Check("Catalog: a blank setting selects nothing", BurnedInTagCatalog.Parse(string.Empty).Count == 0 && BurnedInTagCatalog.Parse(null).Count == 0);
+        }
+
+        private static long SavedBytes(ExamRequest request, DicomTransferSyntax syntax)
+        {
+            long total = 0;
+            foreach (var image in new ExamGenerator(request).GetImages(CancellationToken.None))
+            {
+                using (var stream = new MemoryStream())
+                {
+                    TransferSyntaxConverter.Convert(image.File, syntax).Save(stream);
+                    total += stream.Length;
+                }
+            }
+            return total;
+        }
+
+        private static void TestSizeEstimate()
+        {
+            Console.WriteLine("\nSize estimate");
+            const long headerTolerance = 300;
+
+            foreach (var syntax in new[] { DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.ExplicitVRLittleEndian })
+            {
+                foreach (var modality in ModalityCatalog.All)
+                {
+                    var request = MakeRequest(modality.Code, rows: 128, columns: 128);
+                    var estimate = ExamSizeEstimator.UncompressedImageBytes(request).Value;
+                    var actual = SavedBytes(request, syntax);
+                    Check($"{modality.Code} {syntax.UID.Name}: estimate matches a real file", Math.Abs(estimate - actual) <= headerTolerance, $"estimated {estimate}, real {actual}");
+                }
+            }
+
+            var exam = MakeRequest("CT", series: 3, images: 4, rows: 128, columns: 128);
+            var total = ExamSizeEstimator.UncompressedImageBytes(exam).Value * exam.TotalImages;
+            var realTotal = SavedBytes(exam, DicomTransferSyntax.ExplicitVRLittleEndian);
+            Check("Total follows series x images", Math.Abs(total - realTotal) <= headerTolerance * exam.TotalImages, $"estimated {total}, real {realTotal}");
+
+            Check("16 bits allocated: two bytes per pixel", ExamSizeEstimator.UncompressedImageBytes(MakeRequest("CT")) == ExamSizeEstimator.HeaderBytes + 64 * 64 * 2, null);
+            Check("Odd 8-bit pixel count is padded", ExamSizeEstimator.UncompressedImageBytes(MakeRequest("DX", rows: 65, columns: 65, bits: 8)) == ExamSizeEstimator.HeaderBytes + 65 * 65 + 1, null);
+
+            var usMultiFrame = new UsMultiFrameProfile();
+            Check("RGB and frames count", ExamSizeEstimator.UncompressedImageBytes(new ExamRequest { Modality = usMultiFrame, Rows = 64, Columns = 64, BitsStored = 8, FramesPerImage = 2 }) == ExamSizeEstimator.HeaderBytes + 64 * 64 * 3 * 2, null);
+            var segmentation = new SegmentationProfile();
+            Check("Binary mask: one bit per pixel", ExamSizeEstimator.UncompressedImageBytes(new ExamRequest { Modality = segmentation, Rows = 65, Columns = 64, BitsStored = segmentation.BitDepths[0], FramesPerImage = 3 }) == ExamSizeEstimator.HeaderBytes + 65 * 64 * 3 / 8, null);
+
+            Check("Too few rows: no estimate", ExamSizeEstimator.UncompressedImageBytes(MakeRequest(rows: 63)) == null, null);
+            Check("Too many columns: no estimate", ExamSizeEstimator.UncompressedImageBytes(MakeRequest(columns: 4097)) == null, null);
+            Check("No series: no estimate", ExamSizeEstimator.UncompressedImageBytes(MakeRequest(series: 0)) == null, null);
+            Check("No images: no estimate", ExamSizeEstimator.UncompressedImageBytes(MakeRequest(images: 0)) == null, null);
+            Check("Too many images: no estimate", ExamSizeEstimator.UncompressedImageBytes(MakeRequest(series: 100001)) == null, null);
+            Check("Bit depth the modality does not allow: no estimate", ExamSizeEstimator.UncompressedImageBytes(MakeRequest(bits: 3)) == null, null);
+
+            var jpeg = MakeRequest("CT", images: 5, rows: 256, columns: 256);
+            var sampled = ExamSizeEstimator.MeasureImageBytes(jpeg, DicomTransferSyntax.JPEGProcess14SV1, CancellationToken.None) * jpeg.TotalImages;
+            var compressed = SavedBytes(jpeg, DicomTransferSyntax.JPEGProcess14SV1);
+            Check("JPEG Lossless: one sample gives the total within 25%", Math.Abs(sampled - compressed) <= compressed / 4, $"estimated {sampled}, real {compressed}");
+            Check("JPEG Lossless: smaller than uncompressed", compressed < ExamSizeEstimator.UncompressedImageBytes(jpeg).Value * jpeg.TotalImages, compressed.ToString(CultureInfo.InvariantCulture));
+
+            var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            var threw = false;
+            try { ExamSizeEstimator.MeasureImageBytes(jpeg, DicomTransferSyntax.JPEGProcess14SV1, cancelled.Token); }
+            catch (OperationCanceledException) { threw = true; }
+            Check("A cancelled measurement stops", threw, null);
+
+            const long kilobyte = 1024, megabyte = kilobyte * 1024, gigabyte = megabyte * 1024;
+            Check("Format: bytes", ExamSizeEstimator.Format(999) == "999 bytes", ExamSizeEstimator.Format(999));
+            Check("Format: 1 KB", ExamSizeEstimator.Format(kilobyte) == "1 KB", ExamSizeEstimator.Format(kilobyte));
+            Check("Format: KB", ExamSizeEstimator.Format(850 * kilobyte) == "850 KB", ExamSizeEstimator.Format(850 * kilobyte));
+            Check("Format: just under 1 MB rounds up to MB", ExamSizeEstimator.Format(megabyte - 1) == "1.0 MB", ExamSizeEstimator.Format(megabyte - 1));
+            Check("Format: MB", ExamSizeEstimator.Format(megabyte * 524 / 10) == "52.4 MB", ExamSizeEstimator.Format(megabyte * 524 / 10));
+            Check("Format: just under 1 GB rounds up to GB", ExamSizeEstimator.Format(gigabyte - 1) == "1.0 GB", ExamSizeEstimator.Format(gigabyte - 1));
+            Check("Format: GB", ExamSizeEstimator.Format(gigabyte * 13 / 10) == "1.3 GB", ExamSizeEstimator.Format(gigabyte * 13 / 10));
         }
 
         private static void TestPixelDataSizes(string temp)
