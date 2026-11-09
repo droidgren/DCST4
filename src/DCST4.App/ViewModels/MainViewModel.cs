@@ -1,3 +1,4 @@
+using DCST4.Core.Capability;
 using DCST4.Core.Generation;
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Network;
@@ -824,6 +825,9 @@ namespace DCST4.ViewModels
             // Let the rows queued by the background thread land before the summary replaces the status.
             await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
 
+            var matrix = report.Results.Select(r => r.CapabilityMatrix).FirstOrDefault(m => m != null);
+            if (matrix != null) TestSuite.Capabilities.Show(matrix);
+
             LastRunText = string.Join(", ", report.Summary.Where(p => p.Value > 0).Select(p => $"{p.Key} {p.Value}"));
             var ending = report.Cancelled ? "Tests cancelled." : "Tests finished.";
             try
@@ -835,6 +839,39 @@ namespace DCST4.ViewModels
             {
                 _logger.Error(ex, "Could not write the test results to {folder}", folder);
                 StatusText = $"{ending} The results could not be saved: {ex.Message}";
+            }
+        }
+
+        /// <summary>Writes the matrix on the Capabilities tab as JSON or as CSV.</summary>
+        public void SaveCapabilityMatrix(string path, bool asCsv)
+        {
+            var matrix = TestSuite.Capabilities.Matrix;
+            if (matrix == null) return;
+            try
+            {
+                if (asCsv) matrix.SaveCsv(path);
+                else matrix.SaveJson(path);
+                StatusText = $"Capability matrix saved to {path}";
+            }
+            catch (CapabilityFileException ex)
+            {
+                _logger.Error(ex, "Could not save the capability matrix to {path}", path);
+                ShowMessage(ex.Message, MessageBoxImage.Warning, null);
+            }
+        }
+
+        /// <summary>Loads what a vendor's Conformance Statement claims, and compares the matrix with it.</summary>
+        public void LoadClaimedCapabilities(string path)
+        {
+            try
+            {
+                TestSuite.Capabilities.SetClaimed(CapabilityMatrix.Load(path));
+                StatusText = $"Claims loaded from {path}";
+            }
+            catch (CapabilityFileException ex)
+            {
+                _logger.Warning(ex, "Could not load the claims from {path}", path);
+                ShowMessage(ex.Message, MessageBoxImage.Warning, null);
             }
         }
 

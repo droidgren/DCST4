@@ -90,7 +90,11 @@ namespace DCST4.Core.Network
         private static readonly ILogger Logger = Log.ForContext(typeof(EchoService));
 
         /// <param name="timeline">Receives the protocol steps of this association, if given.</param>
-        public static async Task<ConnectivityResult> EchoAsync(DicomEndpoint endpoint, NetworkOptions options, CancellationToken token, AssociationTimeline timeline = null)
+        /// <param name="configure">
+        /// Called with the client and the request before the association opens, so that a negotiation test can decide what is
+        /// proposed. fo-dicom adds the request's own context first, then the client's additional contexts.
+        /// </param>
+        public static async Task<ConnectivityResult> EchoAsync(DicomEndpoint endpoint, NetworkOptions options, CancellationToken token, AssociationTimeline timeline = null, Action<IDicomClient, DicomCEchoRequest> configure = null)
         {
             Logger.Information("C-ECHO -> {calledAe} at {host}:{port} from {callingAe}", endpoint.CalledAe, endpoint.Host, endpoint.Port, endpoint.CallingAe);
 
@@ -113,6 +117,7 @@ namespace DCST4.Core.Network
                 timeline?.Attach(client);
 
                 var request = new DicomCEchoRequest();
+                configure?.Invoke(client, request);
                 DicomStatus echoStatus = null;
                 ushort? rawStatus = null;
                 var associationAccepted = false;

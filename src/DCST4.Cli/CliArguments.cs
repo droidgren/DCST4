@@ -15,7 +15,7 @@ namespace DCST4.Cli
             "  DCST4.Cli.exe list-codecs [--log-dir <folder>]\n" +
             "  DCST4.Cli.exe --version\n" +
             "\n" +
-            "  --tests            Comma-separated test ids or categories, for example c-echo or Capability.\n" +
+            "  --tests            Comma-separated test ids or categories, for example c-echo, negotiation-probe or Capability.\n" +
             "  --log-dir          Where to write the log. Default: %LocalAppData%\\DCST4\\Logs\n" +
             "  --patient-naming   RegistrySwedishName (default) or MarkedTestName, which gives DCST4^TEST^<number>.\n" +
             "\n" +

@@ -82,6 +82,7 @@ namespace DCST4.ViewModels
 
         public ObservableCollection<TestChoice> Choices { get; } = new ObservableCollection<TestChoice>();
         public ObservableCollection<TestResultRow> Rows { get; } = new ObservableCollection<TestResultRow>();
+        public CapabilityViewModel Capabilities { get; } = new CapabilityViewModel();
 
         public IReadOnlyList<ITestCase> SelectedTests => Choices.Where(c => c.IsSelected).Select(c => c.Test).ToList();
 

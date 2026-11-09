@@ -36,6 +36,9 @@ namespace DCST4.Core.Testing
     {
         public string Json { get; set; }
         public string Csv { get; set; }
+        /// <summary>Null when the run has no capability matrix.</summary>
+        public string CapabilityJson { get; set; }
+        public string CapabilityCsv { get; set; }
     }
 
     /// <summary>
@@ -68,6 +71,15 @@ namespace DCST4.Core.Testing
             var paths = new ResultFilePaths { Json = unique + ".json", Csv = unique + ".csv" };
             File.WriteAllText(paths.Json, ToJson(report), Utf8NoBom);
             File.WriteAllText(paths.Csv, ToCsv(report), Utf8NoBom);
+
+            var matrix = report.Results.Select(r => r.CapabilityMatrix).FirstOrDefault(m => m != null);
+            if (matrix != null)
+            {
+                paths.CapabilityJson = unique + "-capability.json";
+                paths.CapabilityCsv = unique + "-capability.csv";
+                File.WriteAllText(paths.CapabilityJson, matrix.ToJson(), Utf8NoBom);
+                File.WriteAllText(paths.CapabilityCsv, matrix.ToCsv(), Utf8NoBom);
+            }
             return paths;
         }
 
@@ -101,7 +113,7 @@ namespace DCST4.Core.Testing
         private static string Time(DateTime value) => value.ToString(TimeFormat, CultureInfo.InvariantCulture);
         private static string Pairs(IDictionary<string, string> values) => string.Join(";", values.Select(p => p.Key + "=" + p.Value));
 
-        private static void AppendRow(StringBuilder text, IEnumerable<string> values)
+        internal static void AppendRow(StringBuilder text, IEnumerable<string> values)
         {
             text.Append(string.Join(",", values.Select(Quote))).Append("\r\n");
         }

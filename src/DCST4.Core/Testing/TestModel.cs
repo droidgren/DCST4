@@ -1,7 +1,9 @@
+using DCST4.Core.Capability;
 using DCST4.Core.Network;
 using DCST4.Core.TestData;
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -72,6 +74,9 @@ namespace DCST4.Core.Testing
         public SortedDictionary<string, string> Uids { get; set; } = new SortedDictionary<string, string>(StringComparer.Ordinal);
         public SortedDictionary<string, string> Details { get; set; } = new SortedDictionary<string, string>(StringComparer.Ordinal);
         public List<ProtocolEvent> Timeline { get; set; } = new List<ProtocolEvent>();
+        /// <summary>Only set by the negotiation probe.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CapabilityMatrix CapabilityMatrix { get; set; }
     }
 
     /// <summary>
@@ -115,7 +120,8 @@ namespace DCST4.Core.Testing
     /// <summary>A whole test run: what is written to the result files.</summary>
     public sealed class TestRunReport
     {
-        public const int CurrentSchemaVersion = 1;
+        /// <summary>2: added the capability matrix and the association number on protocol events.</summary>
+        public const int CurrentSchemaVersion = 2;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ToolVersion { get; set; }

@@ -526,7 +526,7 @@ namespace DCST4.Tests
             var rows = ParseCsv(csv);
             check("CSV: one row per result", rows.Count == 3, rows.Count.ToString());
             check("CSV: every row has every column", rows.All(r => r.Count == rows[0].Count), null);
-            check("CSV: schema and tool version", CsvValue(csv, "schema_version") == "1" && CsvValue(csv, "tool_version") == ProductInfo.Version, null);
+            check("CSV: schema and tool version", CsvValue(csv, "schema_version") == TestRunReport.CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture) && CsvValue(csv, "tool_version") == ProductInfo.Version, null);
             check("CSV: profile on each row", CsvValue(csv, "host", 2) == "127.0.0.1" && CsvValue(csv, "called_ae", 2) == "MOCKSCP" && CsvValue(csv, "uid_root", 2) == "1.2.3", null);
             check("CSV: start and end time", CsvValue(csv, "run_started_utc").EndsWith("Z") && CsvValue(csv, "run_ended_utc").EndsWith("Z"), CsvValue(csv, "run_started_utc"));
             check("CSV: result and raw status", CsvValue(csv, "result") == "PASS" && CsvValue(csv, "status_codes") == "C-ECHO=0x0000", CsvValue(csv, "status_codes"));
@@ -609,8 +609,14 @@ namespace DCST4.Tests
             check("The log has Core's messages", logText.Contains("C-ECHO ->") && logText.Contains("[DCST4.Core.Network.EchoService]"), logText);
             check("The log has fo-dicom's messages", logText.Contains("A-ASSOCIATE") || logText.Contains("Association"), null);
 
+            // The negative tests expect a refusal, so this SCP only knows the profile's own AE titles.
+            Scp.RejectWhen = (association, number) => association.CallingAE == "DCST4" && association.CalledAE == "MOCKSCP" ? null : new ScpRejection();
+            Scp.ContextTable = new ScpContextTable { Default = ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported) };
+            Scp.ContextTable.Set(DicomUID.Verification, ScpAnswer.Accept);
             var byCategory = await RunCli("run", "--profile", profilePath, "--tests", "Capability", "--out", Path.Combine(folder, "category"), "--log-dir", logs);
-            check("Tests can be selected by category", byCategory.ExitCode == 0 && byCategory.Output.Contains("c-echo: PASS"), byCategory.Output);
+            Scp.RejectWhen = null;
+            Scp.ContextTable = null;
+            check("Tests can be selected by category", byCategory.ExitCode == 0 && byCategory.Output.Contains("c-echo: PASS") && byCategory.Output.Contains("negotiation-unknown-calling-ae: EXPECTED_FAILURE"), byCategory.Output);
 
             var closedPath = Path.Combine(folder, "closed.json");
             MockProfile(closedPort).Save(closedPath);

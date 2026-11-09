@@ -186,6 +186,11 @@ namespace DCST4.Cli
                 var files = ResultFileWriter.Write(report, outputFolder);
                 Console.WriteLine("JSON: " + files.Json);
                 Console.WriteLine("CSV:  " + files.Csv);
+                if (files.CapabilityJson != null)
+                {
+                    Console.WriteLine("Capability matrix: " + files.CapabilityJson);
+                    Console.WriteLine("Capability matrix: " + files.CapabilityCsv);
+                }
             }
             catch (Exception ex) when (IsFileProblem(ex))
             {
