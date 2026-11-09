@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.2.1-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.2.2-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -254,6 +254,12 @@ DCMTK has no IOD validator, so this does not prove that every attribute an IOD r
 | Log, kept for 7 days | `%LocalAppData%\DCST4\Logs\`       |
 
 ## Changelog
+
+### 1.2.2
+
+Fixed:
+
+- A shortcut pinned to Start is now kept when the program is updated with the MSI. The update from an earlier version may still lose the pin once
 
 ### 1.2.1
 

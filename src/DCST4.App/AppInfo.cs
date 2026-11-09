@@ -13,6 +13,9 @@ namespace DCST4
         /// <summary>GitHub's answer to "what is the newest release", which leaves out drafts and prereleases.</summary>
         public const string LatestReleaseApiUrl = "https://api.github.com/repos/droidgren/DCST4/releases/latest";
 
+        /// <summary>What Windows knows the program by. Must match the ID the installer puts on the Start menu shortcut.</summary>
+        public const string AppUserModelId = "VGR.DCST4";
+
         public static string CurrentVersion
         {
             get
