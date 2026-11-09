@@ -12,7 +12,7 @@ namespace DCST4
         public UpdateAvailableWindow(UpdateCheckResult update, string currentVersion)
         {
             InitializeComponent();
-            VersionText.Text = $"Version {update.LatestVersion} is available. You have {currentVersion}.";
+            VersionText.Text = $"Version {update.LatestVersion} is available. ({currentVersion} is installed)";
             ReleaseLink.NavigateUri = update.ReleaseUri;
 
             var notes = ReleaseNotesText.ToPlainText(update.ReleaseNotes);
