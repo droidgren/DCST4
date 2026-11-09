@@ -1,4 +1,5 @@
 using DCST4.Core.Generation;
+using DCST4.Core.TestData;
 using DCST4.Models;
 using DCST4.Properties;
 using FellowOakDicom;
@@ -47,6 +48,8 @@ namespace DCST4
             LogDimseDatasets.IsChecked = s.Client_LogDimseDatasets;
             LogDataPDUs.IsChecked = s.Client_LogDataPDUs;
             NewValuesAfterRun.IsChecked = s.NewValuesAfterRun;
+            TestPatientNames.TryParse(s.TestPatientNaming, out var patientNaming);
+            TestPatientNaming.SelectedValue = patientNaming.ToString();
             BurnInText.IsChecked = s.BurnInText;
             ShowUpdateWindowAtStartup.IsChecked = s.ShowUpdateWindowAtStartup;
 
@@ -92,6 +95,7 @@ namespace DCST4
             s.Client_LogDimseDatasets = LogDimseDatasets.IsChecked == true;
             s.Client_LogDataPDUs = LogDataPDUs.IsChecked == true;
             s.NewValuesAfterRun = NewValuesAfterRun.IsChecked == true;
+            s.TestPatientNaming = (string)TestPatientNaming.SelectedValue;
             s.BurnInText = BurnInText.IsChecked == true;
             s.ShowUpdateWindowAtStartup = ShowUpdateWindowAtStartup.IsChecked == true;
             s.BurnInTags = BurnedInTagCatalog.Format(_burnInTags.Where(c => c.IsChecked).Select(c => c.Tag));

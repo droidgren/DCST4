@@ -72,6 +72,7 @@ namespace DCST4.Core.Output
                     var file = DicomFile.Open(path, FileReadOption.SkipLargeTags);
                     var entry = directory.AddFile(file, fileId);
                     AddCharacterSet(file.Dataset, entry);
+                    SetRecordType(file.Dataset, entry);
                     count++;
                 }
                 catch (Exception ex) when (ex is DicomException || ex is IOException || ex is InvalidOperationException || ex is ArgumentException || ex is UnauthorizedAccessException)
@@ -102,6 +103,43 @@ namespace DCST4.Core.Output
             foreach (var record in new DicomDirectoryRecord[] { entry.PatientRecord, entry.StudyRecord, entry.SeriesRecord, entry.InstanceRecord })
             {
                 record?.AddOrUpdate(DicomTag.SpecificCharacterSet, characterSet);
+            }
+        }
+
+        /// <summary>
+        /// fo-dicom knows the record types for images, reports and presentation states. Anything else it files as an IMAGE,
+        /// which a viewer would then try to open as one, so these get their own type and the keys it requires (PS3.3 F.5).
+        /// </summary>
+        private static void SetRecordType(DicomDataset source, DicomDirectoryEntry entry)
+        {
+            var sopClass = source.GetSingleValueOrDefault(DicomTag.SOPClassUID, string.Empty);
+            string recordType;
+            DicomTag[] keys;
+            if (sopClass == DicomUID.KeyObjectSelectionDocumentStorage.UID)
+            {
+                recordType = "KEY OBJECT DOC";
+                keys = new[] { DicomTag.InstanceNumber, DicomTag.ContentDate, DicomTag.ContentTime, DicomTag.ConceptNameCodeSequence };
+            }
+            else if (sopClass == DicomUID.EncapsulatedPDFStorage.UID)
+            {
+                recordType = "ENCAP DOC";
+                keys = new[] { DicomTag.InstanceNumber, DicomTag.ContentDate, DicomTag.ContentTime, DicomTag.ConceptNameCodeSequence, DicomTag.DocumentTitle, DicomTag.MIMETypeOfEncapsulatedDocument };
+            }
+            else if (sopClass == DicomUID.RTStructureSetStorage.UID)
+            {
+                recordType = "RT STRUCTURE SET";
+                keys = new[] { DicomTag.InstanceNumber, DicomTag.StructureSetLabel, DicomTag.StructureSetDate, DicomTag.StructureSetTime };
+            }
+            else
+            {
+                return;
+            }
+
+            entry.InstanceRecord.AddOrUpdate(DicomTag.DirectoryRecordType, recordType);
+            foreach (var key in keys)
+            {
+                var item = source.GetDicomItem<DicomItem>(key);
+                if (item != null) entry.InstanceRecord.AddOrUpdate(item);
             }
         }
 

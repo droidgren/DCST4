@@ -25,6 +25,18 @@ namespace DCST4.Core.Generation
         public static string FromDisplayName(string displayName) => displayName == EmptyDisplayName ? Empty : displayName;
     }
 
+    /// <summary>The UIDs another object needs in order to point at an image.</summary>
+    public sealed class ReferencedImage
+    {
+        public string SopClassUid { get; set; }
+        public string SopInstanceUid { get; set; }
+        public string SeriesInstanceUid { get; set; }
+        public string StudyInstanceUid { get; set; }
+        public string FrameOfReferenceUid { get; set; }
+        public int Rows { get; set; }
+        public int Columns { get; set; }
+    }
+
     /// <summary>What to generate: one exam with fully resolved identity values.</summary>
     public sealed class ExamRequest
     {
@@ -42,6 +54,14 @@ namespace DCST4.Core.Generation
         public string CharacterSet { get; set; } = DicomCharacterSets.Latin1;
         /// <summary>The tags to burn into the image. Null or empty means no text box.</summary>
         public IReadOnlyList<DicomTag> BurnedInTags { get; set; }
+        /// <summary>Random UIDs unless a run must be reproducible.</summary>
+        public IUidSource Uids { get; set; } = GeneratedUidSource.Instance;
+        /// <summary>Frames in each image. More than one only where the modality is multi-frame.</summary>
+        public int FramesPerImage { get; set; } = 1;
+        /// <summary>Added to the Series Number and Acquisition Number, when an earlier series in the study has the first number.</summary>
+        public int SeriesNumberOffset { get; set; }
+        /// <summary>The image a derived object such as a segmentation refers to. Null if it refers to none.</summary>
+        public ReferencedImage SourceImage { get; set; }
 
         public int BitsAllocated => BitsStored <= 8 ? 8 : 16;
         public int TotalImages => SeriesCount * ImagesPerSeries;
@@ -65,6 +85,8 @@ namespace DCST4.Core.Generation
             if (request.SeriesCount < 1) errors.Add("Number of series must be at least 1.");
             if (request.ImagesPerSeries < 1) errors.Add("Images per series must be at least 1.");
             if ((long)request.SeriesCount * request.ImagesPerSeries > MaxTotalImages) errors.Add($"A run can have at most {MaxTotalImages} images.");
+            if (request.FramesPerImage < 1) errors.Add("Frames per image must be at least 1.");
+            if (request.Modality != null && request.FramesPerImage > 1 && !request.Modality.IsMultiFrame) errors.Add($"{request.Modality.DisplayName} images have one frame.");
             if (request.Rows < ExamRequest.MinMatrix || request.Rows > ExamRequest.MaxMatrix) errors.Add($"Rows must be between {ExamRequest.MinMatrix} and {ExamRequest.MaxMatrix}.");
             if (request.Columns < ExamRequest.MinMatrix || request.Columns > ExamRequest.MaxMatrix) errors.Add($"Columns must be between {ExamRequest.MinMatrix} and {ExamRequest.MaxMatrix}.");
             if (request.Modality != null && !request.Modality.BitDepths.Contains(request.BitsStored))

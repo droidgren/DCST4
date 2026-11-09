@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.4.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -25,6 +25,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
 - **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). The first test is C-ECHO, and each run is saved as JSON and CSV for comparison over time. See [Testing a PACS](#testing-a-pacs).
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
+- **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, Enhanced CT and MR, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
 
 
 ## Install
@@ -183,6 +184,37 @@ Each run writes `DCST4-run-<UTC time>.json` with full detail and a `.csv` with o
 
 Two identical runs differ only in the times and durations, from the program or the command line alike.
 
+## Test datasets
+
+The test suite works with datasets that can be generated again, unlike Generate & Send, where every run gets new UIDs and the current date. `DCST4.Cli.exe generate` writes a dataset as a DICOM File-set with a DICOMDIR and a `manifest.json`:
+
+```powershell
+DCST4.Cli.exe list-datasets
+DCST4.Cli.exe generate --dataset enhanced-ct --out C:\Temp\enhanced --seed 42 --frames 20
+```
+
+| Option                                                                | Meaning                                                                                                           |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `--dataset`                                                           | A profile from `list-datasets`                                                                                    |
+| `--seed`                                                              | Everything that varies follows from this. Default 1                                                               |
+| `--uid-root`                                                          | UIDs start with this root. Without it they are `2.25.` and a value hashed from the seed and counters              |
+| `--patient-naming`                                                    | `RegistrySwedishName` (default) or `MarkedTestName`, which gives `DCST4^TEST^<number>`                            |
+| `--patients` `--studies` `--series` `--instances`                     | How many. Default 1 of each                                                                                       |
+| `--rows` `--columns` `--bits` `--frames`                              | The image. The profile's own values if left out                                                                   |
+| `--transfer-syntax`                                                   | `explicit` (default), `implicit`, or a name from `list-codecs`, or a Transfer Syntax UID                          |
+| `--charset`                                                           | `default`, or `empty`, `latin1` or `utf8` with å, ä, ö, Å, Ä and Ö in the patient name and the descriptions       |
+| `--edge`                                                              | `private`, `long` or `nested`, separated by commas: private tags, values at maximum length, sequences three deep  |
+
+Assume that a PACS cannot delete what it receives, and keep the volumes small. `tomosynthesis-large`, about 700 MB per object, only runs when asked for by name.
+
+**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name can be a Swedish name or `DCST4^TEST^<number>`, chosen with `--patient-naming` or on the Identifiers tab of **File > Settings**. That setting does not affect Generate & Send, and it has no visible effect in the program until a test on the Tests tab uses datasets.
+
+**What is guaranteed:** the same seed, parameters, personnummer list and reference date give byte-identical files, within one DCST4 version, one fo-dicom and PureCodecs version, and the same Windows GDI+ and Consolas rendering. On another computer the UIDs, names and all non-pixel attributes still match, and the pixels match only if the rendering does. `manifest.json` records these versions. The reference date is fixed, so the same request gives the same result on any day.
+
+**The manifest** holds, for each object, the SOP Class and Instance UID, the transfer syntax, a SHA-256 of the whole file, a SHA-256 of each frame and a normalized hash of the other attributes. The frame hashes are taken from the raw frames before any encoding, so that no decoder is involved. The normalized hash leaves out the file meta group, Specific Character Set, Pixel Data, VRs and private sequences, and compares text as Unicode, so it survives a change of transfer syntax or character set. Private sequences are left out because Implicit VR returns them as unreadable bytes. The whole-file hash still covers them. An object that refers to an image, such as a Key Object Selection, gets one small CT image of its own first, marked `source-image` in the manifest.
+
+**Compressed variants** are tried per bit depth, since PureCodecs is pre-1.0. `list-codecs` shows what works on this computer. What cannot be produced is reported as unavailable in the output and the manifest, and is not an error. JPEG Baseline is 8-bit only and JPEG Extended at most 12-bit. A lossy variant has Lossy Image Compression `01` with ratio and method, and Image Type `DERIVED`.
+
 ## Generated tags
 
 | Group      | Values                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -220,7 +252,10 @@ The list holds future dates and people born in the 1890s, so random selection on
 ```
 src\DCST4.Core\     No WPF reference
   Generation\       Exam request, identity, modality profiles, pixel renderer, image builder
-  TestData\         Test personnummer, names, identifiers
+    Modalities\     ModalityCatalog (Generate & Send) and MultiFrameProfiles (datasets only)
+    Objects\        Objects without pixels: SR, KOS, GSPS, PDF, RT Structure Set
+    Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
+  TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
   Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary
   Network\          Ping, C-ECHO, C-STORE, AssociationTimeline, AssociationNegotiation
   Output\           DICOM File-set and DICOMDIR
@@ -245,7 +280,11 @@ Generation knows nothing about sending. The two meet at `IImageSource`, which su
 | Storage Commitment                                           | `RunSummary.Results` keeps each image's SOP Class and Instance UID.                                |
 | MPPS                                                         | `ExamRequest` holds the study and series identity. `Network\` gets a new service.                  |
 
-To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog`.
+To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog`. An image type only for datasets goes in `DatasetProfileCatalog` instead, so that it stays out of the Generate & Send list. A non-image object subclasses `ObjectProfile`.
+
+`TestDatasetGenerator` is an `IImageSource`, so its objects go through `StoreRun` like any others. It composes `ExamGenerator` with an `IUidSource`: `GeneratedUidSource` is the default, and `DeterministicUidSource` derives UIDs from the root, seed and counters. Every parameter that changes the data is part of the hashed context, so two variants never share a SOP Instance UID on a PACS. Each object leaves the generator in its final syntax, so a run must use `TestDatasetGenerator.TransferSyntax`. The manifest and the hashes (`ManifestHashes`, `NormalizedAttributes`) are what Phase 4 uses to verify integrity.
+
+Pixel Data of `tomosynthesis-large` comes from `RenderedFramesBuffer`, which draws each frame when it is read and keeps only the latest in memory, so a 700 MB object takes little more than one frame of heap. A dataset has one or two SOP classes, since `StoreService` negotiates from its first window of images.
 
 
 ## Reporting Bugs & Feature Requests
@@ -282,6 +321,7 @@ The test tool can feed other DICOM software:
 
 ```powershell
 # Every exam type, bit depth and transfer syntax as files. The same image in each syntax, so pixels can be compared.
+# The datasets folder inside it holds every dataset profile, character set, edge case and codec variant.
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe matrix C:\Temp\matrix
 
 # File-sets with a DICOMDIR: every modality in both character sets, uncompressed and JPEG
@@ -301,14 +341,16 @@ Version 1.0.0 was checked once by hand with DCMTK 3.7.0. This is not part of `ru
 
 DCMTK has no IOD validator, so this does not prove that every attribute an IOD requires is present. Those are checked against a list in the tests, not by an outside tool.
 
+The dataset profiles added in 1.4.0 have not been checked with DCMTK. To do so, run `matrix` and then `dcmftest` and `dcmdump` on the `datasets` folder.
+
 ## Dependencies
 
 | Package                  | Use                                                          | Licence    |
 | ------------------------ | ------------------------------------------------------------ | ---------- |
 | fo-dicom 5.2.6           | DICOM                                                        | MS-PL      |
-| FoDicom.PureCodecs 0.5.1 | JPEG Lossless encoder. Managed code, no native DLL. Pre-1.0. | MS-PL      |
+| FoDicom.PureCodecs 0.5.1 | JPEG, JPEG-LS, JPEG 2000, HTJ2K and RLE. Managed code, no native DLL. Pre-1.0. | MS-PL      |
 | Serilog                  | Logging                                                      | Apache-2.0 |
-| System.Text.Json         | Target profiles and result files. Comes with fo-dicom.       | MIT        |
+| System.Text.Json         | Target profiles, result files and manifests. Comes with fo-dicom. | MIT        |
 
 ## Files
 
@@ -320,6 +362,20 @@ DCMTK has no IOD validator, so this does not prove that every attribute an IOD r
 | Test results from the command line | The folder given with `--out`                                  |
 
 ## Changelog
+
+### 1.4.0
+
+New:
+
+- Reproducible test datasets: `DCST4.Cli.exe generate` writes a named dataset from a seed as a File-set with a DICOMDIR, and `list-datasets` and `list-codecs` show what is available
+- Dataset profiles for CT, MR, CR, DX, US, XA, RF, MG, PT and NM, US multi-frame, Secondary Capture, Enhanced CT, Enhanced MR, a large Breast Tomosynthesis object, Basic Text SR, Key Object Selection, Grayscale Softcopy Presentation State, Encapsulated PDF, Segmentation and RT Structure Set
+- Variants: character sets with Swedish letters, private tags, values at maximum length, nested sequences, and JPEG, JPEG-LS, JPEG 2000, HTJ2K and RLE compression. What the encoders cannot produce is reported as unavailable
+- A manifest with the SHA-256 of each file and each raw frame, and a normalized hash of the attributes
+- Setting for how test-suite datasets name the patient, on the Identifiers tab of File > Settings and as `--patient-naming`. It does not affect Generate & Send
+
+Changed:
+
+- Objects without pixels can pass through a run and into a DICOMDIR, with the record type their SOP class requires
 
 ### 1.3.0
 

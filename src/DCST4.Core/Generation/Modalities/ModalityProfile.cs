@@ -1,3 +1,4 @@
+using DCST4.Core.TestData;
 using FellowOakDicom;
 using System;
 using System.Collections.Generic;
@@ -82,6 +83,15 @@ namespace DCST4.Core.Generation.Modalities
         public int Rows { get; set; }
         public int Columns { get; set; }
         public int BitsStored { get; set; }
+        /// <summary>Frames in this image, 1 for a single-frame image.</summary>
+        public int Frames { get; set; } = 1;
+        /// <summary>For UIDs inside the object, such as a Dimension Organization UID.</summary>
+        public IUidSource Uids { get; set; }
+        public string FrameOfReferenceUid { get; set; }
+        /// <summary>The image a derived object refers to. Null if it refers to none.</summary>
+        public ReferencedImage SourceImage { get; set; }
+        /// <summary>When the image was made, for the attributes of an enhanced object.</summary>
+        public DateTime ContentTime { get; set; }
     }
 
     /// <summary>
@@ -110,6 +120,21 @@ namespace DCST4.Core.Generation.Modalities
 
         /// <summary>A stack in the patient coordinate system: the images get Frame of Reference and Patient Position.</summary>
         public virtual bool UsesFrameOfReference => false;
+
+        /// <summary>1 for grayscale, 3 for RGB. RGB images are 8 bits per sample.</summary>
+        public virtual int SamplesPerPixel => 1;
+
+        /// <summary>The image can have more than one frame.</summary>
+        public virtual bool IsMultiFrame => false;
+
+        /// <summary>Window and rescale go in the functional groups instead of at the top level.</summary>
+        public virtual bool UsesFunctionalGroups => false;
+
+        /// <summary>One bit per pixel, as in a binary segmentation.</summary>
+        public virtual bool IsBinaryMask => false;
+
+        /// <summary>Frames are drawn when they are written, so that the whole object is never in memory at once.</summary>
+        public virtual bool RendersFramesOnDemand => false;
 
         public virtual string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY" };
 

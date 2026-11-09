@@ -1,3 +1,4 @@
+using DCST4.Core.TestData;
 using System;
 using System.Collections.Generic;
 
@@ -8,11 +9,22 @@ namespace DCST4.Cli
     {
         public const string Usage =
             "Usage:\n" +
-            "  DCST4.Cli.exe run --profile <file> --tests <ids|category|all> --out <folder> [--log-dir <folder>]\n" +
+            "  DCST4.Cli.exe run --profile <file> --tests <ids|category|all> --out <folder> [--patient-naming <name>] [--log-dir <folder>]\n" +
+            "  DCST4.Cli.exe generate --dataset <id> --out <folder> [options below]\n" +
+            "  DCST4.Cli.exe list-datasets\n" +
+            "  DCST4.Cli.exe list-codecs [--log-dir <folder>]\n" +
             "  DCST4.Cli.exe --version\n" +
             "\n" +
-            "  --tests     Comma-separated test ids or categories, for example c-echo or Capability.\n" +
-            "  --log-dir   Where to write the log. Default: %LocalAppData%\\DCST4\\Logs\n" +
+            "  --tests            Comma-separated test ids or categories, for example c-echo or Capability.\n" +
+            "  --log-dir          Where to write the log. Default: %LocalAppData%\\DCST4\\Logs\n" +
+            "  --patient-naming   RegistrySwedishName (default) or MarkedTestName, which gives DCST4^TEST^<number>.\n" +
+            "\n" +
+            "Options of generate:\n" +
+            "  --seed <n>  --uid-root <root>  --patients <n>  --studies <n>  --series <n>  --instances <n>\n" +
+            "  --rows <n>  --columns <n>  --bits <n>  --frames <n>\n" +
+            "  --transfer-syntax <name or UID>   explicit (default), implicit, or a name from list-codecs\n" +
+            "  --charset default|empty|latin1|utf8\n" +
+            "  --edge private,long,nested\n" +
             "\n" +
             "Exit codes: 0 no FAIL or TOOL_ERROR, 1 at least one of those, 2 bad arguments, profile or output folder, 130 cancelled.";
 
@@ -20,6 +32,10 @@ namespace DCST4.Cli
         public string Tests { get; private set; }
         public string OutputFolder { get; private set; }
         public string LogFolder { get; private set; }
+        public TestPatientNaming PatientNaming { get; private set; } = TestPatientNaming.RegistrySwedishName;
+
+        public static string PatientNamingError(string value) =>
+            $"Unknown patient naming '{value}'. Use {nameof(TestPatientNaming.RegistrySwedishName)} or {nameof(TestPatientNaming.MarkedTestName)}.";
 
         /// <summary>Returns null and sets <paramref name="error"/> if the arguments after "run" are not usable.</summary>
         public static CliArguments Parse(IReadOnlyList<string> args, out string error)
@@ -43,6 +59,14 @@ namespace DCST4.Cli
                     case "--tests": parsed.Tests = value; break;
                     case "--out": parsed.OutputFolder = value; break;
                     case "--log-dir": parsed.LogFolder = value; break;
+                    case "--patient-naming":
+                        if (!TestPatientNames.TryParse(value, out var naming))
+                        {
+                            error = PatientNamingError(value);
+                            return null;
+                        }
+                        parsed.PatientNaming = naming;
+                        break;
                     default:
                         error = $"Unknown option {name}.";
                         return null;

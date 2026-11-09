@@ -1,5 +1,6 @@
 using DCST4.Core;
 using DCST4.Core.Generation;
+using DCST4.Core.Generation.Datasets;
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Network;
 using DCST4.Core.Pipeline;
@@ -126,6 +127,7 @@ namespace DCST4.Tests
                     TestFaults().GetAwaiter().GetResult();
                     TestSaving(temp).GetAwaiter().GetResult();
                     TestAdditionalTagDelivery(temp).GetAwaiter().GetResult();
+                    TestDataTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     ViewModelTests.Run(Port, ClosedPort, temp, (name, ok, detail) => Check(name, ok, detail));
                 }
                 TestTls().GetAwaiter().GetResult();
@@ -1773,6 +1775,81 @@ namespace DCST4.Tests
                 }
             }
             Console.WriteLine($"Wrote {count} files to {folder}");
+            WriteDatasetProfiles(Path.Combine(folder, "datasets"));
+        }
+
+        /// <summary>The test-suite dataset profiles and their variants, small enough to check by hand with another toolkit.</summary>
+        private static void WriteDatasetProfiles(string folder)
+        {
+            Directory.CreateDirectory(folder);
+            var count = 0;
+
+            Action<string, TestDatasetRequest> write = (name, request) =>
+            {
+                var generator = new TestDatasetGenerator(request);
+                if (generator.IsUnavailable)
+                {
+                    Console.WriteLine($"Unavailable: {name}: {generator.Manifest.Unavailable[0].Reason}");
+                    return;
+                }
+
+                var index = 0;
+                foreach (var image in generator.GetImages(CancellationToken.None))
+                {
+                    image.File.Save(Path.Combine(folder, $"{name}_{++index}.dcm"));
+                    count++;
+                }
+            };
+
+            Func<string, TestDatasetRequest> small = id =>
+            {
+                var image = DatasetProfileCatalog.Find(id).Image;
+                return new TestDatasetRequest
+                {
+                    ProfileId = id,
+                    Rows = image != null ? 256 : 0,
+                    Columns = image != null ? 256 : 0,
+                    Frames = image != null && image.IsMultiFrame ? 4 : 0,
+                };
+            };
+
+            foreach (var profile in DatasetProfileCatalog.All) write(profile.Id, small(profile.Id));
+
+            foreach (var variant in new[] { CharacterSetVariant.EmptyAscii, CharacterSetVariant.Latin1Swedish, CharacterSetVariant.Utf8Swedish })
+            {
+                foreach (var naming in new[] { TestPatientNaming.RegistrySwedishName, TestPatientNaming.MarkedTestName })
+                {
+                    var request = small("ct");
+                    request.CharacterSet = variant;
+                    request.PatientNaming = naming;
+                    write($"charset_{variant}_{naming}", request);
+                }
+            }
+
+            foreach (var syntax in CompressionCatalog.Uncompressed.Select(c => c.Syntax))
+            {
+                var request = small("ct");
+                request.TransferSyntax = syntax;
+                request.EdgeCases = EdgeCases.PrivateTags | EdgeCases.LongStrings | EdgeCases.NestedSequences;
+                write($"edge_{syntax.UID.UID}", request);
+            }
+
+            foreach (var choice in CompressionCatalog.Compressed)
+            {
+                foreach (var bits in new[] { 8, 12, 16 })
+                {
+                    var request = small("cr");
+                    request.BitsStored = bits;
+                    request.TransferSyntax = choice.Syntax;
+                    write($"codec_{choice.Id}_{bits}bit", request);
+                }
+
+                var rgb = small("secondary-capture");
+                rgb.TransferSyntax = choice.Syntax;
+                write($"codec_{choice.Id}_rgb", rgb);
+            }
+
+            Console.WriteLine($"Wrote {count} dataset files to {folder}");
         }
 
         /// <summary>

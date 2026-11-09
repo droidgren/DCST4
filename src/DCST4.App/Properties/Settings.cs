@@ -93,6 +93,10 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("False")]
         public bool NewValuesAfterRun { get => (bool)this[nameof(NewValuesAfterRun)]; set => this[nameof(NewValuesAfterRun)] = value; }
 
+        /// <summary>How test-suite datasets name the patient: a TestPatientNaming name. Does not affect Generate &amp; Send.</summary>
+        [UserScopedSetting, DefaultSettingValue("RegistrySwedishName")]
+        public string TestPatientNaming { get => (string)this[nameof(TestPatientNaming)]; set => this[nameof(TestPatientNaming)] = value; }
+
         /// <summary>Tags added on top of the fixed identifier fields, serialized as XML.</summary>
         [UserScopedSetting, DefaultSettingValue("")]
         public string AdditionalTags { get => (string)this[nameof(AdditionalTags)]; set => this[nameof(AdditionalTags)] = value; }

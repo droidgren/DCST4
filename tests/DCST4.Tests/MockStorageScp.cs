@@ -119,7 +119,7 @@ namespace DCST4.Tests
             {
                 Dataset = request.Dataset.Clone(),
                 Syntax = request.Dataset.InternalTransferSyntax,
-                Frame = DicomPixelData.Create(request.Dataset).GetFrame(0).Data.ToArray(),
+                Frame = request.Dataset.Contains(DicomTag.PixelData) ? DicomPixelData.Create(request.Dataset).GetFrame(0).Data.ToArray() : null,
                 CalledAe = _calledAe,
                 CallingAe = _callingAe,
             });

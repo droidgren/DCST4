@@ -49,6 +49,14 @@
                     <CheckBox x:Name="NewValuesAfterRun" Content="Draw new Auto values after each run"/>
                     <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
                                Text="When off, Auto values stay until you click New values or restart the program, so the exam is easy to find in PACS. Another run with the same values adds a new series to the same study."/>
+
+                    <Label Margin="0,14,0,0" Padding="0,0,0,4" Content="Patient name in test-suite datasets:"/>
+                    <ComboBox x:Name="TestPatientNaming" SelectedValuePath="Tag" HorizontalAlignment="Left" MinWidth="280">
+                        <ComboBoxItem Tag="RegistrySwedishName" Content="Swedish name"/>
+                        <ComboBoxItem Tag="MarkedTestName" Content="Marked test name (DCST4^TEST^number)"/>
+                    </ComboBox>
+                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#FF505050"
+                               Text="Only for the datasets the test suite generates. Generate &amp; Send is not affected. The Patient ID comes from the list of test personnummer in both cases. No test on the Tests tab uses datasets yet, so this has no visible effect until one does."/>
                 </StackPanel>
             </TabItem>
 
