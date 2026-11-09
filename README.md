@@ -151,6 +151,10 @@ A test run is a set of tests against one destination. The result of each test is
 
 Open the **Tests** tab below the exam settings, tick the tests and click **Run tests**. They run against the destination entered under Server. Select a row to see its explanation and protocol timeline. **Cancel** stops the run, and what was finished is still saved.
 
+The row below the buttons holds the local AE title and port that C-MOVE sends to, the UID root of the objects the tests send, and the transfer syntax of the store tests.
+
+![The Tests tab after a run against the mock SCP](screenshots/tests.png)
+
 ### On the command line
 
 **Save profile as JSON...** on the Tests tab writes the destination to a file, or you can write one yourself. Only `endpoint` is required:
@@ -196,6 +200,8 @@ The test `negotiation-probe` asks the PACS what it supports without sending a si
 An association can hold at most 128 presentation contexts, so the probe splits the work over several associations, 5 by default. Each one is opened with a C-ECHO, whose context takes one of the 128 places. A last association asks about SCP/SCU role selection for the storage classes and extended negotiation for Query/Retrieve. It is separate so that a PACS that objects to those cannot affect the matrix.
 
 The result is on the **Capabilities** tab, with one row per SOP class and one column per syntax, and is saved next to the result files as `<run>-capability.json` and `.csv`. The tab can also save it on its own.
+
+![The Capabilities tab with the matrix of SOP classes and transfer syntaxes](screenshots/capabilities.png)
 
 | Cell result                  | Meaning                                                                |
 | ---------------------------- | ---------------------------------------------------------------------- |
@@ -264,7 +270,9 @@ These tests prove, per object type, that what the PACS accepted can be found, ca
 
 **The transfer syntax** of each store test is chosen per object type: your choice if you made one and the object type allows it, then the first of Explicit VR, Implicit VR and the lossless compressions that the capability matrix says is accepted, otherwise Explicit VR. The matrix comes from `negotiation-probe` in the same run, the Capabilities tab, or `--matrix <file>`. Each store result records in `transferSyntaxSelectedBy` what chose it. A status of Success or Warning is `PASS`, a warning with its raw code. A refused object is `FAIL`, and `0x0122` or a context that was not accepted is `NOT_SUPPORTED`.
 
-**The Chain tab**, the `chain` section of the JSON file and `<run>-chain.csv` give one row per object type, with one result each for accepted, indexed, retrievable and intact, and a place for committed, which stays empty until Storage Commitment exists.
+**The Chain tab**, the `chain` section of the JSON file and `<run>-chain.csv` give one row per object type, with one result each for accepted, indexed, retrievable and intact, and a place for committed, which stays empty until Storage Commitment exists. Select a row to see the explanation of each step and, per retrieve, each integrity level and what differed.
+
+![The Chain tab, with one row per object type and the details of the selected row](screenshots/chain.png)
 
 **C-MOVE** makes the PACS connect back to this computer. Add the local AE title (`localScpAe` in the profile, default `DCST4`) on the PACS with this computer's address and the port (`localScpPort`, default 11113), and allow incoming TCP on the port. A PACS that does not know the AE title answers `0xA801`. One that knows it and cannot reach us gets an explanation that names the port and Windows Defender Firewall, a common cause on Windows. In these cases `retrieve-cmove` is `INDETERMINATE`, since it says nothing about the PACS, and `retrieve-cmove-diagnostic` is `FAIL`, so `DCST4.Cli.exe` exits with 1. A port that is already in use is `TOOL_ERROR`. The listener does not use TLS, even if the profile does.
 
@@ -318,7 +326,7 @@ DCST4.Cli.exe generate --dataset enhanced-ct --out C:\Temp\enhanced --seed 42 --
 
 Assume that a PACS cannot delete what it receives, and keep the volumes small. `tomosynthesis-large`, about 700 MB per object, only runs when asked for by name.
 
-**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name can be a Swedish name or `DCST4^TEST^<number>`, chosen with `--patient-naming` or on the Identifiers tab of **File > Settings**. That setting does not affect Generate & Send, and it has no visible effect in the program until a test on the Tests tab uses datasets.
+**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name can be a Swedish name or `DCST4^TEST^<number>`, chosen with `--patient-naming` or on the Identifiers tab of **File > Settings**. That setting does not affect Generate & Send. It applies to the objects that the store, query and duplicate tests on the Tests tab send.
 
 **What is guaranteed:** the same seed, parameters, personnummer list and reference date give byte-identical files, within one DCST4 version, one fo-dicom and PureCodecs version, and the same Windows GDI+ and Consolas rendering. On another computer the UIDs, names and all non-pixel attributes still match, and the pixels match only if the rendering does. `manifest.json` records these versions. The reference date is fixed, so the same request gives the same result on any day.
 

@@ -164,7 +164,7 @@ namespace DCST4.Core.Verification
         {
             if (set.ExpectedCount == set.ReturnedCount && set.Missing.Count == 0 && set.Extra.Count == 0 && unreadable.Count == 0)
             {
-                return Level(IntegrityLevel.Transport, TestResultClass.PASS, $"All {Int(set.ExpectedCount)} instances came back.");
+                return Level(IntegrityLevel.Transport, TestResultClass.PASS, $"{Int(set.ExpectedCount)} of {Int(set.ExpectedCount)} instances came back.");
             }
 
             var parts = new List<string> { $"{Int(set.ReturnedCount)} of {Int(set.ExpectedCount)} instances came back." };
