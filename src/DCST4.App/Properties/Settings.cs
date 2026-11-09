@@ -113,6 +113,17 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool ShowUpdateWindowAtStartup { get => (bool)this[nameof(ShowUpdateWindowAtStartup)]; set => this[nameof(ShowUpdateWindowAtStartup)] = value; }
 
+        // ------------------------------------------------------------ Tests
+        /// <summary>The AE title a PACS must know this computer by, for C-MOVE.</summary>
+        [UserScopedSetting, DefaultSettingValue("DCST4")]
+        public string LocalScpAe { get => (string)this[nameof(LocalScpAe)]; set => this[nameof(LocalScpAe)] = value; }
+
+        [UserScopedSetting, DefaultSettingValue("11113")]
+        public int LocalScpPort { get => (int)this[nameof(LocalScpPort)]; set => this[nameof(LocalScpPort)] = value; }
+
+        /// <summary>UIDs in test datasets start with this root.</summary>
+        [UserScopedSetting, DefaultSettingValue("2.25")]
+        public string TestUidRoot { get => (string)this[nameof(TestUidRoot)]; set => this[nameof(TestUidRoot)] = value; }
         // ------------------------------------------------------------ Output
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool SendImages { get => (bool)this[nameof(SendImages)]; set => this[nameof(SendImages)] = value; }

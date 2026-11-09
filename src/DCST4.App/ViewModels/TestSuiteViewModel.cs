@@ -33,6 +33,21 @@ namespace DCST4.ViewModels
         }
     }
 
+    /// <summary>One entry in the list of what the store tests send in.</summary>
+    public sealed class StoreSyntaxChoice
+    {
+        public StoreSyntaxChoice(string name, FellowOakDicom.DicomTransferSyntax syntax)
+        {
+            Name = name;
+            Syntax = syntax;
+        }
+
+        public string Name { get; }
+        /// <summary>Null chooses per object type.</summary>
+        public FellowOakDicom.DicomTransferSyntax Syntax { get; }
+        public override string ToString() => Name;
+    }
+
     /// <summary>One result in the grid on the Tests tab.</summary>
     public sealed class TestResultRow
     {
@@ -83,6 +98,19 @@ namespace DCST4.ViewModels
         public ObservableCollection<TestChoice> Choices { get; } = new ObservableCollection<TestChoice>();
         public ObservableCollection<TestResultRow> Rows { get; } = new ObservableCollection<TestResultRow>();
         public CapabilityViewModel Capabilities { get; } = new CapabilityViewModel();
+        public ChainSummaryViewModel Chain { get; } = new ChainSummaryViewModel();
+
+        /// <summary>What the store tests send in. The first choice leaves it to the capability matrix, per object type.</summary>
+        public IReadOnlyList<StoreSyntaxChoice> StoreSyntaxChoices { get; } =
+            new[] { new StoreSyntaxChoice("Per object type (capability matrix)", null) }
+                .Concat(DCST4.Core.Pipeline.TransferSyntaxOption.All.Select(o => new StoreSyntaxChoice(o.Name, o.Syntax))).ToList();
+
+        private StoreSyntaxChoice _selectedStoreSyntax;
+        public StoreSyntaxChoice SelectedStoreSyntax
+        {
+            get => _selectedStoreSyntax ?? StoreSyntaxChoices[0];
+            set { _selectedStoreSyntax = value; OnPropertyChanged(); }
+        }
 
         public IReadOnlyList<ITestCase> SelectedTests => Choices.Where(c => c.IsSelected).Select(c => c.Test).ToList();
 

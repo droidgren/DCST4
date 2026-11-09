@@ -26,6 +26,7 @@ namespace DCST4.Core.Testing.Cases
         {
             var outcome = await NegotiationProbe.RunAsync(context.Profile, _options, token).ConfigureAwait(false);
             var matrix = outcome.Matrix;
+            context.Session.Matrix = matrix;
 
             var result = new TestResult
             {

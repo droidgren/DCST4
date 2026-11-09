@@ -49,6 +49,8 @@ namespace DCST4.Core.Pipeline
         public bool AllowFallback { get; set; }
         public DicomEndpoint Endpoint { get; set; }
         public NetworkOptions Network { get; set; } = new NetworkOptions();
+        /// <summary>Records the protocol steps of the send, if given.</summary>
+        public AssociationTimeline Timeline { get; set; }
 
         /// <summary>Returns the first problem with these options, or null if they are valid.</summary>
         public string Validate()
@@ -77,6 +79,8 @@ namespace DCST4.Core.Pipeline
         public double ImagesPerSecond { get; set; }
         public bool WasCancelled { get; set; }
         public string FatalError { get; set; }
+        /// <summary>What kind of thing <see cref="FatalError"/> was.</summary>
+        public ConnectivityFailure FailureKind { get; set; }
         public int AssociationCount { get; set; }
         public string NegotiationSummary { get; set; }
         /// <summary>Set when images went out in another syntax than selected because fallback was allowed.</summary>
@@ -142,7 +146,7 @@ namespace DCST4.Core.Pipeline
                         var endpoint = _options.Endpoint.Trimmed();
                         Logger.Information("Run started: {count} images to {called} at {host}:{port} from {calling}, proposing {syntax}",
                             _source.ExpectedCount, endpoint.CalledAe, endpoint.Host, endpoint.Port, endpoint.CallingAe, _options.TransferSyntax.UID.Name);
-                        send = await new StoreService().SendAsync(endpoint, _options.Network, prepared, _options.AllowFallback, Complete, token).ConfigureAwait(false);
+                        send = await new StoreService().SendAsync(endpoint, _options.Network, prepared, _options.AllowFallback, Complete, token, _options.Timeline).ConfigureAwait(false);
                     }
                     else
                     {
@@ -172,6 +176,7 @@ namespace DCST4.Core.Pipeline
                 catch (Exception ex)
                 {
                     send.FatalError = NetworkErrors.GetUserMessage(ex);
+                    send.FailureKind = ConnectivityFailure.LocalConfiguration;
                     Logger.Error(ex, "Run stopped: {reason}", send.FatalError);
                 }
 
@@ -265,6 +270,7 @@ namespace DCST4.Core.Pipeline
                 Elapsed = elapsed,
                 WasCancelled = send.Cancelled,
                 FatalError = send.FatalError,
+                FailureKind = send.FailureKind,
                 AssociationCount = send.AssociationCount,
                 NegotiationSummary = send.NegotiationSummary,
                 FallbackWarning = send.FallbackWarning,

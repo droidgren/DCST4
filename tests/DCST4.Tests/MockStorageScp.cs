@@ -2,6 +2,7 @@ using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.Network;
+using FellowOakDicom.Network.Client;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
@@ -87,6 +88,42 @@ namespace DCST4.Tests
         public DicomRejectReason Reason = DicomRejectReason.CalledAENotRecognized;
     }
 
+    public enum DuplicatePolicy { Overwrite, KeepFirst, Reject }
+
+    public enum ConflictPolicy { Keep, Reject, ReconcileToFirst }
+
+    /// <summary>One object the mock holds, for C-FIND, C-GET and C-MOVE.</summary>
+    public sealed class ArchivedObject
+    {
+        public DicomDataset Dataset;
+        public string PatientId => Dataset.GetSingleValueOrDefault(DicomTag.PatientID, string.Empty);
+        public string StudyUid => Dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, string.Empty);
+        public string SeriesUid => Dataset.GetSingleValueOrDefault(DicomTag.SeriesInstanceUID, string.Empty);
+        public string SopUid => Dataset.GetSingleValueOrDefault(DicomTag.SOPInstanceUID, string.Empty);
+    }
+
+    /// <summary>An already known list as the asynchronous sequence that fo-dicom's providers return. C# 7.3 has no async iterators.</summary>
+    internal sealed class ResponseList<T> : IAsyncEnumerable<T>
+    {
+        private readonly IReadOnlyList<T> _items;
+
+        public ResponseList(IReadOnlyList<T> items) { _items = items; }
+
+        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default(CancellationToken)) => new Enumerator(_items);
+
+        private sealed class Enumerator : IAsyncEnumerator<T>
+        {
+            private readonly IReadOnlyList<T> _items;
+            private int _index = -1;
+
+            public Enumerator(IReadOnlyList<T> items) { _items = items; }
+
+            public T Current => _items[_index];
+            public ValueTask<bool> MoveNextAsync() => new ValueTask<bool>(++_index < _items.Count);
+            public ValueTask DisposeAsync() => default(ValueTask);
+        }
+    }
+
     /// <summary>Behaviour and records of the mock SCP. Static because fo-dicom creates the service instances itself.</summary>
     public static class Scp
     {
@@ -120,6 +157,26 @@ namespace DCST4.Tests
         /// <summary>The application information to answer per SOP class, or null to leave that item unanswered.</summary>
         public static Func<string, byte[]> ExtendedReply;
 
+        // ------------------------------------------------------------ what it does with what it stores
+        /// <summary>Keep what is stored, so that it can be queried and retrieved. Off by default, so that a long send does not fill the memory.</summary>
+        public static bool KeepStored;
+        public static readonly List<ArchivedObject> Archive = new List<ArchivedObject>();
+        public static DuplicatePolicy Duplicates;
+        public static ConflictPolicy Conflicts;
+        /// <summary>Applied to each object as it goes out on C-GET or C-MOVE. Return null to leave the object out.</summary>
+        public static Func<DicomFile, DicomFile> OnRetrieve;
+        /// <summary>Not found by C-FIND, as a system that has not indexed it. Keyed by SOP Instance UID.</summary>
+        public static Func<string, bool> HideFromQuery;
+        /// <summary>Dropped from every C-FIND response.</summary>
+        public static readonly HashSet<DicomTag> DropReturnKeys = new HashSet<DicomTag>();
+        /// <summary>Answer C-FIND with this final status and no matches.</summary>
+        public static DicomStatus QueryStatus;
+        public static bool QueryCaseInsensitive;
+        /// <summary>Accept C-GET storage contexts with this syntax, as a system that transcodes on retrieve.</summary>
+        public static DicomTransferSyntax RetrieveSyntax;
+        /// <summary>Where C-MOVE sends to, by AE title. An AE title that is not here gets 0xA801.</summary>
+        public static readonly Dictionary<string, Tuple<string, int>> MoveDestinations = new Dictionary<string, Tuple<string, int>>(StringComparer.Ordinal);
+
         public static int AssociationCount;
         public static int EchoCount;
         public static int StoreCount;
@@ -148,6 +205,17 @@ namespace DCST4.Tests
             MaxPduLength = 0;
             RoleReply = null;
             ExtendedReply = null;
+            KeepStored = false;
+            lock (Archive) Archive.Clear();
+            Duplicates = DuplicatePolicy.Overwrite;
+            Conflicts = ConflictPolicy.Keep;
+            OnRetrieve = null;
+            HideFromQuery = null;
+            DropReturnKeys.Clear();
+            QueryStatus = null;
+            QueryCaseInsensitive = false;
+            RetrieveSyntax = null;
+            MoveDestinations.Clear();
             AssociationCount = 0;
             EchoCount = 0;
             StoreCount = 0;
@@ -157,7 +225,7 @@ namespace DCST4.Tests
         }
     }
 
-    public sealed class MockStorageScp : DicomService, IDicomServiceProvider, IDicomCStoreProvider, IDicomCEchoProvider
+    public sealed class MockStorageScp : DicomService, IDicomServiceProvider, IDicomCStoreProvider, IDicomCEchoProvider, IDicomCFindProvider, IDicomCGetProvider, IDicomCMoveProvider
     {
         private static readonly uint DefaultMaxPdu = new DicomServiceOptions().MaxPDULength;
         private static readonly MethodInfo SetUserRole = typeof(DicomPresentationContext).GetProperty(nameof(DicomPresentationContext.UserRole)).GetSetMethod(true);
@@ -226,6 +294,7 @@ namespace DCST4.Tests
                 Scp.Proposed.Enqueue(string.Join(",", context.GetTransferSyntaxes().Select(t => t.UID.UID)));
                 if (Scp.ContextTable == null) context.AcceptTransferSyntaxes(Scp.AcceptedSyntaxes);
                 else if (ApplyTable(context)) unanswered.Add(context);
+                if (Scp.RetrieveSyntax != null && context.ProviderRole == true) context.SetResult(DicomPresentationContextResult.Accept, Scp.RetrieveSyntax);
                 ApplyRoleReply(context);
             }
             foreach (var context in unanswered) association.PresentationContexts.Remove(context);
@@ -306,12 +375,217 @@ namespace DCST4.Tests
             if (Scp.HangFromImage >= 0 && index >= Scp.HangFromImage) await Task.Delay(TimeSpan.FromSeconds(30));
             if (Scp.ResponseDelayMs > 0) await Task.Delay(Scp.ResponseDelayMs);
 
-            var status = Scp.StatusFor?.Invoke(index) ?? DicomStatus.Success;
+            var status = Scp.StatusFor?.Invoke(index) ?? (Scp.KeepStored ? Archive(request.Dataset) : DicomStatus.Success);
             var response = new DicomCStoreResponse(request, status);
             if (Scp.OffendingElement != null && status != DicomStatus.Success) response.Command.AddOrUpdate(DicomTag.OffendingElement, Scp.OffendingElement.Value);
             return response;
         }
 
         public Task OnCStoreRequestExceptionAsync(string tempFileName, Exception e) => Task.CompletedTask;
+
+        // ---------------------------------------------------------------- what it keeps
+
+        private static DicomStatus Archive(DicomDataset received)
+        {
+            var dataset = received.Clone();
+            var sop = dataset.GetSingleValueOrDefault(DicomTag.SOPInstanceUID, string.Empty);
+            var study = dataset.GetSingleValueOrDefault(DicomTag.StudyInstanceUID, string.Empty);
+            var patient = dataset.GetSingleValueOrDefault(DicomTag.PatientID, string.Empty);
+
+            lock (Scp.Archive)
+            {
+                var same = Scp.Archive.FirstOrDefault(a => a.SopUid == sop);
+                if (same != null)
+                {
+                    if (Scp.Duplicates == DuplicatePolicy.Reject) return DicomStatus.DuplicateSOPInstance;
+                    if (Scp.Duplicates == DuplicatePolicy.KeepFirst) return DicomStatus.Success;
+                    same.Dataset = dataset;
+                    return DicomStatus.Success;
+                }
+
+                var inStudy = Scp.Archive.FirstOrDefault(a => a.StudyUid == study);
+                if (inStudy != null && inStudy.PatientId != patient)
+                {
+                    if (Scp.Conflicts == ConflictPolicy.Reject) return DicomStatus.StorageDataSetDoesNotMatchSOPClassError;
+                    if (Scp.Conflicts == ConflictPolicy.ReconcileToFirst)
+                    {
+                        dataset.AddOrUpdate(DicomTag.PatientID, inStudy.PatientId);
+                        dataset.AddOrUpdate(DicomTag.PatientName, inStudy.Dataset.GetSingleValueOrDefault(DicomTag.PatientName, string.Empty));
+                    }
+                }
+
+                Scp.Archive.Add(new ArchivedObject { Dataset = dataset });
+                return DicomStatus.Success;
+            }
+        }
+
+        private static List<ArchivedObject> Select(DicomDataset identifier)
+        {
+            lock (Scp.Archive)
+            {
+                return Scp.Archive.Where(a => Matches(a.Dataset, identifier)).ToList();
+            }
+        }
+
+        private static bool Matches(DicomDataset stored, DicomDataset identifier)
+        {
+            foreach (var key in identifier)
+            {
+                if (key.Tag == DicomTag.QueryRetrieveLevel || key.Tag == DicomTag.SpecificCharacterSet || !(key is DicomElement element) || element.Buffer.Size == 0) continue;
+
+                var wanted = identifier.GetString(key.Tag);
+                if (string.IsNullOrEmpty(wanted)) continue;
+                if (!stored.TryGetString(key.Tag, out var value)) return false;
+
+                var ok = key.ValueRepresentation == DicomVR.DA ? InDateRange(value, wanted) : WildcardMatch(value.TrimEnd(' ', '\0'), wanted);
+                if (!ok) return false;
+            }
+            return true;
+        }
+
+        private static bool InDateRange(string value, string range)
+        {
+            if (!range.Contains("-")) return value == range;
+            var parts = range.Split('-');
+            return (parts[0].Length == 0 || string.CompareOrdinal(value, parts[0]) >= 0) && (parts[1].Length == 0 || string.CompareOrdinal(value, parts[1]) <= 0);
+        }
+
+        private static bool WildcardMatch(string value, string pattern)
+        {
+            var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
+            var options = Scp.QueryCaseInsensitive ? System.Text.RegularExpressions.RegexOptions.IgnoreCase : System.Text.RegularExpressions.RegexOptions.None;
+            return System.Text.RegularExpressions.Regex.IsMatch(value, regex, options);
+        }
+
+        // ---------------------------------------------------------------- C-FIND
+
+        public IAsyncEnumerable<DicomCFindResponse> OnCFindRequestAsync(DicomCFindRequest request)
+        {
+            var responses = new List<DicomCFindResponse>();
+            var patientRoot = request.SOPClassUID == DicomUID.PatientRootQueryRetrieveInformationModelFind;
+
+            if (Scp.QueryStatus != null)
+            {
+                responses.Add(new DicomCFindResponse(request, Scp.QueryStatus));
+            }
+            else if (!patientRoot && request.Level == DicomQueryRetrieveLevel.Patient)
+            {
+                responses.Add(new DicomCFindResponse(request, DicomStatus.QueryRetrieveIdentifierDoesNotMatchSOPClass));
+            }
+            else
+            {
+                var found = Select(request.Dataset).Where(a => Scp.HideFromQuery == null || !Scp.HideFromQuery(a.SopUid));
+                foreach (var group in found.GroupBy(a => LevelKey(a, request.Level)))
+                {
+                    var identifier = new DicomDataset(request.Dataset.InternalTransferSyntax);
+                    var stored = group.First().Dataset;
+                    identifier.AddOrUpdate(DicomTag.SpecificCharacterSet, stored.GetSingleValueOrDefault(DicomTag.SpecificCharacterSet, "ISO_IR 100"));
+
+                    foreach (var key in request.Dataset.Where(k => k.Tag != DicomTag.SpecificCharacterSet && !Scp.DropReturnKeys.Contains(k.Tag)))
+                    {
+                        if (stored.Contains(key.Tag)) stored.CopyTo(identifier, key.Tag);
+                        else identifier.Add(key);
+                    }
+                    identifier.AddOrUpdate(DicomTag.QueryRetrieveLevel, request.Level.ToString().ToUpperInvariant());
+                    responses.Add(new DicomCFindResponse(request, DicomStatus.Pending) { Dataset = identifier });
+                }
+                responses.Add(new DicomCFindResponse(request, DicomStatus.Success));
+            }
+
+            return new ResponseList<DicomCFindResponse>(responses);
+        }
+
+        private static string LevelKey(ArchivedObject item, DicomQueryRetrieveLevel level)
+        {
+            switch (level)
+            {
+                case DicomQueryRetrieveLevel.Patient: return item.PatientId;
+                case DicomQueryRetrieveLevel.Study: return item.StudyUid;
+                case DicomQueryRetrieveLevel.Series: return item.SeriesUid;
+                default: return item.SopUid;
+            }
+        }
+
+        // ---------------------------------------------------------------- retrieve
+
+        private static List<DicomFile> ToSend(DicomDataset identifier)
+        {
+            var files = new List<DicomFile>();
+            foreach (var item in Select(identifier))
+            {
+                var file = new DicomFile(item.Dataset.Clone());
+                file = Scp.OnRetrieve != null ? Scp.OnRetrieve(file) : file;
+                if (file != null) files.Add(file);
+            }
+            return files;
+        }
+
+        /// <summary>
+        /// fo-dicom runs the provider inside the loop that reads the incoming PDUs. A C-STORE-RSP cannot be read until that returns,
+        /// so waiting for one there would hang. The work happens in the background, and the final response goes out through the service.
+        /// </summary>
+        public IAsyncEnumerable<DicomCGetResponse> OnCGetRequestAsync(DicomCGetRequest request)
+        {
+            Task.Run(async () =>
+            {
+                var files = ToSend(request.Dataset);
+                var completed = 0;
+                var failed = 0;
+                foreach (var file in files)
+                {
+                    var done = new TaskCompletionSource<DicomStatus>();
+                    var store = new DicomCStoreRequest(file) { OnResponseReceived = (q, r) => done.TrySetResult(r.Status) };
+                    await SendRequestAsync(store).ConfigureAwait(false);
+                    var status = await done.Task.ConfigureAwait(false);
+                    if (status == DicomStatus.Success) completed++;
+                    else failed++;
+                }
+
+                await SendResponseAsync(new DicomCGetResponse(request, DicomStatus.Success) { Completed = completed, Failures = failed, Warnings = 0, Remaining = 0 }).ConfigureAwait(false);
+            });
+
+            return new ResponseList<DicomCGetResponse>(new DicomCGetResponse[0]);
+        }
+
+        public IAsyncEnumerable<DicomCMoveResponse> OnCMoveRequestAsync(DicomCMoveRequest request)
+        {
+            if (!Scp.MoveDestinations.TryGetValue(request.DestinationAE, out var destination))
+            {
+                return new ResponseList<DicomCMoveResponse>(new[] { new DicomCMoveResponse(request, DicomStatus.QueryRetrieveMoveDestinationUnknown) });
+            }
+
+            Task.Run(async () =>
+            {
+                var files = ToSend(request.Dataset);
+                var client = DicomClientFactory.Create(destination.Item1, destination.Item2, false, "MOCKSCP", request.DestinationAE);
+                var completed = 0;
+                var failed = 0;
+                try
+                {
+                    foreach (var file in files)
+                    {
+                        var store = new DicomCStoreRequest(file)
+                        {
+                            OnResponseReceived = (q, r) =>
+                            {
+                                if (r.Status == DicomStatus.Success) Interlocked.Increment(ref completed);
+                                else Interlocked.Increment(ref failed);
+                            },
+                        };
+                        await client.AddRequestAsync(store).ConfigureAwait(false);
+                    }
+                    if (files.Count > 0) await client.SendAsync().ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    failed = Math.Max(failed, files.Count - completed);
+                }
+
+                var status = failed > 0 && completed == 0 ? DicomStatus.QueryRetrieveUnableToPerformSuboperations : failed > 0 ? DicomStatus.QueryRetrieveSubOpsOneOrMoreFailures : DicomStatus.Success;
+                await SendResponseAsync(new DicomCMoveResponse(request, status) { Completed = completed, Failures = failed, Warnings = 0, Remaining = 0 }).ConfigureAwait(false);
+            });
+
+            return new ResponseList<DicomCMoveResponse>(new DicomCMoveResponse[0]);
+        }
     }
 }

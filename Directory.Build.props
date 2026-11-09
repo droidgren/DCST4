@@ -1,7 +1,7 @@
 <Project>
   <!-- The version is set here for all projects. Add a Changelog entry in README.md when bumping it. -->
   <PropertyGroup>
-    <Version>1.5.1</Version>
+    <Version>1.6.0</Version>
     <Company>Västra Götalandsregionen</Company>
     <Product>DCST4</Product>
     <Copyright>Copyright © Anders Dahlgren 2026</Copyright>

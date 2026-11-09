@@ -1,6 +1,7 @@
 using DCST4.Core.Capability;
 using DCST4.Core.Network;
 using DCST4.Core.TestData;
+using DCST4.Core.Verification;
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
@@ -26,16 +27,20 @@ namespace DCST4.Core.Testing
 
     public sealed class TestContext
     {
-        public TestContext(TargetProfile profile, TestPatientNaming patientNaming = TestPatientNaming.RegistrySwedishName)
+        public TestContext(TargetProfile profile, TestPatientNaming patientNaming = TestPatientNaming.RegistrySwedishName, TestRunSession session = null)
         {
             Profile = profile ?? throw new ArgumentNullException(nameof(profile));
             PatientNaming = patientNaming;
+            Session = session ?? new TestRunSession();
         }
 
         public TargetProfile Profile { get; }
 
         /// <summary>How the datasets of this run name the patient. Given by the front-end, since Core does not read its settings.</summary>
         public TestPatientNaming PatientNaming { get; }
+
+        /// <summary>What the tests of this run hand on to each other.</summary>
+        public TestRunSession Session { get; }
     }
 
     public interface ITestCase
@@ -77,6 +82,12 @@ namespace DCST4.Core.Testing
         /// <summary>Only set by the negotiation probe.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public CapabilityMatrix CapabilityMatrix { get; set; }
+        /// <summary>Only set by verify-integrity.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IntegrityReport Integrity { get; set; }
+        /// <summary>Only set by the query capability tests.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public QueryReport Query { get; set; }
     }
 
     /// <summary>
@@ -120,8 +131,8 @@ namespace DCST4.Core.Testing
     /// <summary>A whole test run: what is written to the result files.</summary>
     public sealed class TestRunReport
     {
-        /// <summary>2: added the capability matrix and the association number on protocol events.</summary>
-        public const int CurrentSchemaVersion = 2;
+        /// <summary>2: added the capability matrix and the association number on protocol events. 3: added the seed, the chain summary, the integrity report and the query report.</summary>
+        public const int CurrentSchemaVersion = 3;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ToolVersion { get; set; }
@@ -134,6 +145,12 @@ namespace DCST4.Core.Testing
         /// <summary>Number of results per class, including those with none.</summary>
         public SortedDictionary<string, int> Summary { get; set; } = new SortedDictionary<string, int>(StringComparer.Ordinal);
         public List<TestResult> Results { get; set; } = new List<TestResult>();
+        /// <summary>What the generated data of this run followed from. Null if the run generated none.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? Seed { get; set; }
+        /// <summary>One row per object type that a store test handled. Null if there were none.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<ChainRow> Chain { get; set; }
     }
 
     /// <summary>What the command line returns.</summary>

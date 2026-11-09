@@ -62,6 +62,16 @@ namespace DCST4.ViewModels
         private int _serverPort;
         public int ServerPort { get => _serverPort; set { _serverPort = value; OnPropertyChanged(); Settings.Default.ServerPort = value; } }
 
+        private string _localScpAe;
+        /// <summary>The AE title the PACS must know this computer by for C-MOVE.</summary>
+        public string LocalScpAe { get => _localScpAe; set { _localScpAe = value; OnPropertyChanged(); Settings.Default.LocalScpAe = value; } }
+
+        private int _localScpPort;
+        public int LocalScpPort { get => _localScpPort; set { _localScpPort = value; OnPropertyChanged(); Settings.Default.LocalScpPort = value; } }
+
+        private string _testUidRoot;
+        public string TestUidRoot { get => _testUidRoot; set { _testUidRoot = value; OnPropertyChanged(); Settings.Default.TestUidRoot = value; } }
+
         private bool _useTLS;
         public bool UseTLS { get => _useTLS; set { _useTLS = value; OnPropertyChanged(); Settings.Default.UseTLS = value; } }
 
@@ -391,6 +401,9 @@ namespace DCST4.ViewModels
             _serverAET = s.ServerAET ?? string.Empty;
             _serverHost = s.ServerHost ?? string.Empty;
             _serverPort = s.ServerPort;
+            _localScpAe = s.LocalScpAe;
+            _localScpPort = s.LocalScpPort;
+            _testUidRoot = s.TestUidRoot;
             _useTLS = s.UseTLS;
             _tlsIgnoreCertErrors = s.TlsIgnoreCertErrors;
             _tlsClientCertThumbprint = s.TlsClientCertThumbprint ?? string.Empty;
@@ -876,12 +889,15 @@ namespace DCST4.ViewModels
         #endregion
 
         #region Tests
-        /// <summary>The current destination fields as a profile. Local SCP and UID root have no fields yet and keep their defaults.</summary>
+        /// <summary>The current destination fields as a profile.</summary>
         public TargetProfile BuildTargetProfile() => new TargetProfile
         {
             Name = ProfileName?.Trim(),
             Endpoint = BuildEndpoint(),
             Network = BuildNetworkOptions(),
+            LocalScpAe = _localScpAe,
+            LocalScpPort = _localScpPort,
+            UidRoot = _testUidRoot,
         };
 
         /// <summary>Saves the current destination fields for use with DCST4.Cli.exe.</summary>
@@ -934,13 +950,15 @@ namespace DCST4.ViewModels
             var runner = new TestRunner();
             runner.Progress += progress => _dispatcher.BeginInvoke(new Action(() => ShowTestProgress(progress)), DispatcherPriority.Background);
             DCST4.Core.TestData.TestPatientNames.TryParse(Settings.Default.TestPatientNaming, out var patientNaming);
-            var report = await runner.RunAsync(profile, tests, token, patientNaming);
+            var options = new TestRunOptions { Matrix = TestSuite.Capabilities.Matrix, SyntaxOverride = TestSuite.SelectedStoreSyntax.Syntax };
+            var report = await runner.RunAsync(profile, tests, token, patientNaming, options);
 
             // Let the rows queued by the background thread land before the summary replaces the status.
             await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
 
             var matrix = report.Results.Select(r => r.CapabilityMatrix).FirstOrDefault(m => m != null);
             if (matrix != null) TestSuite.Capabilities.Show(matrix);
+            TestSuite.Chain.Show(report);
 
             LastRunText = string.Join(", ", report.Summary.Where(p => p.Value > 0).Select(p => $"{p.Key} {p.Value}"));
             var ending = report.Cancelled ? "Tests cancelled." : "Tests finished.";

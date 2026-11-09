@@ -249,7 +249,7 @@ namespace DCST4.Core.Generation.Datasets
             }
         }
 
-        private static bool IsLeftOut(DicomTag tag) =>
+        internal static bool IsLeftOut(DicomTag tag) =>
             tag.Group == 0x0002 || tag.Element == 0x0000
             || tag == DicomTag.SpecificCharacterSet
             || tag == DicomTag.PixelData || tag == DicomTag.FloatPixelData || tag == DicomTag.DoubleFloatPixelData
