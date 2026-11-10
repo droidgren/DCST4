@@ -612,7 +612,7 @@ The store, query and retrieve tests added in 1.6.0 were checked once by hand aga
 - A second copy of an object was accepted with `0x0000` and the second version kept. Two patients under one Study Instance UID were kept as they were, which is reported as a finding.
 - A C-MOVE to an AE title it does not know gave `0xA801`, and the diagnostic said what to change.
 
-The check that a firewall really blocks C-MOVE was not done, since both ends were on the same computer. A comparison with Orthanc has not been done, since it was not available.
+The check that a firewall really blocks C-MOVE was not done, since both ends were on the same computer.
 
 The Storage Commitment tests added in 1.7.0 have only been run against the mock SCP in `run-tests.ps1`, which answers on the same association, on a new one, partly, late and not at all. No reference server that implements Storage Commitment was installed, such as Orthanc (from 1.6) or dcm4chee. DCMTK's `storescp` is only a Storage SCP, so it cannot serve as one.
 
