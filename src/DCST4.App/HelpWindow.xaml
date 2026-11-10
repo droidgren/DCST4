@@ -436,6 +436,8 @@
                         and allow incoming TCP on the port. On Windows, Windows Defender Firewall is a common reason why
                         nothing arrives, and the test <Bold>C-MOVE: can the system reach this computer?</Bold> says what it
                         found. Such a problem gives INDETERMINATE on the C-MOVE test, since it says nothing about the PACS.
+                        The test then stops after the first object type and marks the others as not tried, since the cause
+                        is the same for all of them.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">What Intact means</Paragraph>
                     <Paragraph>

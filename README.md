@@ -278,7 +278,7 @@ These tests prove, per object type, that what the PACS accepted can be found, ca
 
 ![The Chain tab, with one row per object type and the details of the selected row](screenshots/chain.png)
 
-**C-MOVE** makes the PACS connect back to this computer. Add the local AE title (`localScpAe` in the profile, default `DCST4`) on the PACS with this computer's address and the port (`localScpPort`, default 11113), and allow incoming TCP on the port. A PACS that does not know the AE title answers `0xA801`. One that knows it and cannot reach us gets an explanation that names the port and Windows Defender Firewall, a common cause on Windows. In these cases `retrieve-cmove` is `INDETERMINATE`, since it says nothing about the PACS, and `retrieve-cmove-diagnostic` is `FAIL`, so `DCST4.Cli.exe` exits with 1. A port that is already in use is `TOOL_ERROR`. The listener does not use TLS, even if the profile does.
+**C-MOVE** makes the PACS connect back to this computer. Add the local AE title (`localScpAe` in the profile, default `DCST4`) on the PACS with this computer's address and the port (`localScpPort`, default 11113), and allow incoming TCP on the port. A PACS that does not know the AE title answers `0xA801`. One that knows it and cannot reach us gets an explanation that names the port and Windows Defender Firewall, a common cause on Windows. In these cases `retrieve-cmove` is `INDETERMINATE`, since it says nothing about the PACS, and it stops after the first object type, since the cause is the same for all of them and a PACS may take its whole connection timeout to answer each one, and `retrieve-cmove-diagnostic` is `FAIL`, so `DCST4.Cli.exe` exits with 1. A port that is already in use is `TOOL_ERROR`. The listener does not use TLS, even if the profile does.
 
 **What Intact checks.** Each retrieved object is compared with the copy that was sent and with the manifest, reported per level:
 
@@ -653,6 +653,10 @@ Changed:
 
 - The result files have schema version 5, with a `limits` section in the results of these tests
 - `all` includes the new tests on the command line, so a run of `all` takes several minutes longer and leaves up to eight more objects on the destination
+
+Fixed:
+
+- `retrieve-cmove` no longer repeats a C-MOVE that cannot arrive for every object type. When the PACS does not know the local AE title or cannot reach this computer, the test stops after the first object type and marks the others as not tried. A PACS that takes its whole connection timeout to answer made the test look as if it had stopped
 
 ### 1.7.0
 

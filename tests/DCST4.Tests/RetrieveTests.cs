@@ -278,6 +278,18 @@ namespace DCST4.Tests
             _check("Unreachable: no association reached the listener", unreachableResult.Details["incomingAssociations"] == "0", null);
             _check("Unreachable: retrieve test is INDETERMINATE and says why", Result(unreachable, "retrieve-cmove").Result == TestResultClass.INDETERMINATE && Result(unreachable, "retrieve-cmove").Explanation.Contains("Firewall"), null);
 
+            Fresh();
+            Scp.MoveDestinations["DCST4"] = Tuple.Create("127.0.0.1", closedPort);
+            var several = await Execute("store-ct,store-mr,store-cr,retrieve-cmove");
+            var severalMove = Result(several, "retrieve-cmove");
+            _check("Unreachable, three object types: only the first is tried", severalMove.Timeline.Count(e => e.Type == "C-MOVE-RQ") == 1 && severalMove.Details["notTried"] == "2", string.Join(",", severalMove.Timeline.Select(e => e.Type)));
+            _check("Unreachable, three object types: all three are INDETERMINATE in the chain, and the others say they were not tried",
+                several.Chain.Count == 3 && several.Chain.All(r => r.Retrievable.Result == TestResultClass.INDETERMINATE) && several.Chain.Skip(1).All(r => r.Retrievable.Explanation.Contains("Not tried")) && !several.Chain[0].Retrievable.Explanation.Contains("Not tried"), Show(several));
+
+            Fresh();
+            var allMoved = await Execute("store-ct,store-mr,store-cr,retrieve-cmove");
+            _check("Reachable, three object types: every one is moved", Result(allMoved, "retrieve-cmove").Timeline.Count(e => e.Type == "C-MOVE-RQ") == 3 && !Result(allMoved, "retrieve-cmove").Details.ContainsKey("notTried") && Result(allMoved, "retrieve-cmove").Result == TestResultClass.PASS, Show(allMoved));
+
             using (DicomServerFactory.Create<MockStorageScp>(ListenPort))
             {
                 Fresh();
