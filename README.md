@@ -614,7 +614,14 @@ The store, query and retrieve tests added in 1.6.0 were checked once by hand aga
 
 The check that a firewall really blocks C-MOVE was not done, since both ends were on the same computer.
 
-The Storage Commitment tests added in 1.7.0 have only been run against the mock SCP in `run-tests.ps1`, which answers on the same association, on a new one, partly, late and not at all. No reference server that implements Storage Commitment was installed, such as Orthanc (from 1.6) or dcm4chee. DCMTK's `storescp` is only a Storage SCP, so it cannot serve as one.
+The Storage Commitment tests added in 1.7.0 run in `run-tests.ps1` against the mock SCP, which answers on the same association, on a new one, partly, late and not at all, and were also run by hand against an Orthanc test server.
+
+The limit, fault and TLS tests added in 1.8.0 were run by hand against an Orthanc test server, and the limit and fault tests also against DCMTK 3.7.1 `storescp` on the same computer, with `--max-pdu 16384`:
+
+- `limit-max-pdu` passed, and `dcmftest` and `dcmdump` read the objects that DCST4's own PDU writer had sent.
+- `limit-oversized-pdu` got an A-ABORT, which is `EXPECTED_FAILURE`.
+- The three fault tests left no partial file, and the retry was stored each time.
+- `limit-artim` passed. `limit-max-associations` gave `TIMEOUT` at 1, since `storescp` serves one association at a time and leaves the next one unanswered.
 
 ## Dependencies
 
