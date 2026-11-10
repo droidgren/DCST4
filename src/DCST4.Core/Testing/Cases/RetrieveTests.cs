@@ -113,6 +113,7 @@ namespace DCST4.Core.Testing.Cases
             foreach (var record in records)
             {
                 token.ThrowIfCancellationRequested();
+                context.Report($"C-GET of {record.DisplayName}, object type {Fixtures.Int(records.IndexOf(record) + 1)} of {Fixtures.Int(records.Count)}");
                 var expected = record.Stored.Count();
                 var contexts = RetrieveSteps.Contexts(record.Stored.Select(i => i.Manifest.SopClassUid), record.TransferSyntaxUid);
 
@@ -162,6 +163,7 @@ namespace DCST4.Core.Testing.Cases
             for (var i = 0; i < records.Count; i++)
             {
                 token.ThrowIfCancellationRequested();
+                context.Report($"C-MOVE of {records[i].DisplayName}, object type {Fixtures.Int(i + 1)} of {Fixtures.Int(records.Count)}. Waiting for the system to send it to {context.Profile.LocalScpAe} on port {Fixtures.Int(context.Profile.LocalScpPort)}");
                 var moved = await MoveOneAsync(context, records[i], result, timelines, token).ConfigureAwait(false);
                 if (moved == null) return result;
                 if (!moved.Item2) continue;
@@ -278,6 +280,7 @@ namespace DCST4.Core.Testing.Cases
 
             using (listener)
             {
+                context.Report($"C-MOVE of {record.DisplayName}. Waiting for the system to connect to {context.Profile.LocalScpAe} on port {Fixtures.Int(context.Profile.LocalScpPort)}");
                 var timeline = new AssociationTimeline();
                 var outcome = await RetrieveService.MoveAsync(context.Profile.Endpoint, context.Profile.Network,
                     RetrieveSteps.Target(record.StudyInstanceUid, RetrieveSteps.PatientIdOf(record), QueryRoot.Study),

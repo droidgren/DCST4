@@ -1005,10 +1005,23 @@ namespace DCST4.ViewModels
             var runner = new TestRunner();
             runner.Progress += progress => _dispatcher.BeginInvoke(new Action(() => ShowTestProgress(progress)), DispatcherPriority.Background);
             DCST4.Core.TestData.TestPatientNames.TryParse(Settings.Default.TestPatientNaming, out var patientNaming);
-            var report = await runner.RunAsync(profile, tests, token, patientNaming, options);
 
-            // Let the rows queued by the background thread land before the summary replaces the status.
-            await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            // Counts the seconds in the status bar, so that a test that waits can be told from one that has stopped.
+            var ticker = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (s, e) => { if (!token.IsCancellationRequested) ShowTestStatus(); }, _dispatcher);
+            TestRunReport report;
+            try
+            {
+                report = await runner.RunAsync(profile, tests, token, patientNaming, options);
+
+                // Let the rows queued by the background thread land before the summary replaces the status.
+                await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            }
+            finally
+            {
+                ticker.Stop();
+                _testHeading = null;
+                _testActivity = null;
+            }
 
             var matrix = report.Results.Select(r => r.CapabilityMatrix).FirstOrDefault(m => m != null);
             if (matrix != null) TestSuite.Capabilities.Show(matrix);
@@ -1061,11 +1074,28 @@ namespace DCST4.ViewModels
             }
         }
 
+        private string _testHeading;
+        private string _testActivity;
+        private readonly System.Diagnostics.Stopwatch _testActivityClock = new System.Diagnostics.Stopwatch();
+
+        /// <summary>The running test, what it says it is doing, and for how many seconds it has been doing that.</summary>
+        public static string FormatTestStatus(string heading, string activity, long seconds) =>
+            string.IsNullOrEmpty(activity) ? $"{heading} ({seconds} s)" : $"{heading}. {activity} ({seconds} s)";
+
+        private void ShowTestStatus()
+        {
+            if (_testHeading != null) StatusText = FormatTestStatus(_testHeading, _testActivity, _testActivityClock.ElapsedMilliseconds / 1000);
+        }
+
         private void ShowTestProgress(TestProgress progress)
         {
-            if (progress.Stage == TestProgressStage.Started)
+            if (progress.Stage == TestProgressStage.Started || progress.Stage == TestProgressStage.Activity)
             {
-                StatusText = $"Test {progress.Index + 1} of {progress.Total}: {progress.Test.Name}";
+                // The seconds count from when the test said what it is doing now, since that is what "up to 60 s" is measured against.
+                _testHeading = $"Test {progress.Index + 1} of {progress.Total}: {progress.Test.Name}";
+                _testActivity = progress.Activity;
+                _testActivityClock.Restart();
+                ShowTestStatus();
                 return;
             }
 

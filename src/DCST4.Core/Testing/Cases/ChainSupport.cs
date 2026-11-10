@@ -96,6 +96,7 @@ namespace DCST4.Core.Testing.Cases
             var clock = Stopwatch.StartNew();
             var deadline = TimeSpan.FromSeconds(context.Session.Options.IndexWaitSeconds);
             var first = true;
+            context.Report($"Asking with C-FIND whether what was stored can be found, for up to {Int(context.Session.Options.IndexWaitSeconds)} s");
 
             while (true)
             {

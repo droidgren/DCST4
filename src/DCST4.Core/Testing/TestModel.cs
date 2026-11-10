@@ -41,6 +41,15 @@ namespace DCST4.Core.Testing
 
         /// <summary>What the tests of this run hand on to each other.</summary>
         public TestRunSession Session { get; }
+
+        /// <summary>Set by <see cref="TestRunner"/> for the test that is running.</summary>
+        internal Action<string> Reporter { get; set; }
+
+        /// <summary>
+        /// Says what the test is doing right now, above all what it is waiting for and for how long at most, so that a
+        /// front-end can show it. It is not part of the result.
+        /// </summary>
+        public void Report(string activity) => Reporter?.Invoke(activity);
     }
 
     public interface ITestCase
@@ -178,7 +187,13 @@ namespace DCST4.Core.Testing
         }
     }
 
-    public enum TestProgressStage { Started, Completed }
+    public enum TestProgressStage
+    {
+        Started,
+        Completed,
+        /// <summary>The running test says what it is doing, see <see cref="TestContext.Report"/>. Any number of times between the other two.</summary>
+        Activity,
+    }
 
     public sealed class TestProgress
     {
@@ -187,7 +202,9 @@ namespace DCST4.Core.Testing
         public int Index { get; set; }
         public int Total { get; set; }
         public ITestCase Test { get; set; }
-        /// <summary>Null while <see cref="Stage"/> is Started.</summary>
+        /// <summary>Only when <see cref="Stage"/> is Completed.</summary>
         public TestResult Result { get; set; }
+        /// <summary>Only when <see cref="Stage"/> is Activity: what the test is doing, for example what it waits for.</summary>
+        public string Activity { get; set; }
     }
 }

@@ -295,7 +295,9 @@ namespace DCST4.Core.Network
             {
                 try
                 {
-                    _tcp.Client.SendTimeout = 500;
+                    // Null once the connection is closed, which a cleanup on another thread may just have done.
+                    var socket = _tcp.Client;
+                    if (socket != null) socket.SendTimeout = 500;
                     var pdu = new byte[] { PduAbort, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00 };
                     _stream.Write(pdu, 0, pdu.Length);
                     _stream.Flush();
@@ -668,7 +670,14 @@ namespace DCST4.Core.Network
         {
             if (Interlocked.Exchange(ref _closed, 1) != 0) return;
             Timeline?.RecordStep(ProtocolEvent.Sent, "CONNECTION-RESET", reason);
-            try { _tcp.Client.LingerState = new LingerOption(true, 0); } catch (Exception ex) when (ex is SocketException || ex is ObjectDisposedException) { }
+            try
+            {
+                var socket = _tcp.Client;
+                if (socket != null) socket.LingerState = new LingerOption(true, 0);
+            }
+            catch (Exception ex) when (ex is SocketException || ex is ObjectDisposedException)
+            {
+            }
             SafeClose(_tcp);
         }
 
@@ -682,7 +691,8 @@ namespace DCST4.Core.Network
             try
             {
                 if (_stream is SslStream ssl) await ssl.ShutdownAsync().ConfigureAwait(false);
-                _tcp.Client.Shutdown(SocketShutdown.Send);
+                // Null if a cancel closed the connection in the meantime.
+                _tcp.Client?.Shutdown(SocketShutdown.Send);
 
                 var deadline = _clock.Elapsed + drain;
                 while (_ending == null && _clock.Elapsed < deadline) await Task.Delay(20).ConfigureAwait(false);

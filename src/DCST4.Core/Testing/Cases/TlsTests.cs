@@ -223,6 +223,7 @@ namespace DCST4.Core.Testing.Cases
                     return result;
                 }
 
+                context.Report($"Presenting a client certificate {What}, and waiting for the system to refuse or accept it");
                 var chosen = Certificate(context, target, result);
                 if (chosen == null) return result;
                 certificate = chosen.Item1;

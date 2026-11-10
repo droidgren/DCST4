@@ -84,6 +84,9 @@ namespace DCST4.Core.Testing.Cases
                     if (report.Late && report.TransactionUid == transactionUid) late.TrySetResult(report);
                 };
 
+                context.Report(options.CommitLingerSeconds > 0
+                    ? $"N-ACTION sent. The association is kept open for {Fixtures.Int(options.CommitLingerSeconds)} s so that the report can come on it"
+                    : "Sending the N-ACTION");
                 var timeline = timelines.Next();
                 var outcome = await StorageCommitmentService.RequestAsync(profile.Endpoint, profile.Network, request, options.CommitLingerSeconds, tracker, token, timeline).ConfigureAwait(false);
                 timelines.Collect(timeline);
@@ -97,6 +100,7 @@ namespace DCST4.Core.Testing.Cases
 
                 if (!ConcludeAction(run, outcome, waiter))
                 {
+                    context.Report($"Waiting for the Storage Commitment report, for up to {Fixtures.Int(options.CommitWaitSeconds)} s after the N-ACTION response");
                     var report = await WaitAsync(waiter, Remaining(tracker, outcome, options.CommitWaitSeconds), token).ConfigureAwait(false);
                     if (report != null)
                     {
@@ -110,6 +114,7 @@ namespace DCST4.Core.Testing.Cases
                     else
                     {
                         tracker.Expire(transactionUid);
+                        context.Report($"No report in time. Listening {Fixtures.Int(options.CommitGraceSeconds)} s more to see whether it comes late");
                         var lateReport = await WaitAsync(late.Task, options.CommitGraceSeconds * 1000L, token).ConfigureAwait(false);
                         if (lateReport != null)
                         {
