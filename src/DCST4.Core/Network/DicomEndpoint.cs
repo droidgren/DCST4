@@ -16,6 +16,11 @@ namespace DCST4.Core.Network
         public bool TlsIgnoreCertErrors { get; set; }
         /// <summary>Thumbprint of the client certificate in CurrentUser\My, or empty for none.</summary>
         public string TlsClientCertThumbprint { get; set; }
+        /// <summary>
+        /// Thumbprint of an expired client certificate in CurrentUser\My, for the test that expects the system under test to
+        /// refuse it. Empty if there is none. DCST4 never installs one itself.
+        /// </summary>
+        public string TlsExpiredClientCertThumbprint { get; set; }
 
         /// <summary>A copy with surrounding spaces removed from host and AE titles.</summary>
         public DicomEndpoint Trimmed() => new DicomEndpoint
@@ -27,6 +32,7 @@ namespace DCST4.Core.Network
             UseTls = UseTls,
             TlsIgnoreCertErrors = TlsIgnoreCertErrors,
             TlsClientCertThumbprint = TlsClientCertThumbprint,
+            TlsExpiredClientCertThumbprint = TlsExpiredClientCertThumbprint,
         };
 
         /// <summary>Returns what is wrong with the host only, or null if it is usable. Enough for Ping.</summary>

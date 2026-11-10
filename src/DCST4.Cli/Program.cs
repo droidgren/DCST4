@@ -106,6 +106,10 @@ namespace DCST4.Cli
                 CommitLingerSeconds = arguments.CommitLingerSeconds,
                 CommitWaitSeconds = arguments.CommitWaitSeconds,
                 CommitGraceSeconds = arguments.CommitGraceSeconds,
+                MaxAssociations = arguments.MaxAssociations,
+                IdleWaitSeconds = arguments.IdleWaitSeconds,
+                ArtimWaitSeconds = arguments.ArtimWaitSeconds,
+                FaultSettleSeconds = arguments.FaultSettleSeconds,
                 // Under --out and kept, so that what was sent and retrieved can be looked at afterwards.
                 WorkFolder = Path.Combine(arguments.OutputFolder, "work-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture)),
             };

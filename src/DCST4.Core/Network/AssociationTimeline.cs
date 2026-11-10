@@ -207,6 +207,38 @@ namespace DCST4.Core.Network
             }
         }
 
+        /// <summary>A step of an association that DCST4 runs on a socket of its own, see <see cref="RawAssociation"/>.</summary>
+        /// <param name="atMs">When it happened on the timeline's clock, if that was earlier than now.</param>
+        internal void RecordStep(string direction, string type, string detail, long? atMs = null)
+        {
+            lock (_lock)
+            {
+                var entry = Add(direction, type, detail);
+                if (atMs.HasValue) entry.OffsetMs = atMs.Value;
+            }
+        }
+
+        internal void RecordAccepted(List<NegotiatedContext> negotiation, string detail)
+        {
+            lock (_lock)
+            {
+                _requestRecorded = true;
+                _accepted = true;
+                _negotiation = negotiation;
+                Add(ProtocolEvent.Received, "A-ASSOCIATE-AC", detail);
+            }
+        }
+
+        internal void RecordRejected(AssociationRejection rejection)
+        {
+            lock (_lock)
+            {
+                _requestRecorded = true;
+                _rejection = rejection;
+                Add(ProtocolEvent.Received, "A-ASSOCIATE-RJ", $"Result {rejection.Result}, source {rejection.Source}, reason {rejection.Reason}");
+            }
+        }
+
         public static string FormatStatus(ushort status) => "0x" + status.ToString("X4", CultureInfo.InvariantCulture);
 
         private void OnAccepted(DicomAssociation association)

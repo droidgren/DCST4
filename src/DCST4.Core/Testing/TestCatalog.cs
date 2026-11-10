@@ -41,6 +41,20 @@ namespace DCST4.Core.Testing
             tests.Add(new DuplicateIdenticalTest());
             tests.Add(new DuplicateModifiedTest());
             tests.Add(new ConflictDemographicsTest());
+
+            // Limits and faults. They depend on nothing above, and are last because they strain the system under test.
+            tests.Add(new TlsAssociationTest());
+            tests.Add(new TlsServerCertificateTest());
+            tests.Add(new TlsWrongAuthorityTest());
+            tests.Add(new TlsExpiredCertificateTest());
+            tests.Add(new MaxPduTest());
+            tests.Add(new OversizedPduTest());
+            tests.Add(new AbortMidDatasetTest());
+            tests.Add(new DropMidDatasetTest());
+            tests.Add(new DropBeforeResponseTest());
+            tests.Add(new MaxAssociationsTest());
+            tests.Add(new IdleTimeoutTest());
+            tests.Add(new ArtimTest());
             return tests;
         }
 

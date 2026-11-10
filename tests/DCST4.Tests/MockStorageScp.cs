@@ -113,6 +113,18 @@ namespace DCST4.Tests
 
     public enum ConflictPolicy { Keep, Reject, ReconcileToFirst }
 
+    /// <summary>A C-STORE that was broken off before its dataset had arrived whole.</summary>
+    public sealed class PartialStore
+    {
+        public string SopInstanceUid;
+        /// <summary>Bytes of the dataset in complete data PDUs.</summary>
+        public long DatasetBytes;
+        /// <summary>Bytes of a PDU that was cut off in the middle, header included.</summary>
+        public long BytesOfUnfinishedPdu;
+        /// <summary>abort, closed or reset.</summary>
+        public string Ending;
+    }
+
     /// <summary>One object the mock holds, for C-FIND, C-GET and C-MOVE.</summary>
     public sealed class ArchivedObject
     {
@@ -224,6 +236,31 @@ namespace DCST4.Tests
         /// <summary>A report that could not go out, for example because the association was gone.</summary>
         public static readonly ConcurrentQueue<string> CommitSendFailures = new ConcurrentQueue<string>();
 
+        // ------------------------------------------------------------ limits and faults
+        /// <summary>How many associations may be open at once. 0 means no limit. One more is rejected as transient, local limit exceeded.</summary>
+        public static int MaxAssociations;
+        /// <summary>Answer the association over the limit with A-ABORT instead of A-ASSOCIATE-RJ.</summary>
+        public static bool CeilingAbortsInstead;
+        public static int OpenAssociations;
+        /// <summary>End an association on which nothing has arrived for this long. 0 means never. Needs <see cref="ObservingAcceptor"/>.</summary>
+        public static int IdleTimeoutMs;
+        /// <summary>End an idle association with A-ABORT before closing, instead of only closing.</summary>
+        public static bool IdleEndsWithAbort;
+        /// <summary>Close a connection on which no A-ASSOCIATE-RQ has arrived after this long. 0 means never. Needs <see cref="ObservingAcceptor"/>.</summary>
+        public static int ArtimTimeoutMs;
+        /// <summary>Abort when a data PDU is longer than the announced maximum. fo-dicom itself takes any length.</summary>
+        public static bool EnforceMaxPdu;
+        /// <summary>A C-STORE whose dataset never arrived whole, as seen by <see cref="ObservingAcceptor"/>.</summary>
+        public static readonly ConcurrentQueue<PartialStore> PartialStores = new ConcurrentQueue<PartialStore>();
+        /// <summary>Called for each partial store, for scripting a system that keeps what it got.</summary>
+        public static Action<PartialStore> OnPartialStore;
+        /// <summary>The length field of every data PDU received through <see cref="ObservingAcceptor"/>.</summary>
+        public static readonly ConcurrentQueue<uint> DataPdus = new ConcurrentQueue<uint>();
+        /// <summary>Connections through <see cref="ObservingAcceptor"/> that have not ended yet.</summary>
+        public static int OpenConnections;
+        /// <summary>Changes at every <see cref="Reset"/>, so that a connection from before it does not disturb the counts after it.</summary>
+        public static int Generation;
+
         public static int AssociationCount;
         public static int EchoCount;
         public static int StoreCount;
@@ -275,6 +312,18 @@ namespace DCST4.Tests
             while (CommitReportStatuses.TryDequeue(out _)) { }
             while (CommitRoleAccepted.TryDequeue(out _)) { }
             while (CommitSendFailures.TryDequeue(out _)) { }
+            Interlocked.Increment(ref Generation);
+            MaxAssociations = 0;
+            CeilingAbortsInstead = false;
+            OpenAssociations = 0;
+            IdleTimeoutMs = 0;
+            IdleEndsWithAbort = false;
+            ArtimTimeoutMs = 0;
+            EnforceMaxPdu = false;
+            while (PartialStores.TryDequeue(out _)) { }
+            OnPartialStore = null;
+            while (DataPdus.TryDequeue(out _)) { }
+            OpenConnections = 0;
             AssociationCount = 0;
             EchoCount = 0;
             StoreCount = 0;
@@ -294,6 +343,14 @@ namespace DCST4.Tests
         private string _calledAe;
         private string _callingAe;
         private ReceivedAssociation _received;
+        private int _countedInGeneration = -1;
+
+        /// <summary>The association is over, however it ended: it no longer counts against the ceiling.</summary>
+        private void Uncount()
+        {
+            var generation = Interlocked.Exchange(ref _countedInGeneration, -1);
+            if (generation >= 0 && generation == Scp.Generation) Interlocked.Decrement(ref Scp.OpenAssociations);
+        }
 
         public MockStorageScp(INetworkStream stream, Encoding fallbackEncoding, ILogger log, DicomServiceDependencies deps)
             : base(stream, fallbackEncoding, log, deps) { }
@@ -346,6 +403,18 @@ namespace DCST4.Tests
                 return;
             }
 
+            if (Scp.MaxAssociations > 0)
+            {
+                if (Scp.OpenAssociations >= Scp.MaxAssociations)
+                {
+                    if (Scp.CeilingAbortsInstead) await SendAbortAsync(DicomAbortSource.ServiceProvider, DicomAbortReason.NotSpecified);
+                    else await SendAssociationRejectAsync(DicomRejectResult.Transient, DicomRejectSource.ServiceProviderPresentation, DicomRejectReason.LocalLimitExceeded);
+                    return;
+                }
+                _countedInGeneration = Scp.Generation;
+                Interlocked.Increment(ref Scp.OpenAssociations);
+            }
+
             Options.MaxPDULength = Scp.MaxPduLength > 0 ? Scp.MaxPduLength : DefaultMaxPdu;
 
             var unanswered = new List<DicomPresentationContext>();
@@ -396,6 +465,7 @@ namespace DCST4.Tests
         {
             if (_received != null) _received.Released = true;
             _ended = true;
+            Uncount();
             return SendAssociationReleaseResponseAsync();
         }
 
@@ -403,9 +473,14 @@ namespace DCST4.Tests
         {
             if (_received != null) _received.AbortedByPeer = true;
             _ended = true;
+            Uncount();
         }
 
-        public void OnConnectionClosed(Exception exception) { _ended = true; }
+        public void OnConnectionClosed(Exception exception)
+        {
+            _ended = true;
+            Uncount();
+        }
 
         public async Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
         {
@@ -424,6 +499,7 @@ namespace DCST4.Tests
 
         public async Task<DicomCStoreResponse> OnCStoreRequestAsync(DicomCStoreRequest request)
         {
+            var generation = Scp.Generation;
             var index = Interlocked.Increment(ref Scp.StoreCount) - 1;
             Scp.Received.Enqueue(new ReceivedImage
             {
@@ -436,6 +512,9 @@ namespace DCST4.Tests
 
             if (Scp.HangFromImage >= 0 && index >= Scp.HangFromImage) await Task.Delay(TimeSpan.FromSeconds(30));
             if (Scp.ResponseDelayMs > 0) await Task.Delay(Scp.ResponseDelayMs);
+
+            // A store that was held back for a test that is over must not land in the archive of the next one.
+            if (generation != Scp.Generation) return new DicomCStoreResponse(request, DicomStatus.Success);
 
             var status = Scp.StatusFor?.Invoke(index) ?? (Scp.KeepStored ? Archive(request.Dataset) : DicomStatus.Success);
             var response = new DicomCStoreResponse(request, status);

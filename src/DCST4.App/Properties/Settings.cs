@@ -136,6 +136,26 @@ namespace DCST4.Properties
         /// <summary>How long to go on listening for a late report.</summary>
         [UserScopedSetting, DefaultSettingValue("30")]
         public int CommitGraceSeconds { get => (int)this[nameof(CommitGraceSeconds)]; set => this[nameof(CommitGraceSeconds)] = value; }
+
+        /// <summary>How many associations the limit test opens at most.</summary>
+        [UserScopedSetting, DefaultSettingValue("10")]
+        public int LimitMaxAssociations { get => (int)this[nameof(LimitMaxAssociations)]; set => this[nameof(LimitMaxAssociations)] = value; }
+
+        /// <summary>How long to wait for an idle association to be ended.</summary>
+        [UserScopedSetting, DefaultSettingValue("120")]
+        public int LimitIdleWaitSeconds { get => (int)this[nameof(LimitIdleWaitSeconds)]; set => this[nameof(LimitIdleWaitSeconds)] = value; }
+
+        /// <summary>How long to wait on a connection with no association request.</summary>
+        [UserScopedSetting, DefaultSettingValue("60")]
+        public int LimitArtimWaitSeconds { get => (int)this[nameof(LimitArtimWaitSeconds)]; set => this[nameof(LimitArtimWaitSeconds)] = value; }
+
+        /// <summary>How long a fault test looks for the instance after a broken transfer.</summary>
+        [UserScopedSetting, DefaultSettingValue("5")]
+        public int FaultSettleSeconds { get => (int)this[nameof(FaultSettleSeconds)]; set => this[nameof(FaultSettleSeconds)] = value; }
+
+        /// <summary>Thumbprint of an expired client certificate in CurrentUser\My for the TLS test, or empty for none.</summary>
+        [UserScopedSetting, DefaultSettingValue("")]
+        public string TlsExpiredClientCertThumbprint { get => (string)this[nameof(TlsExpiredClientCertThumbprint)]; set => this[nameof(TlsExpiredClientCertThumbprint)] = value; }
         // ------------------------------------------------------------ Output
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool SendImages { get => (bool)this[nameof(SendImages)]; set => this[nameof(SendImages)] = value; }

@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.7.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.8.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -28,6 +28,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Capability matrix:** finds out from association negotiation alone, with no images sent, which SOP classes and transfer syntaxes a PACS supports, and compares that with what the vendor's Conformance Statement claims. See [What the PACS supports](#what-the-pacs-supports).
 - **Store, query and retrieve:** proves the chain accepted, indexed, retrievable and intact for each object type, with C-STORE, C-FIND, C-GET and C-MOVE. What comes back is compared with what was sent, level by level. See [Store, query and retrieve](#store-query-and-retrieve).
 - **Storage Commitment:** asks the PACS to commit to what it stored, with N-ACTION, and takes its N-EVENT-REPORT either on the same association or on one the PACS opens to this computer. It records which way the PACS used, how long the report took and the Failure Reason of each instance that was not committed. See [Storage Commitment](#storage-commitment).
+- **Limits and faults:** finds how many associations the PACS holds at once, how long it keeps an idle association or a connection that never sends a request, and whether it keeps to the maximum PDU length it announces. Breaks a C-STORE off on purpose in three ways, and checks what the PACS kept and how it takes the retry. With TLS, checks that a client certificate from an unknown authority or an expired one is refused. These tests are not ticked by default. See [Limits and faults](#limits-and-faults).
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
 - **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, Enhanced CT and MR, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
 
@@ -152,7 +153,7 @@ A test run is a set of tests against one destination. The result of each test is
 
 Open the **Tests** tab below the exam settings, tick the tests and click **Run tests**. They run against the destination entered under Server. Select a row to see its explanation and protocol timeline. **Cancel** stops the run, and what was finished is still saved.
 
-The row below the buttons holds the local AE title and port that C-MOVE and Storage Commitment reports go to, the UID root of the objects the tests send, and the transfer syntax of the store tests. The row below that holds the Storage Commitment times, see [Storage Commitment](#storage-commitment).
+The row below the buttons holds the local AE title and port that C-MOVE and Storage Commitment reports go to, the UID root of the objects the tests send, and the transfer syntax of the store tests. The row below that holds the Storage Commitment times, see [Storage Commitment](#storage-commitment), and the last row the settings of the Limits tests, which are not ticked by default, see [Limits and faults](#limits-and-faults).
 
 ![The Tests tab after a run against the mock SCP](screenshots/tests.png)
 
@@ -171,7 +172,7 @@ The row below the buttons holds the local AE title and port that C-MOVE and Stor
 }
 ```
 
-For TLS, add `"useTls": true` to `endpoint`, and optionally `"tlsIgnoreCertErrors": true` and `"tlsClientCertThumbprint"`.
+For TLS, add `"useTls": true` to `endpoint`, and optionally `"tlsIgnoreCertErrors": true`, `"tlsClientCertThumbprint"` and, for one of the TLS tests, `"tlsExpiredClientCertThumbprint"`, see [Limits and faults](#limits-and-faults).
 
 ```powershell
 DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results
@@ -180,6 +181,8 @@ DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results
 `--tests` takes test ids, categories (`Capability`, `Integrity`, `Limits`, `Performance`) or `all`, separated by commas. `--log-dir` chooses another folder for the log. Ctrl+C cancels the run and saves what was finished. A second Ctrl+C ends the program at once. Cancelling while a connection is being opened can take as long as the connection timeout.
 
 **`all` and the `Integrity` category include tests that store objects on the destination**, and those objects may not be possible to delete. Check the profile before running them. `--seed`, `--matrix`, `--transfer-syntax` and `--index-wait` apply to those tests, see [Store, query and retrieve](#store-query-and-retrieve), and `--commit-linger`, `--commit-wait` and `--commit-grace` to the Storage Commitment tests, see [Storage Commitment](#storage-commitment).
+
+**`all` and the `Limits` category include tests that strain the destination and break transfers on purpose**, and that leave up to eight more objects on it. They hold associations open, wait for timeouts and send a PDU that is too long. Read [Limits and faults](#limits-and-faults) before running them against a system that others depend on.
 
 | Exit code | Meaning                                                    |
 | --------- | ---------------------------------------------------------- |
@@ -335,6 +338,58 @@ A C-STORE that succeeds says that the PACS received an object, not that it will 
 DCST4.Cli.exe run --profile target.json --tests store-ct,commit-stored,commit-unknown-instance --out C:\Temp\results --commit-linger 0
 ```
 
+### Limits and faults
+
+These tests find the limits of the PACS and show what it does when a transfer goes wrong. They are in the `Limits` category, come last in a run and depend on no other test. **On the Tests tab they are not ticked by default**, because they hold associations open on the PACS, break transfers on purpose and take minutes with the default waits. Tick the ones you want, or use `--tests Limits` or the test ids on the command line.
+
+| Test                         | What it does                                                                                                   | Result                                                                                                             |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `tls-association`            | C-ECHO with the profile's TLS settings                                                                         | `PASS` with the TLS version and cipher, read from the session                                                      |
+| `tls-server-certificate`     | Checks the PACS's own certificate strictly, even when the profile accepts certificate errors                   | `PASS`, or `FAIL` that names a hostname mismatch, a chain that is not trusted on this computer, or both            |
+| `tls-client-cert-wrong-ca`   | Presents a client certificate from an authority that DCST4 makes up for the test                               | Refused: `EXPECTED_FAILURE`. Accepted: `FAIL`, as a finding. The PACS asks for no client certificate: `NOT_SUPPORTED` |
+| `tls-client-cert-expired`    | Presents an expired client certificate that the profile names                                                  | The same. No certificate named: `NOT_SUPPORTED`. Named but not found, or not expired: `TOOL_ERROR`                 |
+| `limit-max-pdu`              | Four associations where DCST4 announces a maximum PDU length of 4096, 16384, 65536 and 131072. On each it stores one CT image of 256 by 256 in data PDUs of exactly the length the PACS announced | Stored every time, and nothing the PACS sent was longer than DCST4 announced: `PASS`. Refused or broken off: `FAIL` |
+| `limit-oversized-pdu`        | Stores one CT image in data PDUs 1024 bytes longer than the PACS announced                                     | Aborted, closed or refused with a status: `EXPECTED_FAILURE`. Stored: `FAIL`, as a finding. A PACS that announces 0, no limit: `INDETERMINATE` |
+| `fault-abort-mid-dataset`    | Sends half of a 2 MB CT image and then an A-ABORT                                                              | See below                                                                                                          |
+| `fault-drop-mid-dataset`     | Sends half of it, stops in the middle of a PDU and resets the TCP connection, with no A-ABORT                  | See below                                                                                                          |
+| `fault-drop-before-response` | Sends all of it and closes the connection without reading the C-STORE response                                 | See below                                                                                                          |
+| `limit-max-associations`     | Opens associations one at a time and holds them, until one is refused or 10 are open. Sends a C-ECHO on each at the end, then releases them all | Refused with A-ASSOCIATE-RJ: `EXPECTED_FAILURE`, with the limit and the result, source and reason, such as `LocalLimitExceeded`. All 10 held: `PASS`, the limit is higher. Refused with A-ABORT or a closed connection: `FAIL`, as a finding. No answer: `TIMEOUT` |
+| `limit-idle-timeout`         | Opens an association and sends nothing for up to 120 s                                                         | `PASS` either way. Records how the PACS ended it (A-ABORT, A-RELEASE-RQ or a closed connection) and after how long, or that it was still open |
+| `limit-artim`                | Connects, with TLS if the profile has it, and never sends an A-ASSOCIATE-RQ, for up to 60 s                    | Closed by the PACS: `PASS`, with the time. Still open: `FAIL`, as a finding, since such connections can use up what the PACS has |
+
+**After each fault** the test asks with C-FIND whether the instance is there, for 5 seconds, and if it is, gets it back with C-GET or C-MOVE and compares the pixels with what was sent. The state is `None`, `Partial`, `Complete`, `PresentUnverified` if it could not be retrieved, or `Unknown` if the query did not work. Then it sends the whole object again on a new association, as a modality does after a lost connection, and records whether the retry was stored, stored with a warning, refused with `0x0111` Duplicate SOP Instance, or refused with something else. Last it asks again.
+
+| What the PACS did                                                              | Result               |
+| ------------------------------------------------------------------------------ | -------------------- |
+| Kept nothing or a complete object, and stored the retry                        | `PASS`               |
+| Refused the retry with `0x0111` for an instance it holds                       | `EXPECTED_FAILURE`   |
+| Kept a partial object                                                          | `FAIL`, as a finding |
+| Refused the retry with `0x0111` although a query does not find the instance    | `FAIL`, as a finding |
+| Refused the retry with another status, or stored it and still cannot find it   | `FAIL`               |
+
+The instance of a fault test follows from the seed. If it is already on the PACS, from an earlier run with the same `--seed`, the test gives `INDETERMINATE` and sends nothing.
+
+**What is left on the PACS**: four CT images of about 130 KB from `limit-max-pdu`, one from `limit-oversized-pdu` if the PACS takes it, and one of 2 MB from each fault test. All are marked as test images, with a Patient ID from the test personnummer list and UIDs under the profile's root. The other tests store nothing.
+
+**The TLS tests** give `INDETERMINATE` if the profile does not use TLS. The two client certificate tests first open an association with the profile's own settings, and give `INDETERMINATE` if that fails, since a refusal would then prove nothing. The certificate from an unknown authority is made in memory and is never put in a certificate store. Windows needs its private key in a key container to use it, so one exists in your profile while the test runs and is removed afterwards. An expired certificate is only a fair test if it comes from an authority the PACS trusts, so DCST4 cannot make one: install one yourself in your personal certificate store and give its thumbprint in **Expired client certificate** on the Tests tab, or as `tlsExpiredClientCertThumbprint` in the profile's `endpoint`. Neither thumbprint is written to the result files. A PACS on TLS 1.3 may refuse a certificate only after the handshake, by closing the connection, and that counts as refused. `tls-server-certificate` reports on the PACS's certificate as this computer sees it, so a certificate from an internal authority that is not installed here is reported as not trusted.
+
+**Why these tests do not use fo-dicom's client.** It cannot stop in the middle of a dataset, cannot hold a connection without sending an A-ASSOCIATE-RQ, closes an association when it has nothing to send, and does not show the length of the PDUs on the wire. So these tests, and only these, write and read the PDUs themselves on a socket of their own (`RawAssociation`). `tls-association` is the exception: it goes through fo-dicom, so that the TLS version it reports is the one an ordinary send gets.
+
+**What is recorded**, in the `limits` section of the test's result: the limit found and how the next association was refused, how and after how many milliseconds (`endedAfterMs`, on the monotonic clock) an idle association or connection was ended, each PDU attempt with both announced lengths and the longest PDU sent and received, the fault with the bytes sent, the state after it, the retry and the state after that, and for TLS the version, cipher and what was wrong with the server certificate. Measured times are in `endedAfterMs` and on the timeline, never in the explanation.
+
+Every test releases or aborts what it opened, also when the run is cancelled.
+
+| Setting on the Tests tab   | Command line           | Default | Meaning                                                                                       |
+| -------------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| Associations up to         | `--max-associations`   | 10      | Where `limit-max-associations` stops if none is refused. 1 to 500. They are held open on the PACS, so keep it small |
+| Idle wait                  | `--idle-wait`          | 120 s   | How long `limit-idle-timeout` waits                                                           |
+| ARTIM wait                 | `--artim-wait`         | 60 s    | How long `limit-artim` waits                                                                  |
+| After a fault, look for    | `--fault-settle`       | 5 s     | How long a fault test goes on asking for the instance before it counts as not there. Raise it for a PACS that indexes slowly |
+
+```powershell
+DCST4.Cli.exe run --profile target.json --tests limit-max-associations,limit-artim --out C:\Temp\results --max-associations 20 --artim-wait 90
+```
+
 ## Test datasets
 
 The test suite works with datasets that can be generated again, unlike Generate & Send, where every run gets new UIDs and the current date. `DCST4.Cli.exe generate` writes a dataset as a DICOM File-set with a DICOMDIR and a `manifest.json`:
@@ -410,12 +465,12 @@ src\DCST4.Core\     No WPF reference
     Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
   TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
   Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary, ExamSizeEstimator
-  Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), Storage Commitment (StorageCommitment.cs), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
+  Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), Storage Commitment (StorageCommitment.cs), RawAssociation (limit and fault tests only), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
   Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
   Verification\     IntegrityOracle and IntegrityReport: what came back against what was sent
   Output\           DICOM File-set and DICOMDIR
   Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestResult, ResultFileWriter
-    Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests
+    Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category
 src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
@@ -433,6 +488,8 @@ The app and the command line are front-ends on the same engine in `Testing\`. To
 `DimseRunner` opens one association for one DIMSE request, with the same timeouts and endings everywhere. fo-dicom answers a request itself when no context was accepted, so the callbacks check `DimseExchange.ContextAccepted` before believing a status. C-GET proposes storage contexts in SCP role only for the SOP classes it expects, because there are more storage classes than the 128 an association can hold, and `RetrieveService` sets the SOP class on the command, because fo-dicom's retrieve requests are fixed to Study Root. In the mock SCP, a retrieve provider must not wait for a C-STORE response inside `OnCGetRequestAsync`, which fo-dicom runs in the loop that reads the PDUs, so the sub-operations go out on a task of their own.
 
 Storage Commitment is in `Network\StorageCommitment.cs`. `StorageCommitmentService` sends the N-ACTION through `DimseRunner`. "Keep the association open" is fo-dicom's `ClientOptions.AssociationLingerTimeoutInMs`, which holds the association for the whole time after the last response, so the response timer is stopped at the N-ACTION-RSP. A report on that association arrives through `IDicomClient.OnNEventReportRequest`. A report on a new association arrives at `LocalStorageService`, which implements `IDicomNServiceProvider` for that. Both go through one `CommitmentTracker`, which knows the Transaction UIDs we issued, refuses the others, and after a timeout accepts a late report and marks it late. It is registered before the N-ACTION, because a report may come before its response. The tracker completes its wait before the N-EVENT-REPORT-RSP goes out, so `LocalStorageServer.WaitForIncomingToEndAsync` lets an incoming association finish before its steps are read, for at most 2 s. With a clock, `LocalStorageServer` records the steps of each incoming association, and a test adds them to its timeline with `TimelineCollector.Collect`. `AssociationTimeline.RecordIncomingRequest` and `RecordOutgoingResponse` record a request that the other side sends on our own association. In the mock SCP, the report goes out on a task of its own after the N-ACTION-RSP, as the C-GET sub-operations do.
+
+The Limits tests are built on `Network\RawAssociation.cs`, which opens a socket, writes the A-ASSOCIATE-RQ, P-DATA-TF, A-RELEASE-RQ and A-ABORT PDUs by hand and reads what comes back on a task of its own, so that an abort or a closed connection is seen with its time even while nothing is being awaited. It knows C-ECHO and C-STORE and nothing else. `RawSupport` in `LimitTests.cs` opens one with the profile's TLS settings and holds what the three case files share, and `CloseOn` makes a cancel send an A-ABORT and close the socket. TLS goes through an `ITlsInitiator` in both worlds: `RecordingTlsInitiator` wraps the one an ordinary send uses and reads the version from the `SslStream`, and `TestTlsInitiator` presents a chosen client certificate through a selection callback, because .NET otherwise leaves out a certificate whose issuer the server did not list. What these tests find goes in `TestResult.Limits` (`Testing\LimitsResult.cs`). In the test harness, `ObservingAcceptor` puts a stream between the socket and the mock SCP through fo-dicom's TLS acceptor hook, without TLS, and that stream is where the mock's ARTIM and idle timers, its enforced maximum PDU length and its record of partial stores live, since fo-dicom's server has no hook for them. The association ceiling is in `MockStorageScp` itself.
 
 Generation knows nothing about sending. The two meet at `IImageSource`, which supplies images lazily so that a long stack does not sit in memory. That leaves room for:
 
@@ -483,6 +540,9 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 pacs
 
 # Only the store, query, retrieve and Storage Commitment tests, which is quicker while working on them
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe retrieve
+
+# Only the limit, fault and TLS tests
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe limits
 
 # Only the Storage Commitment tests
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe commit
@@ -574,6 +634,25 @@ The Storage Commitment tests added in 1.7.0 have only been run against the mock 
 | Objects sent and retrieved by a run | From the command line, `work-<time>` under `--out`. From the program, a temporary folder that is removed |
 
 ## Changelog
+
+### 1.8.0
+
+New:
+
+- Tests in the `Limits` category, which find the limits of a PACS and show what it does when a transfer goes wrong. They are not ticked by default on the Tests tab
+- `limit-max-associations`: how many associations the PACS holds at once, with the result, source and reason of the rejection that marks the limit
+- `limit-idle-timeout` and `limit-artim`: how long the PACS keeps an idle association, and a connection that never sends an A-ASSOCIATE-RQ, and how it ends them
+- `limit-max-pdu`: stores with data PDUs of exactly the length the PACS announced, on associations where DCST4 announces four different lengths. `limit-oversized-pdu`: sends PDUs longer than that, which the PACS should refuse
+- `fault-abort-mid-dataset`, `fault-drop-mid-dataset` and `fault-drop-before-response`: break a C-STORE off, then check whether the PACS kept nothing, a partial object or a complete one, send the object again and record how the retry is taken
+- `tls-association` records the TLS version and cipher. `tls-server-certificate` checks the PACS's certificate strictly. `tls-client-cert-wrong-ca` and `tls-client-cert-expired` present a client certificate that the PACS should refuse
+- `--max-associations`, `--idle-wait`, `--artim-wait` and `--fault-settle`, and the same settings on the Tests tab. The defaults are 10 associations and 120, 60 and 5 seconds
+- `tlsExpiredClientCertThumbprint` in the profile, and **Expired client certificate** on the Tests tab, for the expired certificate test
+- The mock SCP of the test harness has an association ceiling, an idle timeout, an ARTIM timer, an enforced maximum PDU length and a record of partial stores
+
+Changed:
+
+- The result files have schema version 5, with a `limits` section in the results of these tests
+- `all` includes the new tests on the command line, so a run of `all` takes several minutes longer and leaves up to eight more objects on the destination
 
 ### 1.7.0
 

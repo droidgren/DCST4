@@ -136,7 +136,7 @@ namespace DCST4.Tests
             var json = ResultFileWriter.ToJson(report);
             _check("JSON: holds the chain", json.Contains("\"chain\"") && json.Contains("\"retrievable\"") && json.Contains("\"intact\"") && json.Contains("\"committed\": null"), null);
             _check("JSON: holds the integrity report", json.Contains("\"integrity\"") && json.Contains("ByteIdentical"), null);
-            _check("JSON: schema version 4", TestRunReport.CurrentSchemaVersion == 4 && json.Contains("\"schemaVersion\": 4"), null);
+            _check("JSON: schema version 5", TestRunReport.CurrentSchemaVersion == 5 && json.Contains("\"schemaVersion\": 5"), null);
 
             var folder = Path.Combine(_temp, "chain-files");
             var files = ResultFileWriter.Write(report, folder);

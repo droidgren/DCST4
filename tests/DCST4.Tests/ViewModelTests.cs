@@ -642,7 +642,7 @@ namespace DCST4.Tests
             help.UpdateLayout();
             try
             {
-                check("All the topics are listed", help.Topics.Count == 18, help.Topics.Count.ToString());
+                check("All the topics are listed", help.Topics.Count == 19 && help.Topics.Any(t => t.Title == "Limits and faults"), help.Topics.Count.ToString());
                 check("Topic titles are unique", help.Topics.Select(t => t.Title).Distinct().Count() == help.Topics.Count, null);
                 check("Estimated size is explained", new System.Windows.Documents.TextRange(help.Topics[2].Section.ContentStart, help.Topics[2].Section.ContentEnd).Text.Contains("Estimated size"), null);
 
@@ -692,7 +692,7 @@ namespace DCST4.Tests
             suite.ResultsFolder = Path.Combine(folder, "app");
             vm.ProfileName = "Comparison";
 
-            check("The list holds the catalog, ticked", suite.Choices.Count == TestCatalog.All.Count && suite.Choices.All(c => c.IsSelected), suite.Choices.Count.ToString());
+            check("The list holds the catalog, ticked except the Limits tests", suite.Choices.Count == TestCatalog.All.Count && suite.Choices.All(c => c.IsSelected == (c.Test.Category != TestCategory.Limits)), suite.Choices.Count.ToString());
             foreach (var choice in suite.Choices) choice.IsSelected = choice.Test.Id == "c-echo";
 
             // ------------------------------------------------ the same content as the command line
