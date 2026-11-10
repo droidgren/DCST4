@@ -49,6 +49,7 @@ namespace DCST4.Core.Testing.Cases
 
             try
             {
+                context.Report("Sending a 2 MB image and breaking the transfer off");
                 var request = Fixtures.Request(context, "ct", Id, DicomTransferSyntax.ExplicitVRLittleEndian);
                 request.Rows = Matrix;
                 request.Columns = Matrix;
@@ -118,8 +119,10 @@ namespace DCST4.Core.Testing.Cases
                 collected = true;
                 token.ThrowIfCancellationRequested();
 
-                record.StateAfterFault =await ProbeAsync(context, file, context.Session.Options.FaultSettleSeconds, true, result, timelines, token).ConfigureAwait(false);
+                context.Report($"Transfer broken off. Asking with C-FIND whether the image is there, for up to {Fixtures.Int(context.Session.Options.FaultSettleSeconds)} s");
+                record.StateAfterFault = await ProbeAsync(context, file, context.Session.Options.FaultSettleSeconds, true, result, timelines, token).ConfigureAwait(false);
 
+                context.Report("Sending the whole image again, then asking whether it is there");
                 var second = await DuplicateSupport.SendAsync(context, new FileListSource(file), file.Dataset.InternalTransferSyntax, "resent-" + Id, result, timelines, token).ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
                 var again = second.Results.SingleOrDefault();

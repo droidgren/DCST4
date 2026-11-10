@@ -219,6 +219,7 @@ namespace DCST4.Core.Testing.Cases
                 for (var number = 1; number <= ceiling; number++)
                 {
                     token.ThrowIfCancellationRequested();
+                    context.Report($"Opening association {Fixtures.Int(number)} of at most {Fixtures.Int(ceiling)}, with {Fixtures.Int(held.Count)} held open");
                     var open = await RawSupport.OpenAsync(context, timelines.Next(), timelines.Clock, token).ConfigureAwait(false);
                     if (open.Raw == null)
                     {
@@ -245,6 +246,7 @@ namespace DCST4.Core.Testing.Cases
                 }
 
                 limits.AssociationsOpened = held.Count;
+                context.Report($"Sending a C-ECHO on each of the {Fixtures.Int(held.Count)} open associations, then releasing them");
 
                 var alive = 0;
                 foreach (var raw in held)
@@ -417,6 +419,7 @@ namespace DCST4.Core.Testing.Cases
                     result.NegotiatedContexts = raw.Negotiation();
                     var acceptedAtMs = raw.NowMs;
                     var deadline = acceptedAtMs + wait * 1000L;
+                    context.Report($"Association open and idle. Waiting up to {Fixtures.Int(wait)} s for the system to end it");
                     RawEvent ending = null;
                     while (ending == null && raw.NowMs < deadline)
                     {
@@ -496,6 +499,7 @@ namespace DCST4.Core.Testing.Cases
                 }
 
                 timeline.RecordStep(ProtocolEvent.Sent, "CONNECTION-OPENED", context.Profile.Endpoint.UseTls ? "TLS session, no A-ASSOCIATE-RQ" : "TCP connection, no A-ASSOCIATE-RQ", raw.ConnectedAtMs);
+                context.Report($"Connected without sending an A-ASSOCIATE-RQ. Waiting up to {Fixtures.Int(wait)} s for the system to close the connection");
                 using (raw.CloseOn(token))
                 {
                     var deadline = raw.ConnectedAtMs + wait * 1000L;
@@ -594,6 +598,7 @@ namespace DCST4.Core.Testing.Cases
                 foreach (var size in OurSizes)
                 {
                     token.ThrowIfCancellationRequested();
+                    context.Report($"Storing one image on an association where DCST4 announces a maximum PDU length of {Fixtures.Int((int)size)}");
                     var file = PduSupport.Generate(context, Id + "/" + Fixtures.Int((int)size), PduSupport.Matrix, token);
                     var attempt = new PduAttempt { OurMaxPdu = size, SopInstanceUid = file.Dataset.GetSingleValue<string>(DicomTag.SOPInstanceUID) };
                     result.Limits.PduAttempts.Add(attempt);
@@ -790,6 +795,7 @@ namespace DCST4.Core.Testing.Cases
                 }
 
                 var pduLength = limit + Excess;
+                context.Report($"Sending one image in data PDUs of {pduLength} bytes, longer than the {limit} the system announced, and waiting for its answer");
                 var matrix = PduSupport.Matrix;
                 while ((long)matrix * matrix * 2 < pduLength * 2L && matrix < Generation.ExamRequest.MaxMatrix) matrix *= 2;
                 var file = PduSupport.Generate(context, Id, matrix, token);

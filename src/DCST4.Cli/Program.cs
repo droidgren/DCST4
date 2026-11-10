@@ -200,7 +200,11 @@ namespace DCST4.Cli
             var runner = new TestRunner();
             runner.Progress += progress =>
             {
-                if (progress.Stage == TestProgressStage.Completed)
+                if (progress.Stage == TestProgressStage.Activity)
+                {
+                    Console.WriteLine($"[{progress.Index + 1}/{progress.Total}] {progress.Test.Id} ... {progress.Activity}");
+                }
+                else if (progress.Stage == TestProgressStage.Completed)
                 {
                     Console.WriteLine($"[{progress.Index + 1}/{progress.Total}] {progress.Test.Id}: {progress.Result.Result}: {progress.Result.Explanation}");
                 }

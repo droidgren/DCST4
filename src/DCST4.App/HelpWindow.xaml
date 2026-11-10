@@ -336,7 +336,9 @@
                         On the <Bold>Tests</Bold> tab below the exam settings, tick the tests and click <Bold>Run tests</Bold>.
                         They run against the destination entered under <Bold>Server</Bold>. Select a row to see its
                         explanation and the steps of the association, with the raw status of each response.
-                        <Bold>Cancel</Bold> stops the run, and what was finished is still saved. The tests marked
+                        <Bold>Cancel</Bold> stops the run, and what was finished is still saved. While a run is going,
+                        the status bar shows which test is running, what it is doing or waiting for, and for how many
+                        seconds. The tests marked
                         <Italic>Limits</Italic> are not ticked from the start, see the topic Limits and faults.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Results</Paragraph>

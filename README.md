@@ -153,6 +153,8 @@ A test run is a set of tests against one destination. The result of each test is
 
 Open the **Tests** tab below the exam settings, tick the tests and click **Run tests**. They run against the destination entered under Server. Select a row to see its explanation and protocol timeline. **Cancel** stops the run, and what was finished is still saved.
 
+While a run is going, the status bar shows which test is running, what it is doing or waiting for, and for how many seconds, for example `Test 51 of 51: Limit: connection without an association request (ARTIM). Connected without sending an A-ASSOCIATE-RQ. Waiting up to 60 s for the system to close the connection (23 s)`. The command line prints the same as a line of its own.
+
 The row below the buttons holds the local AE title and port that C-MOVE and Storage Commitment reports go to, the UID root of the objects the tests send, and the transfer syntax of the store tests. The row below that holds the Storage Commitment times, see [Storage Commitment](#storage-commitment), and the last row the settings of the Limits tests, which are not ticked by default, see [Limits and faults](#limits-and-faults).
 
 ![The Tests tab after a run against the mock SCP](screenshots/tests.png)
@@ -483,6 +485,8 @@ The app and the command line are front-ends on the same engine in `Testing\`. To
 
 `NegotiationProbe` runs each association through `EchoService.EchoAsync`, whose `configure` parameter decides what is proposed. It depends on how fo-dicom builds an association: a plain C-ECHO adds one context, Verification with Implicit VR, as ID 1, and `AdditionalPresentationContexts` follow unchanged, but a context identical to one already there is silently dropped. So Verification with Implicit VR is never proposed twice, and that cell of the matrix is answered by the C-ECHO's own context. After the A-ASSOCIATE-AC a context no longer holds what was proposed, so answers are paired with the plan by position. A role reply overwrites the proposed role, which is why the SCU role is proposed as null: it stays null only when no reply came. Later phases can choose a transfer syntax per object type from `CapabilityMatrix`.
 
+A test says what it is doing with `TestContext.Report`, above all before a wait, and `TestRunner` passes it on as a `TestProgress` with the stage `Activity`. It is for the front-ends only and never reaches a result file. `MainViewModel` shows it in the status bar with a timer that counts the seconds since the test last reported.
+
 `TestRunSession` is how tests of one run depend on each other, in catalog order: store tests add a `StoredObjectRecord` with the manifest and the path of what was sent, query and retrieve tests add their step to it, and `TestRunner` turns the records into `TestRunReport.Chain`. `commit-stored` reads the stored instances from the session and fills `StoredObjectRecord.Committed`, which becomes the `Committed` step of `ChainRow`. A store test gets its own seed from `TestRunSession.SeedFor(purpose)`, because a Patient ID follows from the seed alone and two purposes on one seed would put one Patient ID under two names.
 
 `DimseRunner` opens one association for one DIMSE request, with the same timeouts and endings everywhere. fo-dicom answers a request itself when no context was accepted, so the callbacks check `DimseExchange.ContextAccepted` before believing a status. C-GET proposes storage contexts in SCP role only for the SOP classes it expects, because there are more storage classes than the 128 an association can hold, and `RetrieveService` sets the SOP class on the command, because fo-dicom's retrieve requests are fixed to Study Root. In the mock SCP, a retrieve provider must not wait for a C-STORE response inside `OnCGetRequestAsync`, which fo-dicom runs in the loop that reads the PDUs, so the sub-operations go out on a task of their own.
@@ -653,6 +657,7 @@ Changed:
 
 - The result files have schema version 5, with a `limits` section in the results of these tests
 - `all` includes the new tests on the command line, so a run of `all` takes several minutes longer and leaves up to eight more objects on the destination
+- While tests run, the status bar shows what the running test is doing or waiting for, with a count of the seconds, and the command line prints it. A test that waits 60 seconds for a timeout no longer looks as if it had stopped
 
 Fixed:
 

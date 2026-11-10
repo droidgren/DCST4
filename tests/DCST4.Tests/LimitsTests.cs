@@ -393,7 +393,20 @@ namespace DCST4.Tests
             Scp.MaxAssociations = 3;
             Scp.ArtimTimeoutMs = 500;
             var selected = TestCatalog.Select("limit-max-associations,limit-artim", out _);
-            var first = await new TestRunner().RunAsync(Profile(), selected, CancellationToken.None, DCST4.Core.TestData.TestPatientNaming.RegistrySwedishName, Options());
+            var activities = new List<TestProgress>();
+            var watched = new TestRunner();
+            watched.Progress += p => { lock (activities) activities.Add(p); };
+            var first = await watched.RunAsync(Profile(), selected, CancellationToken.None, DCST4.Core.TestData.TestPatientNaming.RegistrySwedishName, Options());
+            var said = activities.Where(p => p.Stage == TestProgressStage.Activity).ToList();
+            _check("Activity: a test says what it is waiting for, and for how long at most",
+                said.Any(p => p.Test.Id == "limit-artim" && p.Activity.Contains("Waiting up to 3 s") && p.Index == 1 && p.Total == 2 && p.Result == null), string.Join(" | ", said.Select(p => p.Activity)));
+            _check("Activity: one line per association while they are opened", said.Count(p => p.Test.Id == "limit-max-associations" && p.Activity.StartsWith("Opening association")) == 4, null);
+            _check("Activity: comes between the start and the end of its test",
+                activities.FindIndex(p => p.Stage == TestProgressStage.Activity && p.Index == 1) > activities.FindIndex(p => p.Stage == TestProgressStage.Started && p.Index == 1)
+                && activities.FindLastIndex(p => p.Stage == TestProgressStage.Activity && p.Index == 1) < activities.FindIndex(p => p.Stage == TestProgressStage.Completed && p.Index == 1), null);
+            _check("Activity: is not part of the result", !ResultFileWriter.ToJson(first).Contains("Waiting up to"), null);
+            _check("Status bar: the test, what it is doing and the seconds", MainViewModel.FormatTestStatus("Test 2 of 2: ARTIM", "Waiting up to 60 s", 23) == "Test 2 of 2: ARTIM. Waiting up to 60 s (23 s)"
+                && MainViewModel.FormatTestStatus("Test 1 of 2: C-ECHO", null, 0) == "Test 1 of 2: C-ECHO (0 s)", null);
             var json = ResultFileWriter.ToJson(first);
             _check("JSON: schema version 5 with a limits section", json.Contains("\"schemaVersion\": 5") && json.Contains("\"limits\"") && json.Contains("\"associationLimit\": 3") && json.Contains("\"reason\": \"LocalLimitExceeded\"") && json.Contains("\"endedAfterMs\""), null);
             _check("JSON: a test fills only its own part", !json.Contains("\"fault\"") && !json.Contains("\"pduAttempts\"") && !json.Contains("\"tls\""), null);
@@ -419,6 +432,7 @@ namespace DCST4.Tests
             var output = Path.Combine(_temp, "limits-cli");
             var cli = await TestSuiteTests.RunCli("run", "--profile", profilePath, "--tests", "limit-max-associations,tls-association", "--out", output, "--log-dir", Path.Combine(_temp, "limits-cli-log"),
                 "--max-associations", "5", "--idle-wait", "2", "--artim-wait", "2", "--fault-settle", "0");
+            _check("Command line: prints what a test is doing", cli.Output.Contains("limit-max-associations ... Opening association 1 of at most 5"), cli.Output);
             _check("Command line: runs a Limits test with its options", cli.ExitCode == 0 && cli.Output.Contains("limit-max-associations: EXPECTED_FAILURE") && cli.Output.Contains("holds 2 associations"), cli.Output);
             _check("Command line: a TLS test without TLS in the profile is INDETERMINATE", cli.Output.Contains("tls-association: INDETERMINATE"), cli.Output);
 

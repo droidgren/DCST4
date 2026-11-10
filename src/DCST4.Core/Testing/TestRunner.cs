@@ -40,6 +40,8 @@ namespace DCST4.Core.Testing
             {
                 var test = tests[i];
                 Raise(new TestProgress { Stage = TestProgressStage.Started, Index = i, Total = tests.Count, Test = test });
+                var position = i;
+                context.Reporter = activity => Raise(new TestProgress { Stage = TestProgressStage.Activity, Index = position, Total = tests.Count, Test = test, Activity = activity });
 
                 var startedUtc = DateTime.UtcNow;
                 var testClock = Stopwatch.StartNew();
@@ -56,6 +58,7 @@ namespace DCST4.Core.Testing
                 Redact(result, trimmed.Endpoint.TlsClientCertThumbprint);
                 Redact(result, trimmed.Endpoint.TlsExpiredClientCertThumbprint);
 
+                context.Reporter = null;
                 report.Results.Add(result);
                 Logger.Information("Test {id}: {result}: {explanation}", result.TestId, result.Result.ToString(), result.Explanation);
                 Raise(new TestProgress { Stage = TestProgressStage.Completed, Index = i, Total = tests.Count, Test = test, Result = result });
