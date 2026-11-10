@@ -159,11 +159,27 @@ namespace DCST4.Core.Testing.Cases
             result.Details["localScpPort"] = Fixtures.Int(context.Profile.LocalScpPort);
             var timelines = new TimelineCollector();
 
-            foreach (var record in records)
+            for (var i = 0; i < records.Count; i++)
             {
                 token.ThrowIfCancellationRequested();
-                var step = await MoveOneAsync(context, record, result, timelines, token).ConfigureAwait(false);
-                if (step == null) return result;
+                var moved = await MoveOneAsync(context, records[i], result, timelines, token).ConfigureAwait(false);
+                if (moved == null) return result;
+                if (!moved.Item2) continue;
+
+                // The AE title or the way back to this computer is wrong, and that is the same for every object type. A system
+                // may take its whole connection timeout to say so, so the rest are not tried one by one.
+                var first = records[i];
+                foreach (var skipped in records.Skip(i + 1))
+                {
+                    skipped.CMove = new RetrieveRecord
+                    {
+                        Method = RetrieveMethod.CMove,
+                        Outcome = first.CMove.Outcome,
+                        Step = ChainStep.Of(first.CMove.Step.Result, $"Not tried, since the C-MOVE of {first.DisplayName} could not arrive for a reason that is the same for every object type. {first.CMove.Step.Explanation}"),
+                    };
+                }
+                result.Details["notTried"] = Fixtures.Int(records.Count - i - 1);
+                break;
             }
 
             result.Timeline = timelines.Events;
@@ -171,8 +187,11 @@ namespace DCST4.Core.Testing.Cases
             return result;
         }
 
-        /// <summary>Null if the listener could not be opened, which ends the test.</summary>
-        private static async Task<ChainStep> MoveOneAsync(TestContext context, StoredObjectRecord record, TestResult result, TimelineCollector timelines, CancellationToken token)
+        /// <summary>
+        /// The step, and whether it failed because of how the two systems are set up. Null if the listener could not be opened,
+        /// which ends the test.
+        /// </summary>
+        private static async Task<Tuple<ChainStep, bool>> MoveOneAsync(TestContext context, StoredObjectRecord record, TestResult result, TimelineCollector timelines, CancellationToken token)
         {
             var expected = record.Stored.Count();
             var folder = context.Session.NewFolder("retrieved-cmove-" + record.ObjectType);
@@ -197,7 +216,7 @@ namespace DCST4.Core.Testing.Cases
                 var diagnosis = MoveDiagnosis.Diagnose(outcome, listener.Associations, expected, context.Profile.LocalScpAe, context.Profile.LocalScpPort, context.Profile.Endpoint.UseTls);
                 var step = Classify(outcome, diagnosis, expected);
                 record.CMove = new RetrieveRecord { Method = RetrieveMethod.CMove, Outcome = outcome, Step = step };
-                return step;
+                return Tuple.Create(step, diagnosis.IsEnvironmental && outcome.Files.Count == 0);
             }
         }
 
