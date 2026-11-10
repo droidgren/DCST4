@@ -28,6 +28,29 @@ namespace DCST4.Core.Testing
         public string WorkFolder { get; set; }
         /// <summary>How long a stored object may take to appear in a query.</summary>
         public int IndexWaitSeconds { get; set; } = DefaultIndexWaitSeconds;
+
+        public const int DefaultCommitLingerSeconds = 10;
+        public const int DefaultCommitWaitSeconds = 60;
+        public const int DefaultCommitGraceSeconds = 30;
+
+        /// <summary>How long the association of an N-ACTION stays open, so that the report can come on it. 0 releases at once.</summary>
+        public int CommitLingerSeconds { get; set; } = DefaultCommitLingerSeconds;
+        /// <summary>How long the Storage Commitment report may take after the N-ACTION-RSP.</summary>
+        public int CommitWaitSeconds { get; set; } = DefaultCommitWaitSeconds;
+        /// <summary>How long to go on listening after that, to find out whether the report comes late or never.</summary>
+        public int CommitGraceSeconds { get; set; } = DefaultCommitGraceSeconds;
+
+        /// <summary>Returns the first problem, or null if the options can be used.</summary>
+        public string Validate()
+        {
+            if (IndexWaitSeconds < 0) return "The index wait cannot be negative.";
+            if (CommitLingerSeconds < 0 || CommitWaitSeconds < 0 || CommitGraceSeconds < 0) return "The Storage Commitment times cannot be negative.";
+            if (CommitLingerSeconds > CommitWaitSeconds)
+            {
+                return $"Keeping the association open for {CommitLingerSeconds.ToString(CultureInfo.InvariantCulture)} s is longer than the wait for the Storage Commitment report, {CommitWaitSeconds.ToString(CultureInfo.InvariantCulture)} s.";
+            }
+            return null;
+        }
     }
 
     /// <summary>One step of the chain for one object type.</summary>
@@ -50,7 +73,7 @@ namespace DCST4.Core.Testing
         public ChainStep Indexed { get; set; }
         public ChainStep Retrievable { get; set; }
         public ChainStep Intact { get; set; }
-        /// <summary>Storage Commitment. Null until that exists.</summary>
+        /// <summary>Storage Commitment, from commit-stored.</summary>
         public ChainStep Committed { get; set; }
     }
 
@@ -86,6 +109,7 @@ namespace DCST4.Core.Testing
         public RetrieveRecord CGet { get; set; }
         public RetrieveRecord CMove { get; set; }
         public ChainStep Intact { get; set; }
+        public ChainStep Committed { get; set; }
 
         public IEnumerable<StoredInstance> Stored => Instances.Where(i => i.WasStored);
         public IEnumerable<RetrieveRecord> Retrieves => new[] { CGet, CMove }.Where(r => r != null);
@@ -174,6 +198,7 @@ namespace DCST4.Core.Testing
             Indexed = o.Indexed,
             Retrievable = CombineRetrieves(o),
             Intact = o.Intact,
+            Committed = o.Committed,
         }).ToList();
 
         /// <summary>The object can be retrieved if either way worked. If neither did, the more serious answer is the one to see.</summary>

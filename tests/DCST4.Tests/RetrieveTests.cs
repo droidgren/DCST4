@@ -106,7 +106,7 @@ namespace DCST4.Tests
                 _check($"Round trip: {row.ObjectType}: accepted, indexed, retrievable and intact all PASS",
                     row.Accepted?.Result == TestResultClass.PASS && row.Indexed?.Result == TestResultClass.PASS && row.Retrievable?.Result == TestResultClass.PASS && row.Intact?.Result == TestResultClass.PASS,
                     Show(report));
-                _check($"Round trip: {row.ObjectType}: room for committed", row.Committed == null, null);
+                _check($"Round trip: {row.ObjectType}: no commit test, so no committed step", row.Committed == null, null);
                 _check($"Round trip: {row.ObjectType}: syntax is uncompressed", row.TransferSyntaxUid == DicomTransferSyntax.ExplicitVRLittleEndian.UID.UID, row.TransferSyntaxUid);
             }
 
@@ -136,7 +136,7 @@ namespace DCST4.Tests
             var json = ResultFileWriter.ToJson(report);
             _check("JSON: holds the chain", json.Contains("\"chain\"") && json.Contains("\"retrievable\"") && json.Contains("\"intact\"") && json.Contains("\"committed\": null"), null);
             _check("JSON: holds the integrity report", json.Contains("\"integrity\"") && json.Contains("ByteIdentical"), null);
-            _check("JSON: schema version 3", TestRunReport.CurrentSchemaVersion == 3 && json.Contains("\"schemaVersion\": 3"), null);
+            _check("JSON: schema version 4", TestRunReport.CurrentSchemaVersion == 4 && json.Contains("\"schemaVersion\": 4"), null);
 
             var folder = Path.Combine(_temp, "chain-files");
             var files = ResultFileWriter.Write(report, folder);
@@ -392,7 +392,7 @@ namespace DCST4.Tests
             _check("Matching: a range that misses finds nothing", cases.Where(c => c.Case.Contains("after the study") || c.Case.Contains("before the study")).All(c => c.Matches == 0 && c.Result == TestResultClass.PASS), null);
             _check("Matching: a range that hits finds both", cases.Single(c => c.Case == "date range around the study").Matches == 2, null);
             _check("Matching: case sensitivity is observed, not judged", cases.Single(c => c.Case.Contains("upper case")).Note.Contains("is case sensitive"), cases.Single(c => c.Case.Contains("upper case")).Note);
-            _check("Matching: every identifier is scoped to one patient", Scp.Archive.Select(a => a.PatientId).Distinct().Count() == 2, null);
+            _check("Matching: every identifier is scoped to one patient", Scp.Archive.Select(a => a.PatientId).Distinct().Count() == 2, string.Join(",", Scp.Archive.Select(a => a.PatientId + "|" + a.Dataset.GetSingleValueOrDefault(DicomTag.PatientName, string.Empty))));
 
             Fresh();
             Scp.QueryCaseInsensitive = true;
@@ -486,7 +486,9 @@ namespace DCST4.Tests
             var first = await Execute(RoundTrip);
             Fresh();
             var second = await Execute(RoundTrip);
-            _check("Same seed: the same result, apart from times", TestSuiteTests.NormalizeJson(ResultFileWriter.ToJson(first)) == TestSuiteTests.NormalizeJson(ResultFileWriter.ToJson(second)), null);
+            var firstJson = TestSuiteTests.NormalizeJson(ResultFileWriter.ToJson(first));
+            var secondJson = TestSuiteTests.NormalizeJson(ResultFileWriter.ToJson(second));
+            _check("Same seed: the same result, apart from times", firstJson == secondJson, TestSuiteTests.FirstDifference(firstJson, secondJson));
 
             Fresh();
             var other = await Execute("store-ct", options: new TestRunOptions { Seed = 8 });

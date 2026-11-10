@@ -425,7 +425,8 @@
                         One row per object type. Each step has its own result, and a step that did not run shows a dash:
                         <Bold>Accepted</Bold> by C-STORE, <Bold>Indexed</Bold> so that C-FIND finds it, <Bold>Retrievable</Bold>
                         by C-GET or C-MOVE, and <Bold>Intact</Bold> when compared with what was sent. Select a row for the
-                        explanations. <Bold>Committed</Bold> is for Storage Commitment, which is not there yet.
+                        explanations. <Bold>Committed</Bold> is the answer to Storage Commitment, from the test
+                        <Bold>Storage Commitment: every stored instance</Bold>. See the topic Storage Commitment.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Before C-MOVE works</Paragraph>
                     <Paragraph>
@@ -451,6 +452,45 @@
                         one study with two different patients. A refusal is EXPECTED_FAILURE. For the changed content the
                         result says which version was kept. Keeping two patients in one study without any change or warning
                         is FAIL, as a finding to report. These tests leave those objects on the destination.
+                    </Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
+                <Section Tag="Storage Commitment">
+                    <Paragraph Style="{StaticResource H1}">Storage Commitment</Paragraph>
+                    <Paragraph>
+                        A C-STORE that succeeds says the PACS received an object. Storage Commitment asks it to promise that
+                        it keeps it. DCST4 sends an N-ACTION with the objects stored earlier in the same run, and the PACS
+                        answers later with an N-EVENT-REPORT, either on the same association or on a new one that it opens
+                        to this computer. The tests record which way it used and how long the report took. They send no
+                        objects of their own.
+                    </Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="220"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>Every stored instance</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>PASS if all are committed. FAIL if any is not, with its Failure Reason. Fills Committed on the Chain tab.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>An instance that was never stored</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Adds a UID that no test stored. EXPECTED_FAILURE if the PACS refuses that one with a Failure Reason and commits the rest. FAIL, as a finding, if it says it committed it.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource H2}">Settings on the Tests tab</Paragraph>
+                    <Paragraph>
+                        <Bold>Keep association open</Bold> is how many seconds the association of the N-ACTION stays open, so
+                        that the report can come on it. The association stays open for that long even if the report comes
+                        sooner. 0 releases it at once, as many modalities do, and the report must then come on a new
+                        association. <Bold>Wait for the report</Bold> is how long the report may take after the N-ACTION
+                        response before the test gives TIMEOUT. <Bold>Then keep listening</Bold> is how much longer DCST4
+                        listens after that, so that the explanation can say whether the report came late or not at all.
+                    </Paragraph>
+                    <Paragraph>
+                        A report on a new association goes to <Bold>Local SCP AET</Bold> and <Bold>Port</Bold>, as C-MOVE does.
+                        The PACS must know that AE title with this computer's address and port, and Windows Defender Firewall
+                        must allow incoming TCP on the port. A report for a transaction DCST4 did not start is refused with
+                        0x0110 and counted in the result.
                     </Paragraph>
                 </Section>
 
@@ -482,6 +522,12 @@
                                 <TableCell><Paragraph>Send everything in this syntax where the object type allows it.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>--index-wait</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How long an object may take to appear in a query, in seconds. Default 30.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>--commit-linger</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Seconds to keep the Storage Commitment association open for the report. 0 releases at once. Default 10.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>--commit-wait</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Seconds the Storage Commitment report may take. Default 60.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>--commit-grace</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Seconds to go on listening for a late report. Default 30.</Paragraph></TableCell></TableRow>
                         </TableRowGroup>
                     </Table>
                     <Paragraph>

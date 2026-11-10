@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.6.1-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.7.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -27,6 +27,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). Each run is saved as JSON and CSV for comparison over time. See [Testing a PACS](#testing-a-pacs).
 - **Capability matrix:** finds out from association negotiation alone, with no images sent, which SOP classes and transfer syntaxes a PACS supports, and compares that with what the vendor's Conformance Statement claims. See [What the PACS supports](#what-the-pacs-supports).
 - **Store, query and retrieve:** proves the chain accepted, indexed, retrievable and intact for each object type, with C-STORE, C-FIND, C-GET and C-MOVE. What comes back is compared with what was sent, level by level. See [Store, query and retrieve](#store-query-and-retrieve).
+- **Storage Commitment:** asks the PACS to commit to what it stored, with N-ACTION, and takes its N-EVENT-REPORT either on the same association or on one the PACS opens to this computer. It records which way the PACS used, how long the report took and the Failure Reason of each instance that was not committed. See [Storage Commitment](#storage-commitment).
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
 - **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, Enhanced CT and MR, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
 
@@ -151,7 +152,7 @@ A test run is a set of tests against one destination. The result of each test is
 
 Open the **Tests** tab below the exam settings, tick the tests and click **Run tests**. They run against the destination entered under Server. Select a row to see its explanation and protocol timeline. **Cancel** stops the run, and what was finished is still saved.
 
-The row below the buttons holds the local AE title and port that C-MOVE sends to, the UID root of the objects the tests send, and the transfer syntax of the store tests.
+The row below the buttons holds the local AE title and port that C-MOVE and Storage Commitment reports go to, the UID root of the objects the tests send, and the transfer syntax of the store tests. The row below that holds the Storage Commitment times, see [Storage Commitment](#storage-commitment).
 
 ![The Tests tab after a run against the mock SCP](screenshots/tests.png)
 
@@ -178,7 +179,7 @@ DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results
 
 `--tests` takes test ids, categories (`Capability`, `Integrity`, `Limits`, `Performance`) or `all`, separated by commas. `--log-dir` chooses another folder for the log. Ctrl+C cancels the run and saves what was finished. A second Ctrl+C ends the program at once. Cancelling while a connection is being opened can take as long as the connection timeout.
 
-**`all` and the `Integrity` category include tests that store objects on the destination**, and those objects may not be possible to delete. Check the profile before running them. `--seed`, `--matrix`, `--transfer-syntax` and `--index-wait` apply to those tests, see [Store, query and retrieve](#store-query-and-retrieve).
+**`all` and the `Integrity` category include tests that store objects on the destination**, and those objects may not be possible to delete. Check the profile before running them. `--seed`, `--matrix`, `--transfer-syntax` and `--index-wait` apply to those tests, see [Store, query and retrieve](#store-query-and-retrieve), and `--commit-linger`, `--commit-wait` and `--commit-grace` to the Storage Commitment tests, see [Storage Commitment](#storage-commitment).
 
 | Exit code | Meaning                                                    |
 | --------- | ---------------------------------------------------------- |
@@ -270,7 +271,7 @@ These tests prove, per object type, that what the PACS accepted can be found, ca
 
 **The transfer syntax** of each store test is chosen per object type: your choice if you made one and the object type allows it, then the first of Explicit VR, Implicit VR and the lossless compressions that the capability matrix says is accepted, otherwise Explicit VR. The matrix comes from `negotiation-probe` in the same run, the Capabilities tab, or `--matrix <file>`. Each store result records in `transferSyntaxSelectedBy` what chose it. A status of Success or Warning is `PASS`, a warning with its raw code. A refused object is `FAIL`, and `0x0122` or a context that was not accepted is `NOT_SUPPORTED`.
 
-**The Chain tab**, the `chain` section of the JSON file and `<run>-chain.csv` give one row per object type, with one result each for accepted, indexed, retrievable and intact, and a place for committed, which stays empty until Storage Commitment exists. Select a row to see the explanation of each step and, per retrieve, each integrity level and what differed.
+**The Chain tab**, the `chain` section of the JSON file and `<run>-chain.csv` give one row per object type, with one result each for accepted, indexed, retrievable, intact and committed. Committed comes from `commit-stored`, see [Storage Commitment](#storage-commitment). Select a row to see the explanation of each step and, per retrieve, each integrity level and what differed.
 
 ![The Chain tab, with one row per object type and the details of the selected row](screenshots/chain.png)
 
@@ -302,6 +303,37 @@ DCST4.Cli.exe run --profile target.json --tests Integrity --out C:\Temp\results 
 | `--index-wait`         | How long an object may take to appear in a query, in seconds. Default 30                                    |
 
 The command line keeps the files that were sent and retrieved under the `--out` folder in `work-<time>`. The program uses a temporary folder and removes it when the run ends. The folder holds only test data.
+
+### Storage Commitment
+
+A C-STORE that succeeds says that the PACS received an object, not that it will keep it. Storage Commitment Push Model asks for that promise: DCST4 sends an N-ACTION (Request Storage Commitment, Action Type 1) with a Referenced SOP Sequence of instances stored earlier in the run, and the PACS answers later with an N-EVENT-REPORT. The two tests run after `verify-integrity`, need a store test before them in the same run, and send no objects of their own.
+
+| Test                      | What it asks for                                                                  | Result                                                                                                  |
+| ------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `commit-stored`           | Every instance stored in the run, in one transaction. The Committed step of the chain | `PASS` if Event Type 1 and all are committed. `FAIL` if any is not, with its Failure Reason            |
+| `commit-unknown-instance` | The instances of the smallest stored object type, plus one SOP Instance UID under the profile's root that no test stored | `EXPECTED_FAILURE` if that one fails with a Failure Reason and the rest are committed. Reported as committed: `FAIL`, as a finding |
+
+**Where the report comes.** The PACS may send the N-EVENT-REPORT on the association of the N-ACTION, if it is still open, or open a new association to the local SCP, the same AE title and port as for C-MOVE. Both are accepted and the result says which was used, in `reportVia`. A report on a new association needs the PACS to know the local AE title with this computer's address and port, and Windows Defender Firewall to allow incoming TCP on the port. The SCP role that the PACS proposes for it is accepted.
+
+| Setting on the Tests tab   | Command line        | Default | Meaning                                                                                                    |
+| -------------------------- | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------- |
+| Keep association open      | `--commit-linger`   | 10 s    | How long the association of the N-ACTION stays open after its response, so that the report can come on it. It stays open that long even if the report comes sooner. 0 releases it at once, as many modalities do |
+| Wait for the report        | `--commit-wait`     | 60 s    | How long the report may take after the N-ACTION-RSP. It cannot be shorter than the time the association is kept open |
+| Then keep listening        | `--commit-grace`    | 30 s    | How much longer DCST4 listens after a timeout                                                             |
+
+**No report in time** is `TIMEOUT`. DCST4 keeps listening for the grace period, and the explanation says whether the report came later and on which association, or not at all. A late report is answered with `0x0000`, since DCST4 issued its Transaction UID, and its content is recorded. The timeout counts from the N-ACTION-RSP, and the N-ACTION-RSP itself is under the profile's response timeout.
+
+**What is recorded**, in the `commitment` section of the test's result: the Transaction UID, the settings, the raw N-ACTION-RSP status, which association the report came on and from which AE title, the Event Type, `reportAfterMs` from the N-ACTION to the report on the monotonic clock, and per instance `Committed`, `Failed` with the Failure Reason as `0xNNNN` and its meaning, `NotReported` or `ListedTwice`. The timeline shows our association and each one the PACS opened, with the N-EVENT-REPORT and our response.
+
+**Rules the report must follow.** Every instance asked for in exactly one of the two lists, nothing that was not asked for, a Failure Reason for each failure, Event Type 1 only without failures and 2 only with them. A report that breaks one is `FAIL` with `finding` in the Details.
+
+**What DCST4 refuses.** An N-EVENT-REPORT whose Transaction UID DCST4 did not issue, or that has none, is answered with `0x0110` Processing Failure and the Error Comment `Unknown Transaction UID`, and is listed in `rejectedReports`. An Event Type other than 1 or 2 gets `0x0113`. Neither ends the wait for the real report. A report while no commitment is outstanding is refused the same way.
+
+**Other results.** A Storage Commitment Push Model context that is not accepted, or an N-ACTION-RSP of `0x0123` or `0x0211`, is `NOT_SUPPORTED`. Any other N-ACTION-RSP than `0x0000` is `FAIL`. A port that is already in use is `TOOL_ERROR`. The Transaction UID follows from the seed and the profile's UID root, so the same seed repeats it.
+
+```powershell
+DCST4.Cli.exe run --profile target.json --tests store-ct,commit-stored,commit-unknown-instance --out C:\Temp\results --commit-linger 0
+```
 
 ## Test datasets
 
@@ -378,12 +410,12 @@ src\DCST4.Core\     No WPF reference
     Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
   TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
   Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary, ExamSizeEstimator
-  Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
+  Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), Storage Commitment (StorageCommitment.cs), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
   Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
   Verification\     IntegrityOracle and IntegrityReport: what came back against what was sent
   Output\           DICOM File-set and DICOMDIR
   Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestResult, ResultFileWriter
-    Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share
+    Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests
 src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
@@ -396,9 +428,11 @@ The app and the command line are front-ends on the same engine in `Testing\`. To
 
 `NegotiationProbe` runs each association through `EchoService.EchoAsync`, whose `configure` parameter decides what is proposed. It depends on how fo-dicom builds an association: a plain C-ECHO adds one context, Verification with Implicit VR, as ID 1, and `AdditionalPresentationContexts` follow unchanged, but a context identical to one already there is silently dropped. So Verification with Implicit VR is never proposed twice, and that cell of the matrix is answered by the C-ECHO's own context. After the A-ASSOCIATE-AC a context no longer holds what was proposed, so answers are paired with the plan by position. A role reply overwrites the proposed role, which is why the SCU role is proposed as null: it stays null only when no reply came. Later phases can choose a transfer syntax per object type from `CapabilityMatrix`.
 
-`TestRunSession` is how tests of one run depend on each other, in catalog order: store tests add a `StoredObjectRecord` with the manifest and the path of what was sent, query and retrieve tests add their step to it, and `TestRunner` turns the records into `TestRunReport.Chain`. Storage Commitment fits here: it reads the stored instances from the session and fills the `Committed` step of `ChainRow`. A store test gets its own seed from `TestRunSession.SeedFor(purpose)`, because a Patient ID follows from the seed alone and two purposes on one seed would put one Patient ID under two names.
+`TestRunSession` is how tests of one run depend on each other, in catalog order: store tests add a `StoredObjectRecord` with the manifest and the path of what was sent, query and retrieve tests add their step to it, and `TestRunner` turns the records into `TestRunReport.Chain`. `commit-stored` reads the stored instances from the session and fills `StoredObjectRecord.Committed`, which becomes the `Committed` step of `ChainRow`. A store test gets its own seed from `TestRunSession.SeedFor(purpose)`, because a Patient ID follows from the seed alone and two purposes on one seed would put one Patient ID under two names.
 
 `DimseRunner` opens one association for one DIMSE request, with the same timeouts and endings everywhere. fo-dicom answers a request itself when no context was accepted, so the callbacks check `DimseExchange.ContextAccepted` before believing a status. C-GET proposes storage contexts in SCP role only for the SOP classes it expects, because there are more storage classes than the 128 an association can hold, and `RetrieveService` sets the SOP class on the command, because fo-dicom's retrieve requests are fixed to Study Root. In the mock SCP, a retrieve provider must not wait for a C-STORE response inside `OnCGetRequestAsync`, which fo-dicom runs in the loop that reads the PDUs, so the sub-operations go out on a task of their own.
+
+Storage Commitment is in `Network\StorageCommitment.cs`. `StorageCommitmentService` sends the N-ACTION through `DimseRunner`. "Keep the association open" is fo-dicom's `ClientOptions.AssociationLingerTimeoutInMs`, which holds the association for the whole time after the last response, so the response timer is stopped at the N-ACTION-RSP. A report on that association arrives through `IDicomClient.OnNEventReportRequest`. A report on a new association arrives at `LocalStorageService`, which implements `IDicomNServiceProvider` for that. Both go through one `CommitmentTracker`, which knows the Transaction UIDs we issued, refuses the others, and after a timeout accepts a late report and marks it late. It is registered before the N-ACTION, because a report may come before its response. The tracker completes its wait before the N-EVENT-REPORT-RSP goes out, so `LocalStorageServer.WaitForIncomingToEndAsync` lets an incoming association finish before its steps are read, for at most 2 s. With a clock, `LocalStorageServer` records the steps of each incoming association, and a test adds them to its timeline with `TimelineCollector.Collect`. `AssociationTimeline.RecordIncomingRequest` and `RecordOutgoingResponse` record a request that the other side sends on our own association. In the mock SCP, the report goes out on a task of its own after the N-ACTION-RSP, as the C-GET sub-operations do.
 
 Generation knows nothing about sending. The two meet at `IImageSource`, which supplies images lazily so that a long stack does not sit in memory. That leaves room for:
 
@@ -406,7 +440,6 @@ Generation knows nothing about sending. The two meet at `IImageSource`, which su
 | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
 | Sending existing files from a folder, with optional new UIDs | A new `IImageSource`. Sending does not change.                                                     |
 | Load testing (send N times, measure throughput)              | Repeat `StoreRun` with a new source. `RunSummary` already has timing, bytes and images per second. |
-| Storage Commitment                                           | `RunSummary.Results` keeps each image's SOP Class and Instance UID.                                |
 | MPPS                                                         | `ExamRequest` holds the study and series identity. `Network\` gets a new service.                  |
 
 To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog`. An image type only for datasets goes in `DatasetProfileCatalog` instead, so that it stays out of the Generate & Send list. A non-image object subclasses `ObjectProfile`.
@@ -444,11 +477,15 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 mixed
 # The same, with a table of what is accepted, for looking at the Capabilities tab
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 negotiation
 
-# The same, but it keeps what it receives and answers C-FIND, C-GET and C-MOVE, with DCST4 at 127.0.0.1:11113 as the C-MOVE destination
+# The same, but it keeps what it receives and answers C-FIND, C-GET, C-MOVE and Storage Commitment, with DCST4 at 127.0.0.1:11113
+# as the C-MOVE destination. The commitment report goes on the same association while it is open, otherwise on a new one to DCST4.
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 pacs
 
-# Only the store, query and retrieve tests, which is quicker while working on them
+# Only the store, query, retrieve and Storage Commitment tests, which is quicker while working on them
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe retrieve
+
+# Only the Storage Commitment tests
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe commit
 ```
 
 JPEG Lossless streams are checked with a small decoder written from ITU T.81 (`LosslessJpegDecoder.cs`). fo-dicom's built-in decoder is not used as the reference, because it was seen returning 0 for the last pixel of a frame that this decoder and PureCodecs both decode correctly.
@@ -513,6 +550,8 @@ The store, query and retrieve tests added in 1.6.0 were checked once by hand aga
 
 The check that a firewall really blocks C-MOVE was not done, since both ends were on the same computer. A comparison with Orthanc has not been done, since it was not available.
 
+The Storage Commitment tests added in 1.7.0 have only been run against the mock SCP in `run-tests.ps1`, which answers on the same association, on a new one, partly, late and not at all. No reference server that implements Storage Commitment was installed, such as Orthanc (from 1.6) or dcm4chee. DCMTK's `storescp` is only a Storage SCP, so it cannot serve as one.
+
 ## Dependencies
 
 | Package                  | Use                                                          | Licence    |
@@ -535,6 +574,24 @@ The check that a firewall really blocks C-MOVE was not done, since both ends wer
 | Objects sent and retrieved by a run | From the command line, `work-<time>` under `--out`. From the program, a temporary folder that is removed |
 
 ## Changelog
+
+### 1.7.0
+
+New:
+
+- Storage Commitment Push Model, tested separately from C-STORE success: an N-ACTION for the instances stored earlier in the run, with the N-EVENT-REPORT accepted both on the same association and on a new association that the PACS opens to the local SCP
+- Test `commit-stored`: every stored instance, with the result as the Committed step of the Chain tab, the `chain` section and `<run>-chain.csv`
+- Test `commit-unknown-instance`: adds an instance that was never stored, which the PACS must refuse with a Failure Reason. A PACS that reports it as committed is `FAIL`, as a finding
+- Records which association the report came on, the time from N-ACTION to report on the monotonic clock, the Event Type, and per instance whether it was committed or failed, with the Failure Reason
+- No report in time gives `TIMEOUT`. DCST4 keeps listening for a grace period, and the explanation says whether the report came late or not at all
+- The local SCP refuses an N-EVENT-REPORT for a Transaction UID that DCST4 did not issue with `0x0110`, and one with an unknown Event Type with `0x0113`
+- How long to keep the association open for the report, how long to wait and how long to keep listening, on the Tests tab and as `--commit-linger`, `--commit-wait` and `--commit-grace`. The defaults are 10, 60 and 30 seconds
+- The mock SCP of the test harness answers Storage Commitment on the same association, on a new one, partly, late or not at all
+
+Changed:
+
+- The result files have schema version 4, with a `commitment` section in the results of the Storage Commitment tests and the committed step filled in the chain
+- `all` and the `Integrity` category include the two Storage Commitment tests, and they are ticked by default on the Tests tab. They send no objects
 
 ### 1.6.1
 

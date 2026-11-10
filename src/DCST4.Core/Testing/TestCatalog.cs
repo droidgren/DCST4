@@ -36,6 +36,8 @@ namespace DCST4.Core.Testing
             tests.Add(new RetrieveMoveTest());
             tests.Add(new RetrieveMoveDiagnosticTest());
             tests.Add(new VerifyIntegrityTest());
+            tests.Add(new CommitStoredTest());
+            tests.Add(new CommitUnknownInstanceTest());
             tests.Add(new DuplicateIdenticalTest());
             tests.Add(new DuplicateModifiedTest());
             tests.Add(new ConflictDemographicsTest());

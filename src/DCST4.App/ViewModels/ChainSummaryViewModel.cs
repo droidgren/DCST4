@@ -52,6 +52,7 @@ namespace DCST4.ViewModels
             Line("Indexed", row.Indexed);
             Line("Retrievable", row.Retrievable);
             Line("Intact", row.Intact);
+            Line("Committed", row.Committed);
 
             foreach (var set in sets)
             {

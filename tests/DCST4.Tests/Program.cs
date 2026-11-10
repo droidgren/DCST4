@@ -101,13 +101,14 @@ namespace DCST4.Tests
             var temp = Path.Combine(Path.GetTempPath(), "DCST4Tests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(temp);
 
-            if (args.Length == 1 && args[0] == "retrieve")
+            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit"))
             {
                 try
                 {
                     using (DicomServerFactory.Create<MockStorageScp>(Port))
                     {
-                        RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
+                        if (args[0] == "retrieve") RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
+                        CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     }
                 }
                 catch (Exception ex)
@@ -155,6 +156,7 @@ namespace DCST4.Tests
                     TestAdditionalTagDelivery(temp).GetAwaiter().GetResult();
                     TestDataTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
+                    CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     ViewModelTests.Run(Port, ClosedPort, temp, (name, ok, detail) => Check(name, ok, detail));
                 }
                 TestTls().GetAwaiter().GetResult();
@@ -2099,6 +2101,9 @@ namespace DCST4.Tests
             {
                 Scp.KeepStored = true;
                 Scp.MoveDestinations["DCST4"] = Tuple.Create("127.0.0.1", 11113);
+                Scp.Commit = CommitMode.SameIfOpen;
+                Scp.CommitDelayMs = 500;
+                Scp.CommitDestinations["DCST4"] = Tuple.Create("127.0.0.1", 11113, "DCST4");
             }
             if (mode == "mixed")
             {
