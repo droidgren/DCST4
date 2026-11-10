@@ -22,12 +22,18 @@ namespace DCST4.Core.Testing.Cases
         private readonly List<ProtocolEvent> _events = new List<ProtocolEvent>();
         private int _associations;
 
+        /// <summary>The shared time axis, for steps recorded outside an <see cref="AssociationTimeline"/>.</summary>
+        public Stopwatch Clock => _clock;
+
         public AssociationTimeline Next() => new AssociationTimeline(_clock);
 
-        public void Collect(AssociationTimeline timeline)
+        public void Collect(AssociationTimeline timeline) => Collect(timeline.Events);
+
+        /// <summary>The steps of one association, recorded on <see cref="Clock"/>.</summary>
+        public void Collect(IEnumerable<ProtocolEvent> events)
         {
             _associations++;
-            foreach (var entry in timeline.Events)
+            foreach (var entry in events)
             {
                 entry.Association = _associations;
                 _events.Add(entry);

@@ -24,6 +24,9 @@ namespace DCST4.Cli
             "  --matrix <file>                  A saved capability matrix to choose the transfer syntax from\n" +
             "  --transfer-syntax <name or UID>  Send everything in this syntax where the object type allows it\n" +
             "  --index-wait <seconds>           How long an object may take to appear in a query. Default 30\n" +
+            "  --commit-linger <seconds>        Keep the Storage Commitment association open this long for the report. 0 releases at once. Default 10\n" +
+            "  --commit-wait <seconds>          How long the Storage Commitment report may take. Default 60\n" +
+            "  --commit-grace <seconds>         How long to go on listening for a late report after that. Default 30\n" +
             "\n" +
             "Options of generate:\n" +
             "  --seed <n>  --uid-root <root>  --patients <n>  --studies <n>  --series <n>  --instances <n>\n" +
@@ -43,6 +46,17 @@ namespace DCST4.Cli
         public string MatrixPath { get; private set; }
         public FellowOakDicom.DicomTransferSyntax TransferSyntax { get; private set; }
         public int IndexWaitSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultIndexWaitSeconds;
+        public int CommitLingerSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultCommitLingerSeconds;
+        public int CommitWaitSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultCommitWaitSeconds;
+        public int CommitGraceSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultCommitGraceSeconds;
+
+        private static bool TrySeconds(string name, string value, out int seconds, out string error)
+        {
+            error = null;
+            if (int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out seconds)) return true;
+            error = $"{name} must be a number of seconds, not '{value}'.";
+            return false;
+        }
 
         public static string PatientNamingError(string value) =>
             $"Unknown patient naming '{value}'. Use {nameof(TestPatientNaming.RegistrySwedishName)} or {nameof(TestPatientNaming.MarkedTestName)}.";
@@ -103,6 +117,18 @@ namespace DCST4.Cli
                         }
                         parsed.IndexWaitSeconds = wait;
                         break;
+                    case "--commit-linger":
+                        if (!TrySeconds(name, value, out var linger, out error)) return null;
+                        parsed.CommitLingerSeconds = linger;
+                        break;
+                    case "--commit-wait":
+                        if (!TrySeconds(name, value, out var commitWait, out error)) return null;
+                        parsed.CommitWaitSeconds = commitWait;
+                        break;
+                    case "--commit-grace":
+                        if (!TrySeconds(name, value, out var grace, out error)) return null;
+                        parsed.CommitGraceSeconds = grace;
+                        break;
                     default:
                         error = $"Unknown option {name}.";
                         return null;
@@ -112,6 +138,13 @@ namespace DCST4.Cli
             if (string.IsNullOrWhiteSpace(parsed.ProfilePath)) error = "--profile is required.";
             else if (string.IsNullOrWhiteSpace(parsed.Tests)) error = "--tests is required.";
             else if (string.IsNullOrWhiteSpace(parsed.OutputFolder)) error = "--out is required.";
+            else error = new DCST4.Core.Testing.TestRunOptions
+            {
+                IndexWaitSeconds = parsed.IndexWaitSeconds,
+                CommitLingerSeconds = parsed.CommitLingerSeconds,
+                CommitWaitSeconds = parsed.CommitWaitSeconds,
+                CommitGraceSeconds = parsed.CommitGraceSeconds,
+            }.Validate();
             return error == null ? parsed : null;
         }
     }

@@ -30,17 +30,19 @@ namespace DCST4.Core.Testing.Cases
             sopClasses.Distinct().ToDictionary(uid => uid, uid => sentSyntaxUid, StringComparer.Ordinal);
 
         /// <summary>Opens the listener, or returns why it could not be, which is a local problem and never the PACS's.</summary>
-        public static LocalStorageServer TryListen(TargetProfile profile, string folder, IReadOnlyDictionary<string, string> preferred, out string problem)
+        /// <param name="purpose">What the listener is for, as it reads in the explanation.</param>
+        public static LocalStorageServer TryListen(TargetProfile profile, string folder, IReadOnlyDictionary<string, string> preferred, out string problem,
+            string purpose = "the C-MOVE", CommitmentTracker commitments = null, System.Diagnostics.Stopwatch clock = null)
         {
             problem = null;
             try
             {
-                return LocalStorageServer.Start(profile.LocalScpPort, folder, preferred);
+                return LocalStorageServer.Start(profile.LocalScpPort, folder, preferred, commitments, clock);
             }
             catch (Exception ex) when (ex is DicomNetworkException || ex is SocketException || ex is InvalidOperationException || ex is DicomException)
             {
                 Logger.Error(ex, "Could not listen on port {port}", profile.LocalScpPort);
-                problem = $"DCST4 could not listen on port {profile.LocalScpPort.ToString(System.Globalization.CultureInfo.InvariantCulture)} for the C-MOVE, which is a local problem and not a fault of the system under test. Is another program using that port? {NetworkErrors.GetUserMessage(ex)}";
+                problem = $"DCST4 could not listen on port {profile.LocalScpPort.ToString(System.Globalization.CultureInfo.InvariantCulture)} for {purpose}, which is a local problem and not a fault of the system under test. Is another program using that port? {NetworkErrors.GetUserMessage(ex)}";
                 return null;
             }
         }

@@ -103,6 +103,9 @@ namespace DCST4.Cli
                 Seed = arguments.Seed,
                 SyntaxOverride = arguments.TransferSyntax,
                 IndexWaitSeconds = arguments.IndexWaitSeconds,
+                CommitLingerSeconds = arguments.CommitLingerSeconds,
+                CommitWaitSeconds = arguments.CommitWaitSeconds,
+                CommitGraceSeconds = arguments.CommitGraceSeconds,
                 // Under --out and kept, so that what was sent and retrieved can be looked at afterwards.
                 WorkFolder = Path.Combine(arguments.OutputFolder, "work-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture)),
             };

@@ -642,7 +642,7 @@ namespace DCST4.Tests
             help.UpdateLayout();
             try
             {
-                check("All the topics are listed", help.Topics.Count == 17, help.Topics.Count.ToString());
+                check("All the topics are listed", help.Topics.Count == 18, help.Topics.Count.ToString());
                 check("Topic titles are unique", help.Topics.Select(t => t.Title).Distinct().Count() == help.Topics.Count, null);
                 check("Estimated size is explained", new System.Windows.Documents.TextRange(help.Topics[2].Section.ContentStart, help.Topics[2].Section.ContentEnd).Text.Contains("Estimated size"), null);
 
@@ -734,11 +734,27 @@ namespace DCST4.Tests
             Scp.KeepStored = true;
             Scp.MoveDestinations["DCST4"] = Tuple.Create("127.0.0.1", 41215);
             vm.LocalScpPort = 41215;
-            foreach (var choice in suite.Choices) choice.IsSelected = new[] { "store-ct", "query-index", "retrieve-cget", "retrieve-cmove", "verify-integrity" }.Contains(choice.Test.Id);
+            Scp.Commit = CommitMode.NewAssociation;
+            Scp.CommitDestinations["DCST4"] = Tuple.Create("127.0.0.1", 41215, "DCST4");
+            vm.CommitLingerSeconds = 0;
+            vm.CommitWaitSeconds = 5;
+            vm.CommitGraceSeconds = 1;
+            var runOptions = vm.BuildTestRunOptions();
+            check("Commitment settings: passed to the run", runOptions.CommitLingerSeconds == 0 && runOptions.CommitWaitSeconds == 5 && runOptions.CommitGraceSeconds == 1, null);
+            foreach (var choice in suite.Choices) choice.IsSelected = new[] { "store-ct", "query-index", "retrieve-cget", "retrieve-cmove", "verify-integrity", "commit-stored" }.Contains(choice.Test.Id);
             await h.Execute(vm.RunTestsCommand);
             check("Chain: one row per object type", suite.Chain.Rows.Count == 1 && suite.Chain.Rows[0].ObjectType.Length > 0, suite.Chain.Rows.Count.ToString());
             var chainRow = suite.Chain.Rows.Single();
-            check("Chain: every step PASS, none invented", chainRow.Accepted == "PASS" && chainRow.Indexed == "PASS" && chainRow.Retrievable == "PASS" && chainRow.Intact == "PASS" && chainRow.Committed == "-", chainRow.Detail);
+            check("Chain: every step PASS, none invented", chainRow.Accepted == "PASS" && chainRow.Indexed == "PASS" && chainRow.Retrievable == "PASS" && chainRow.Intact == "PASS" && chainRow.Committed == "PASS", chainRow.Detail);
+            check("Chain: the detail has the committed step", chainRow.Detail.Contains("Committed: PASS"), chainRow.Detail);
+
+            vm.CommitLingerSeconds = 9;
+            vm.CommitWaitSeconds = 3;
+            h.Messages.Clear();
+            await h.Execute(vm.RunTestsCommand);
+            check("Commitment settings: a linger longer than the wait stops the run with a message", h.Messages.Count == 1 && h.Messages[0].Contains("longer than the wait"), string.Join("; ", h.Messages));
+            vm.CommitLingerSeconds = 0;
+            h.Messages.Clear();
             check("Chain: the detail explains it, level by level", chainRow.Detail.Contains("C-GET") && chainRow.Detail.Contains("C-MOVE") && chainRow.Detail.Contains("Attributes: PASS"), chainRow.Detail);
             check("Chain: the JSON holds the same", File.ReadAllText(suite.LastResultFiles.Json, Encoding.UTF8).Contains("\"chain\""), null);
             check("Chain: the CSV is written", suite.LastResultFiles.ChainCsv != null && File.Exists(suite.LastResultFiles.ChainCsv), null);

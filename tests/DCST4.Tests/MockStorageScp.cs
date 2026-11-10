@@ -90,6 +90,27 @@ namespace DCST4.Tests
 
     public enum DuplicatePolicy { Overwrite, KeepFirst, Reject }
 
+    /// <summary>How the mock answers Request Storage Commitment.</summary>
+    public enum CommitMode
+    {
+        /// <summary>Only on the association of the N-ACTION, and nothing if that has been released.</summary>
+        SameAssociation,
+        /// <summary>Always on a new association to <see cref="Scp.CommitDestinations"/>.</summary>
+        NewAssociation,
+        /// <summary>On the same association while it is open, otherwise on a new one.</summary>
+        SameIfOpen,
+        /// <summary>Never sends a report.</summary>
+        Never,
+    }
+
+    /// <summary>One N-ACTION the mock received.</summary>
+    public sealed class CommitRequestRecord
+    {
+        public string TransactionUid;
+        public List<string> SopInstanceUids;
+        public int Association;
+    }
+
     public enum ConflictPolicy { Keep, Reject, ReconcileToFirst }
 
     /// <summary>One object the mock holds, for C-FIND, C-GET and C-MOVE.</summary>
@@ -177,6 +198,32 @@ namespace DCST4.Tests
         /// <summary>Where C-MOVE sends to, by AE title. An AE title that is not here gets 0xA801.</summary>
         public static readonly Dictionary<string, Tuple<string, int>> MoveDestinations = new Dictionary<string, Tuple<string, int>>(StringComparer.Ordinal);
 
+        // ------------------------------------------------------------ Storage Commitment
+        public static CommitMode Commit;
+        /// <summary>How long after the N-ACTION the report goes out.</summary>
+        public static int CommitDelayMs;
+        /// <summary>The status of the N-ACTION-RSP. Null means Success, and only then is a report sent.</summary>
+        public static DicomStatus CommitActionStatus;
+        /// <summary>The failure reason per SOP Instance UID, or null to commit it. When null, an instance not kept fails with 0x0112 if <see cref="KeepStored"/>.</summary>
+        public static Func<string, ushort?> CommitFailure;
+        /// <summary>Report every instance as committed, whether it was stored or not.</summary>
+        public static bool CommitClaimAll;
+        /// <summary>Leave out the Failure Reason of a failed instance.</summary>
+        public static bool CommitOmitReason;
+        /// <summary>First send a report with a Transaction UID that nobody issued.</summary>
+        public static bool CommitBogusFirst;
+        /// <summary>The Transaction UID of the bogus report.</summary>
+        public const string BogusTransactionUid = "1.2.826.0.1.3680043.10.999.4242";
+        /// <summary>Where a new association goes, by the calling AE of the N-ACTION: host, port and called AE.</summary>
+        public static readonly Dictionary<string, Tuple<string, int, string>> CommitDestinations = new Dictionary<string, Tuple<string, int, string>>(StringComparer.Ordinal);
+        public static readonly ConcurrentQueue<CommitRequestRecord> CommitRequests = new ConcurrentQueue<CommitRequestRecord>();
+        /// <summary>The raw status of each N-EVENT-REPORT-RSP, with the Transaction UID of its report.</summary>
+        public static readonly ConcurrentQueue<Tuple<string, ushort>> CommitReportStatuses = new ConcurrentQueue<Tuple<string, ushort>>();
+        /// <summary>Per new association: whether the A-ASSOCIATE-AC accepted the SCP role it proposed.</summary>
+        public static readonly ConcurrentQueue<bool> CommitRoleAccepted = new ConcurrentQueue<bool>();
+        /// <summary>A report that could not go out, for example because the association was gone.</summary>
+        public static readonly ConcurrentQueue<string> CommitSendFailures = new ConcurrentQueue<string>();
+
         public static int AssociationCount;
         public static int EchoCount;
         public static int StoreCount;
@@ -216,6 +263,18 @@ namespace DCST4.Tests
             QueryCaseInsensitive = false;
             RetrieveSyntax = null;
             MoveDestinations.Clear();
+            Commit = CommitMode.SameIfOpen;
+            CommitDelayMs = 0;
+            CommitActionStatus = null;
+            CommitFailure = null;
+            CommitClaimAll = false;
+            CommitOmitReason = false;
+            CommitBogusFirst = false;
+            CommitDestinations.Clear();
+            while (CommitRequests.TryDequeue(out _)) { }
+            while (CommitReportStatuses.TryDequeue(out _)) { }
+            while (CommitRoleAccepted.TryDequeue(out _)) { }
+            while (CommitSendFailures.TryDequeue(out _)) { }
             AssociationCount = 0;
             EchoCount = 0;
             StoreCount = 0;
@@ -225,8 +284,9 @@ namespace DCST4.Tests
         }
     }
 
-    public sealed class MockStorageScp : DicomService, IDicomServiceProvider, IDicomCStoreProvider, IDicomCEchoProvider, IDicomCFindProvider, IDicomCGetProvider, IDicomCMoveProvider
+    public sealed class MockStorageScp : DicomService, IDicomServiceProvider, IDicomCStoreProvider, IDicomCEchoProvider, IDicomCFindProvider, IDicomCGetProvider, IDicomCMoveProvider, IDicomNServiceProvider
     {
+        private volatile bool _ended;
         private static readonly uint DefaultMaxPdu = new DicomServiceOptions().MaxPDULength;
         private static readonly MethodInfo SetUserRole = typeof(DicomPresentationContext).GetProperty(nameof(DicomPresentationContext.UserRole)).GetSetMethod(true);
         private static readonly MethodInfo SetProviderRole = typeof(DicomPresentationContext).GetProperty(nameof(DicomPresentationContext.ProviderRole)).GetSetMethod(true);
@@ -335,15 +395,17 @@ namespace DCST4.Tests
         public Task OnReceiveAssociationReleaseRequestAsync()
         {
             if (_received != null) _received.Released = true;
+            _ended = true;
             return SendAssociationReleaseResponseAsync();
         }
 
         public void OnReceiveAbort(DicomAbortSource source, DicomAbortReason reason)
         {
             if (_received != null) _received.AbortedByPeer = true;
+            _ended = true;
         }
 
-        public void OnConnectionClosed(Exception exception) { }
+        public void OnConnectionClosed(Exception exception) { _ended = true; }
 
         public async Task<DicomCEchoResponse> OnCEchoRequestAsync(DicomCEchoRequest request)
         {
@@ -587,5 +649,136 @@ namespace DCST4.Tests
 
             return new ResponseList<DicomCMoveResponse>(new DicomCMoveResponse[0]);
         }
+
+        // ---------------------------------------------------------------- Storage Commitment
+
+        public Task<DicomNActionResponse> OnNActionRequestAsync(DicomNActionRequest request)
+        {
+            var transactionUid = request.Dataset?.GetSingleValueOrDefault(DicomTag.TransactionUID, string.Empty) ?? string.Empty;
+            var references = new List<Tuple<string, string>>();
+            if (request.Dataset != null && request.Dataset.TryGetSequence(DicomTag.ReferencedSOPSequence, out var sequence))
+            {
+                references = sequence.Items.Select(i => Tuple.Create(i.GetSingleValueOrDefault(DicomTag.ReferencedSOPClassUID, string.Empty), i.GetSingleValueOrDefault(DicomTag.ReferencedSOPInstanceUID, string.Empty))).ToList();
+            }
+            Scp.CommitRequests.Enqueue(new CommitRequestRecord { TransactionUid = transactionUid, SopInstanceUids = references.Select(r => r.Item2).ToList(), Association = _received?.Number ?? 0 });
+
+            if (Scp.CommitActionStatus != null) return Task.FromResult(new DicomNActionResponse(request, Scp.CommitActionStatus));
+
+            // After the response has gone out, as with C-GET above: this method runs in the loop that reads the PDUs.
+            if (Scp.Commit != CommitMode.Never)
+            {
+                var callingAe = _callingAe;
+                Task.Run(() => SendReportsAsync(transactionUid, references, callingAe));
+            }
+            return Task.FromResult(new DicomNActionResponse(request, DicomStatus.Success));
+        }
+
+        private async Task SendReportsAsync(string transactionUid, List<Tuple<string, string>> references, string callingAe)
+        {
+            await Task.Delay(Math.Max(100, Scp.CommitDelayMs)).ConfigureAwait(false);
+
+            var reports = new List<DicomNEventReportRequest>();
+            if (Scp.CommitBogusFirst) reports.Add(BuildReport(Scp.BogusTransactionUid, references));
+            reports.Add(BuildReport(transactionUid, references));
+
+            var same = Scp.Commit == CommitMode.SameAssociation || (Scp.Commit == CommitMode.SameIfOpen && !_ended);
+            if (same)
+            {
+                foreach (var report in reports)
+                {
+                    if (_ended)
+                    {
+                        Scp.CommitSendFailures.Enqueue("released before the report");
+                        return;
+                    }
+                    var answered = new TaskCompletionSource<bool>();
+                    var previous = report.OnResponseReceived;
+                    report.OnResponseReceived = (q, r) => { previous?.Invoke(q, r); answered.TrySetResult(true); };
+                    try
+                    {
+                        await SendRequestAsync(report).ConfigureAwait(false);
+                        await Task.WhenAny(answered.Task, Task.Delay(5000)).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Scp.CommitSendFailures.Enqueue(ex.Message);
+                        return;
+                    }
+                }
+                return;
+            }
+
+            if (!Scp.CommitDestinations.TryGetValue(callingAe ?? string.Empty, out var destination))
+            {
+                Scp.CommitSendFailures.Enqueue("no destination for " + callingAe);
+                return;
+            }
+
+            try
+            {
+                var client = DicomClientFactory.Create(destination.Item1, destination.Item2, false, "MOCKSCP", destination.Item3);
+                client.AdditionalPresentationContexts.Add(DicomPresentationContext.GetScpRolePresentationContext(DicomUID.StorageCommitmentPushModel, DicomTransferSyntax.ExplicitVRLittleEndian, DicomTransferSyntax.ImplicitVRLittleEndian));
+                client.AssociationAccepted += (s, e) => Scp.CommitRoleAccepted.Enqueue(e.Association.PresentationContexts.Any(c =>
+                    c.AbstractSyntax == DicomUID.StorageCommitmentPushModel && c.Result == DicomPresentationContextResult.Accept && c.ProviderRole == true));
+                foreach (var report in reports) await client.AddRequestAsync(report).ConfigureAwait(false);
+                await client.SendAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Scp.CommitSendFailures.Enqueue(ex.Message);
+            }
+        }
+
+        private static DicomNEventReportRequest BuildReport(string transactionUid, List<Tuple<string, string>> references)
+        {
+            var committed = new List<DicomDataset>();
+            var failed = new List<DicomDataset>();
+            foreach (var reference in references)
+            {
+                var reason = Scp.CommitClaimAll ? null : Scp.CommitFailure != null ? Scp.CommitFailure(reference.Item2) : DefaultFailure(reference.Item2);
+                var item = new DicomDataset
+                {
+                    { DicomTag.ReferencedSOPClassUID, reference.Item1 },
+                    { DicomTag.ReferencedSOPInstanceUID, reference.Item2 },
+                };
+                if (reason == null)
+                {
+                    committed.Add(item);
+                    continue;
+                }
+                if (!Scp.CommitOmitReason) item.Add(DicomTag.FailureReason, reason.Value);
+                failed.Add(item);
+            }
+
+            var data = new DicomDataset { { DicomTag.TransactionUID, transactionUid } };
+            if (committed.Count > 0) data.Add(new DicomSequence(DicomTag.ReferencedSOPSequence, committed.ToArray()));
+            if (failed.Count > 0) data.Add(new DicomSequence(DicomTag.FailedSOPSequence, failed.ToArray()));
+
+            var eventType = (ushort)(failed.Count > 0 ? 2 : 1);
+            return new DicomNEventReportRequest(DicomUID.StorageCommitmentPushModel, DicomUID.StorageCommitmentPushModelInstance, eventType)
+            {
+                Dataset = data,
+                OnResponseReceived = (q, r) => Scp.CommitReportStatuses.Enqueue(Tuple.Create(transactionUid, r.Command.GetSingleValueOrDefault(DicomTag.Status, r.Status.Code))),
+            };
+        }
+
+        private static ushort? DefaultFailure(string sopInstanceUid)
+        {
+            if (!Scp.KeepStored) return null;
+            lock (Scp.Archive)
+            {
+                return Scp.Archive.Any(a => a.SopUid == sopInstanceUid) ? (ushort?)null : 0x0112;
+            }
+        }
+
+        public Task<DicomNCreateResponse> OnNCreateRequestAsync(DicomNCreateRequest request) => Task.FromResult(new DicomNCreateResponse(request, DicomStatus.UnrecognizedOperation));
+
+        public Task<DicomNDeleteResponse> OnNDeleteRequestAsync(DicomNDeleteRequest request) => Task.FromResult(new DicomNDeleteResponse(request, DicomStatus.UnrecognizedOperation));
+
+        public Task<DicomNEventReportResponse> OnNEventReportRequestAsync(DicomNEventReportRequest request) => Task.FromResult(new DicomNEventReportResponse(request, DicomStatus.UnrecognizedOperation));
+
+        public Task<DicomNGetResponse> OnNGetRequestAsync(DicomNGetRequest request) => Task.FromResult(new DicomNGetResponse(request, DicomStatus.UnrecognizedOperation));
+
+        public Task<DicomNSetResponse> OnNSetRequestAsync(DicomNSetRequest request) => Task.FromResult(new DicomNSetResponse(request, DicomStatus.UnrecognizedOperation));
     }
 }

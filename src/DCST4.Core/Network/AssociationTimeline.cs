@@ -145,6 +145,27 @@ namespace DCST4.Core.Network
             }
         }
 
+        /// <summary>A DIMSE request that the other side sent us on this association, such as N-EVENT-REPORT. Returns the number for <see cref="RecordOutgoingResponse"/>.</summary>
+        public int RecordIncomingRequest(string command, string detail)
+        {
+            lock (_lock)
+            {
+                var number = ++_dimseCount;
+                Add(ProtocolEvent.Received, command + "-RQ", detail).DimseIndex = number;
+                return number;
+            }
+        }
+
+        public void RecordOutgoingResponse(int dimseIndex, string command, ushort status, string detail)
+        {
+            lock (_lock)
+            {
+                var entry = Add(ProtocolEvent.Sent, command + "-RSP", detail);
+                entry.DimseIndex = dimseIndex;
+                entry.Status = FormatStatus(status);
+            }
+        }
+
         /// <summary>
         /// Settles how the association ended. Call after SendAsync, whether it returned or threw.
         /// </summary>

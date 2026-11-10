@@ -72,6 +72,16 @@ namespace DCST4.ViewModels
         private string _testUidRoot;
         public string TestUidRoot { get => _testUidRoot; set { _testUidRoot = value; OnPropertyChanged(); Settings.Default.TestUidRoot = value; } }
 
+        private int _commitLingerSeconds;
+        /// <summary>How long the Storage Commitment association stays open for the report. 0 releases at once.</summary>
+        public int CommitLingerSeconds { get => _commitLingerSeconds; set { _commitLingerSeconds = value; OnPropertyChanged(); Settings.Default.CommitLingerSeconds = value; } }
+
+        private int _commitWaitSeconds;
+        public int CommitWaitSeconds { get => _commitWaitSeconds; set { _commitWaitSeconds = value; OnPropertyChanged(); Settings.Default.CommitWaitSeconds = value; } }
+
+        private int _commitGraceSeconds;
+        public int CommitGraceSeconds { get => _commitGraceSeconds; set { _commitGraceSeconds = value; OnPropertyChanged(); Settings.Default.CommitGraceSeconds = value; } }
+
         private bool _useTLS;
         public bool UseTLS { get => _useTLS; set { _useTLS = value; OnPropertyChanged(); Settings.Default.UseTLS = value; } }
 
@@ -404,6 +414,9 @@ namespace DCST4.ViewModels
             _localScpAe = s.LocalScpAe;
             _localScpPort = s.LocalScpPort;
             _testUidRoot = s.TestUidRoot;
+            _commitLingerSeconds = s.CommitLingerSeconds;
+            _commitWaitSeconds = s.CommitWaitSeconds;
+            _commitGraceSeconds = s.CommitGraceSeconds;
             _useTLS = s.UseTLS;
             _tlsIgnoreCertErrors = s.TlsIgnoreCertErrors;
             _tlsClientCertThumbprint = s.TlsClientCertThumbprint ?? string.Empty;
@@ -900,6 +913,16 @@ namespace DCST4.ViewModels
             UidRoot = _testUidRoot,
         };
 
+        /// <summary>What the Tests tab decides about a run, beyond which tests are in it.</summary>
+        public TestRunOptions BuildTestRunOptions() => new TestRunOptions
+        {
+            Matrix = TestSuite.Capabilities.Matrix,
+            SyntaxOverride = TestSuite.SelectedStoreSyntax.Syntax,
+            CommitLingerSeconds = _commitLingerSeconds,
+            CommitWaitSeconds = _commitWaitSeconds,
+            CommitGraceSeconds = _commitGraceSeconds,
+        };
+
         /// <summary>Saves the current destination fields for use with DCST4.Cli.exe.</summary>
         public void SaveTargetProfile(string path)
         {
@@ -927,7 +950,8 @@ namespace DCST4.ViewModels
         private async Task DoRunTestsAsync(CancellationToken token)
         {
             var profile = BuildTargetProfile();
-            var problem = profile.Validate();
+            var options = BuildTestRunOptions();
+            var problem = profile.Validate() ?? options.Validate();
             if (problem == null && TestSuite.SelectedTests.Count == 0) problem = "Select at least one test.";
             if (problem == null && string.IsNullOrWhiteSpace(TestSuite.ResultsFolder)) problem = "Enter a folder for the results.";
             if (problem != null)
@@ -950,7 +974,6 @@ namespace DCST4.ViewModels
             var runner = new TestRunner();
             runner.Progress += progress => _dispatcher.BeginInvoke(new Action(() => ShowTestProgress(progress)), DispatcherPriority.Background);
             DCST4.Core.TestData.TestPatientNames.TryParse(Settings.Default.TestPatientNaming, out var patientNaming);
-            var options = new TestRunOptions { Matrix = TestSuite.Capabilities.Matrix, SyntaxOverride = TestSuite.SelectedStoreSyntax.Syntax };
             var report = await runner.RunAsync(profile, tests, token, patientNaming, options);
 
             // Let the rows queued by the background thread land before the summary replaces the status.

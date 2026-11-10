@@ -124,6 +124,18 @@ namespace DCST4.Properties
         /// <summary>UIDs in test datasets start with this root.</summary>
         [UserScopedSetting, DefaultSettingValue("2.25")]
         public string TestUidRoot { get => (string)this[nameof(TestUidRoot)]; set => this[nameof(TestUidRoot)] = value; }
+
+        /// <summary>How long the Storage Commitment association stays open for the report. 0 releases at once.</summary>
+        [UserScopedSetting, DefaultSettingValue("10")]
+        public int CommitLingerSeconds { get => (int)this[nameof(CommitLingerSeconds)]; set => this[nameof(CommitLingerSeconds)] = value; }
+
+        /// <summary>How long the Storage Commitment report may take.</summary>
+        [UserScopedSetting, DefaultSettingValue("60")]
+        public int CommitWaitSeconds { get => (int)this[nameof(CommitWaitSeconds)]; set => this[nameof(CommitWaitSeconds)] = value; }
+
+        /// <summary>How long to go on listening for a late report.</summary>
+        [UserScopedSetting, DefaultSettingValue("30")]
+        public int CommitGraceSeconds { get => (int)this[nameof(CommitGraceSeconds)]; set => this[nameof(CommitGraceSeconds)] = value; }
         // ------------------------------------------------------------ Output
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool SendImages { get => (bool)this[nameof(SendImages)]; set => this[nameof(SendImages)] = value; }

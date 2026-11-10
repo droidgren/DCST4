@@ -88,6 +88,9 @@ namespace DCST4.Core.Testing
         /// <summary>Only set by the query capability tests.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public QueryReport Query { get; set; }
+        /// <summary>Only set by the Storage Commitment tests.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CommitmentResult Commitment { get; set; }
     }
 
     /// <summary>
@@ -131,8 +134,11 @@ namespace DCST4.Core.Testing
     /// <summary>A whole test run: what is written to the result files.</summary>
     public sealed class TestRunReport
     {
-        /// <summary>2: added the capability matrix and the association number on protocol events. 3: added the seed, the chain summary, the integrity report and the query report.</summary>
-        public const int CurrentSchemaVersion = 3;
+        /// <summary>
+        /// 2: added the capability matrix and the association number on protocol events. 3: added the seed, the chain summary,
+        /// the integrity report and the query report. 4: added the commitment report and the committed step of the chain.
+        /// </summary>
+        public const int CurrentSchemaVersion = 4;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ToolVersion { get; set; }

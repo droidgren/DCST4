@@ -20,7 +20,7 @@ namespace DCST4.Tests
     internal static class TestSuiteTests
     {
         /// <summary>The fields allowed to differ between two identical runs. Everything else in a result file must match.</summary>
-        private static readonly HashSet<string> VolatileJsonFields = new HashSet<string>(StringComparer.Ordinal) { "startedUtc", "endedUtc", "durationMs", "offsetMs" };
+        private static readonly HashSet<string> VolatileJsonFields = new HashSet<string>(StringComparer.Ordinal) { "startedUtc", "endedUtc", "durationMs", "offsetMs", "reportAfterMs" };
         private static readonly HashSet<string> VolatileCsvColumns = new HashSet<string>(StringComparer.Ordinal) { "run_started_utc", "run_ended_utc", "run_duration_ms", "started_utc", "ended_utc", "duration_ms" };
 
         private const string Thumbprint = "ABCDEF0123456789ABCDEF0123456789ABCDEF01";
@@ -98,6 +98,17 @@ namespace DCST4.Tests
                 }
                 return new CliRun { ExitCode = process.ExitCode, Output = await output + await error };
             }
+        }
+
+        /// <summary>Where two normalized texts first differ, with some context, for a check that fails.</summary>
+        public static string FirstDifference(string a, string b)
+        {
+            var i = 0;
+            while (i < a.Length && i < b.Length && a[i] == b[i]) i++;
+            if (i == a.Length && i == b.Length) return null;
+            var start = Math.Max(0, i - 120);
+            string Around(string s) => s.Substring(start, Math.Min(s.Length - start, 240));
+            return "\n    first: " + Around(a) + "\n    second: " + Around(b);
         }
 
         /// <summary>The JSON with volatile fields removed and everything else in a stable text form.</summary>
