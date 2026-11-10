@@ -20,7 +20,7 @@ namespace DCST4.Tests
     internal static class TestSuiteTests
     {
         /// <summary>The fields allowed to differ between two identical runs. Everything else in a result file must match.</summary>
-        private static readonly HashSet<string> VolatileJsonFields = new HashSet<string>(StringComparer.Ordinal) { "startedUtc", "endedUtc", "durationMs", "offsetMs", "reportAfterMs" };
+        private static readonly HashSet<string> VolatileJsonFields = new HashSet<string>(StringComparer.Ordinal) { "startedUtc", "endedUtc", "durationMs", "offsetMs", "reportAfterMs", "endedAfterMs" };
         private static readonly HashSet<string> VolatileCsvColumns = new HashSet<string>(StringComparer.Ordinal) { "run_started_utc", "run_ended_utc", "run_duration_ms", "started_utc", "ended_utc", "duration_ms" };
 
         private const string Thumbprint = "ABCDEF0123456789ABCDEF0123456789ABCDEF01";

@@ -336,7 +336,8 @@
                         On the <Bold>Tests</Bold> tab below the exam settings, tick the tests and click <Bold>Run tests</Bold>.
                         They run against the destination entered under <Bold>Server</Bold>. Select a row to see its
                         explanation and the steps of the association, with the raw status of each response.
-                        <Bold>Cancel</Bold> stops the run, and what was finished is still saved.
+                        <Bold>Cancel</Bold> stops the run, and what was finished is still saved. The tests marked
+                        <Italic>Limits</Italic> are not ticked from the start, see the topic Limits and faults.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Results</Paragraph>
                     <Table>
@@ -495,6 +496,62 @@
                 </Section>
 
                 <!-- ===================================================================== -->
+                <Section Tag="Limits and faults">
+                    <Paragraph Style="{StaticResource H1}">Limits and faults</Paragraph>
+                    <Paragraph>
+                        The tests marked <Italic>Limits</Italic> find the limits of the PACS and show what it does when a
+                        transfer goes wrong. <Bold>They are not ticked by default</Bold>: they hold associations open on the
+                        PACS, break transfers on purpose, leave up to eight more test images on it, and take minutes with the
+                        default waits. Tick the ones you want. They depend on no other test.
+                    </Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="220"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>Simultaneous associations</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Opens associations one at a time and holds them, until one is refused or the number in <Bold>Associations up to</Bold> is reached. EXPECTED_FAILURE when the PACS rejects one, with the limit and the reason it gave. PASS when all were held: the limit is higher. FAIL, as a finding, if it aborts or closes the connection instead of rejecting. All are released afterwards.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Idle association timeout</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Opens an association and sends nothing for <Bold>Idle wait</Bold> seconds. Records how the PACS ended it, or that it was still open. PASS either way. The time is on the timeline.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Connection without an association request (ARTIM)</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Connects and never sends a request, for <Bold>ARTIM wait</Bold> seconds. PASS if the PACS closes the connection. FAIL, as a finding, if it is still open.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Maximum PDU length</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Stores four small CT images, each sent in data PDUs of exactly the length the PACS said it takes, while DCST4 announces four different lengths of its own.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>PDU longer than the announced maximum</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Sends one CT image in PDUs 1024 bytes longer than the PACS said it takes. EXPECTED_FAILURE if it refuses. FAIL, as a finding, if it stores the image.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>The three Fault tests</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Send a CT image of 2 MB and break off: with an A-ABORT halfway, by resetting the connection halfway, or by closing it when everything is sent but before the response is read. Then the test asks whether the image is there, gets it back to see whether it is complete, and sends it again as a modality would.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>The four TLS tests</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Record the TLS version and cipher, check the server certificate strictly against the host name, and present a client certificate from an unknown authority and an expired one, both of which the PACS should refuse. INDETERMINATE when <Bold>Use TLS</Bold> is not ticked.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource H2}">After a fault</Paragraph>
+                    <Paragraph>
+                        PASS when the PACS kept nothing or a complete image and stored the retry. EXPECTED_FAILURE when it
+                        refused the retry as a duplicate (0x0111) of an image it holds. FAIL, as a finding, when it kept a
+                        partial image, or refused the retry as a duplicate although a query does not find the image. FAIL when
+                        the retry is refused with another status. <Bold>After a fault, look for</Bold> is how many seconds the
+                        test goes on asking for the image before it counts as not there. Raise it for a PACS that indexes
+                        slowly. A fault test whose image is already on the PACS, from an earlier run with the same seed, gives
+                        INDETERMINATE and sends nothing.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">The client certificate tests</Paragraph>
+                    <Paragraph>
+                        The certificate from an unknown authority is made by DCST4 for the test and is never put in a
+                        certificate store. An expired certificate must come from an authority the PACS trusts, so DCST4 cannot
+                        make one. Install one in your personal certificate store and enter its thumbprint in
+                        <Bold>Expired client certificate</Bold>. Without it that test gives NOT_SUPPORTED. A PACS that does not
+                        ask for a client certificate at all also gives NOT_SUPPORTED. The server certificate test reports what
+                        this computer sees, so a certificate from an internal authority that is not installed here is reported
+                        as not trusted.
+                    </Paragraph>
+                    <Paragraph>
+                        Every test releases or aborts what it opened, also when you click <Bold>Cancel</Bold>.
+                    </Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
                 <Section Tag="Command line and datasets">
                     <Paragraph Style="{StaticResource H1}">Command line and test datasets</Paragraph>
                     <Paragraph>DCST4.Cli.exe is in the program's folder.</Paragraph>
@@ -528,8 +585,20 @@
                                 <TableCell><Paragraph>Seconds the Storage Commitment report may take. Default 60.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>--commit-grace</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Seconds to go on listening for a late report. Default 30.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>--max-associations</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Where the test of simultaneous associations stops if none is refused. Default 10.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>--idle-wait</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Seconds to wait for an idle association to be ended. Default 120.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>--artim-wait</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Seconds to wait on a connection with no association request. Default 60.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>--fault-settle</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Seconds a fault test looks for the image after a broken transfer. Default 5.</Paragraph></TableCell></TableRow>
                         </TableRowGroup>
                     </Table>
+                    <Paragraph>
+                        <Italic>all</Italic> and the <Italic>Limits</Italic> category also include the tests that strain the
+                        destination and break transfers on purpose. See the topic Limits and faults.
+                    </Paragraph>
                     <Paragraph>
                         What was sent and retrieved is kept under the <Italic>--out</Italic> folder in
                         <Italic>work-&lt;time&gt;</Italic>.

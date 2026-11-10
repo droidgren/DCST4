@@ -14,11 +14,13 @@ namespace DCST4.ViewModels
     /// <summary>One test in the list on the Tests tab.</summary>
     public sealed class TestChoice : INotifyPropertyChanged
     {
-        private bool _isSelected = true;
+        private bool _isSelected;
 
         public TestChoice(ITestCase test)
         {
             Test = test;
+            // The limit and fault tests strain the system under test and break transfers on purpose, so they are asked for, not assumed.
+            _isSelected = test.Category != TestCategory.Limits;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

@@ -54,6 +54,7 @@ namespace DCST4.Core.Testing
                 result.EndedUtc = DateTime.UtcNow;
                 result.DurationMs = testClock.ElapsedMilliseconds;
                 Redact(result, trimmed.Endpoint.TlsClientCertThumbprint);
+                Redact(result, trimmed.Endpoint.TlsExpiredClientCertThumbprint);
 
                 report.Results.Add(result);
                 Logger.Information("Test {id}: {result}: {explanation}", result.TestId, result.Result.ToString(), result.Explanation);

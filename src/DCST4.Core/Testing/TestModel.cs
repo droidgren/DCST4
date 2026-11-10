@@ -91,6 +91,9 @@ namespace DCST4.Core.Testing
         /// <summary>Only set by the Storage Commitment tests.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public CommitmentResult Commitment { get; set; }
+        /// <summary>Only set by the limit, fault and TLS tests.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public LimitsResult Limits { get; set; }
     }
 
     /// <summary>
@@ -137,8 +140,9 @@ namespace DCST4.Core.Testing
         /// <summary>
         /// 2: added the capability matrix and the association number on protocol events. 3: added the seed, the chain summary,
         /// the integrity report and the query report. 4: added the commitment report and the committed step of the chain.
+        /// 5: added the limits section of the limit, fault and TLS tests.
         /// </summary>
-        public const int CurrentSchemaVersion = 4;
+        public const int CurrentSchemaVersion = 5;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ToolVersion { get; set; }

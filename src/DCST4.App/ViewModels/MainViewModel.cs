@@ -82,6 +82,27 @@ namespace DCST4.ViewModels
         private int _commitGraceSeconds;
         public int CommitGraceSeconds { get => _commitGraceSeconds; set { _commitGraceSeconds = value; OnPropertyChanged(); Settings.Default.CommitGraceSeconds = value; } }
 
+        private int _limitMaxAssociations;
+        /// <summary>Where the limit test stops opening associations.</summary>
+        public int LimitMaxAssociations { get => _limitMaxAssociations; set { _limitMaxAssociations = value; OnPropertyChanged(); Settings.Default.LimitMaxAssociations = value; } }
+
+        private int _limitIdleWaitSeconds;
+        public int LimitIdleWaitSeconds { get => _limitIdleWaitSeconds; set { _limitIdleWaitSeconds = value; OnPropertyChanged(); Settings.Default.LimitIdleWaitSeconds = value; } }
+
+        private int _limitArtimWaitSeconds;
+        public int LimitArtimWaitSeconds { get => _limitArtimWaitSeconds; set { _limitArtimWaitSeconds = value; OnPropertyChanged(); Settings.Default.LimitArtimWaitSeconds = value; } }
+
+        private int _faultSettleSeconds;
+        public int FaultSettleSeconds { get => _faultSettleSeconds; set { _faultSettleSeconds = value; OnPropertyChanged(); Settings.Default.FaultSettleSeconds = value; } }
+
+        private string _tlsExpiredClientCertThumbprint;
+        /// <summary>Thumbprint of an expired client certificate in CurrentUser\My for tls-client-cert-expired, or empty for none.</summary>
+        public string TlsExpiredClientCertThumbprint
+        {
+            get => _tlsExpiredClientCertThumbprint;
+            set { _tlsExpiredClientCertThumbprint = value ?? string.Empty; OnPropertyChanged(); Settings.Default.TlsExpiredClientCertThumbprint = _tlsExpiredClientCertThumbprint; }
+        }
+
         private bool _useTLS;
         public bool UseTLS { get => _useTLS; set { _useTLS = value; OnPropertyChanged(); Settings.Default.UseTLS = value; } }
 
@@ -417,6 +438,11 @@ namespace DCST4.ViewModels
             _commitLingerSeconds = s.CommitLingerSeconds;
             _commitWaitSeconds = s.CommitWaitSeconds;
             _commitGraceSeconds = s.CommitGraceSeconds;
+            _limitMaxAssociations = s.LimitMaxAssociations;
+            _limitIdleWaitSeconds = s.LimitIdleWaitSeconds;
+            _limitArtimWaitSeconds = s.LimitArtimWaitSeconds;
+            _faultSettleSeconds = s.FaultSettleSeconds;
+            _tlsExpiredClientCertThumbprint = s.TlsExpiredClientCertThumbprint ?? string.Empty;
             _useTLS = s.UseTLS;
             _tlsIgnoreCertErrors = s.TlsIgnoreCertErrors;
             _tlsClientCertThumbprint = s.TlsClientCertThumbprint ?? string.Empty;
@@ -490,6 +516,7 @@ namespace DCST4.ViewModels
             UseTls = UseTLS,
             TlsIgnoreCertErrors = TlsIgnoreCertErrors,
             TlsClientCertThumbprint = TlsClientCertThumbprint,
+            TlsExpiredClientCertThumbprint = TlsExpiredClientCertThumbprint?.Trim(),
         }.Trimmed();
 
         private static NetworkOptions BuildNetworkOptions()
@@ -921,6 +948,10 @@ namespace DCST4.ViewModels
             CommitLingerSeconds = _commitLingerSeconds,
             CommitWaitSeconds = _commitWaitSeconds,
             CommitGraceSeconds = _commitGraceSeconds,
+            MaxAssociations = _limitMaxAssociations,
+            IdleWaitSeconds = _limitIdleWaitSeconds,
+            ArtimWaitSeconds = _limitArtimWaitSeconds,
+            FaultSettleSeconds = _faultSettleSeconds,
         };
 
         /// <summary>Saves the current destination fields for use with DCST4.Cli.exe.</summary>

@@ -94,14 +94,16 @@ namespace DCST4.Core.Network
         /// Called with the client and the request before the association opens, so that a negotiation test can decide what is
         /// proposed. fo-dicom adds the request's own context first, then the client's additional contexts.
         /// </param>
-        public static async Task<ConnectivityResult> EchoAsync(DicomEndpoint endpoint, NetworkOptions options, CancellationToken token, AssociationTimeline timeline = null, Action<IDicomClient, DicomCEchoRequest> configure = null)
+        /// <param name="wrapTls">Given the TLS initiator of the endpoint, returns the one to use, so that a test can record the handshake.</param>
+        public static async Task<ConnectivityResult> EchoAsync(DicomEndpoint endpoint, NetworkOptions options, CancellationToken token, AssociationTimeline timeline = null, Action<IDicomClient, DicomCEchoRequest> configure = null,
+            Func<FellowOakDicom.Network.Tls.ITlsInitiator, FellowOakDicom.Network.Tls.ITlsInitiator> wrapTls = null)
         {
             Logger.Information("C-ECHO -> {calledAe} at {host}:{port} from {callingAe}", endpoint.CalledAe, endpoint.Host, endpoint.Port, endpoint.CallingAe);
 
             IDicomClient client;
             try
             {
-                client = DicomClientBuilder.Create(endpoint, options);
+                client = DicomClientBuilder.Create(endpoint, options, wrapTls);
             }
             catch (Exception ex)
             {

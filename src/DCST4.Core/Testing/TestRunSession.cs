@@ -40,9 +40,36 @@ namespace DCST4.Core.Testing
         /// <summary>How long to go on listening after that, to find out whether the report comes late or never.</summary>
         public int CommitGraceSeconds { get; set; } = DefaultCommitGraceSeconds;
 
+        public const int DefaultMaxAssociations = 10;
+        public const int LargestMaxAssociations = 500;
+        public const int DefaultIdleWaitSeconds = 120;
+        public const int DefaultArtimWaitSeconds = 60;
+        public const int DefaultFaultSettleSeconds = 5;
+
+        /// <summary>How many associations limit-max-associations opens at most. Kept small, since they are held open on the system under test.</summary>
+        public int MaxAssociations { get; set; } = DefaultMaxAssociations;
+        /// <summary>How long limit-idle-timeout waits for the system under test to end an idle association.</summary>
+        public int IdleWaitSeconds { get; set; } = DefaultIdleWaitSeconds;
+        /// <summary>How long limit-artim waits for the system under test to close a connection that never sends an A-ASSOCIATE-RQ.</summary>
+        public int ArtimWaitSeconds { get; set; } = DefaultArtimWaitSeconds;
+        /// <summary>How long a fault test looks for the instance after a broken transfer before it counts as not there.</summary>
+        public int FaultSettleSeconds { get; set; } = DefaultFaultSettleSeconds;
+
+        /// <summary>
+        /// The expired client certificate for tls-client-cert-expired, in place of the one the profile names by thumbprint.
+        /// For the test harness, which must not install a certificate in the user's store.
+        /// </summary>
+        public System.Security.Cryptography.X509Certificates.X509Certificate2 ExpiredClientCertificate { get; set; }
+
         /// <summary>Returns the first problem, or null if the options can be used.</summary>
         public string Validate()
         {
+            if (MaxAssociations < 1 || MaxAssociations > LargestMaxAssociations)
+            {
+                return $"The number of associations must be between 1 and {LargestMaxAssociations.ToString(CultureInfo.InvariantCulture)}.";
+            }
+            if (IdleWaitSeconds < 1 || ArtimWaitSeconds < 1) return "The idle and ARTIM waits must be at least 1 second.";
+            if (FaultSettleSeconds < 0) return "The wait after a fault cannot be negative.";
             if (IndexWaitSeconds < 0) return "The index wait cannot be negative.";
             if (CommitLingerSeconds < 0 || CommitWaitSeconds < 0 || CommitGraceSeconds < 0) return "The Storage Commitment times cannot be negative.";
             if (CommitLingerSeconds > CommitWaitSeconds)

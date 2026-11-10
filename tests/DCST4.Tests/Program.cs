@@ -101,6 +101,25 @@ namespace DCST4.Tests
             var temp = Path.Combine(Path.GetTempPath(), "DCST4Tests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(temp);
 
+            if (args.Length == 1 && args[0] == "limits")
+            {
+                try
+                {
+                    LimitsTests.Run(temp, Check).GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    _fail++;
+                    Console.WriteLine("  FAIL  harness exception: " + ex);
+                }
+                finally
+                {
+                    try { Directory.Delete(temp, true); } catch (IOException) { }
+                }
+                Console.WriteLine($"\n{_pass} passed, {_fail} failed");
+                return _fail == 0 ? 0 : 1;
+            }
+
             if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit"))
             {
                 try
@@ -160,6 +179,7 @@ namespace DCST4.Tests
                     ViewModelTests.Run(Port, ClosedPort, temp, (name, ok, detail) => Check(name, ok, detail));
                 }
                 TestTls().GetAwaiter().GetResult();
+                LimitsTests.Run(temp, Check).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {

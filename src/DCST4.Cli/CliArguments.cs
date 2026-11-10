@@ -28,6 +28,12 @@ namespace DCST4.Cli
             "  --commit-wait <seconds>          How long the Storage Commitment report may take. Default 60\n" +
             "  --commit-grace <seconds>         How long to go on listening for a late report after that. Default 30\n" +
             "\n" +
+            "Options of run for the Limits tests, which strain the system and break transfers on purpose:\n" +
+            "  --max-associations <n>           Stop limit-max-associations at this many open associations. Default 10\n" +
+            "  --idle-wait <seconds>            How long limit-idle-timeout waits for an idle association to be ended. Default 120\n" +
+            "  --artim-wait <seconds>           How long limit-artim waits on a connection with no association request. Default 60\n" +
+            "  --fault-settle <seconds>         How long a fault test looks for the instance after a broken transfer. Default 5\n" +
+            "\n" +
             "Options of generate:\n" +
             "  --seed <n>  --uid-root <root>  --patients <n>  --studies <n>  --series <n>  --instances <n>\n" +
             "  --rows <n>  --columns <n>  --bits <n>  --frames <n>\n" +
@@ -49,6 +55,10 @@ namespace DCST4.Cli
         public int CommitLingerSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultCommitLingerSeconds;
         public int CommitWaitSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultCommitWaitSeconds;
         public int CommitGraceSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultCommitGraceSeconds;
+        public int MaxAssociations { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultMaxAssociations;
+        public int IdleWaitSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultIdleWaitSeconds;
+        public int ArtimWaitSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultArtimWaitSeconds;
+        public int FaultSettleSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultFaultSettleSeconds;
 
         private static bool TrySeconds(string name, string value, out int seconds, out string error)
         {
@@ -129,6 +139,26 @@ namespace DCST4.Cli
                         if (!TrySeconds(name, value, out var grace, out error)) return null;
                         parsed.CommitGraceSeconds = grace;
                         break;
+                    case "--max-associations":
+                        if (!int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var associations))
+                        {
+                            error = $"--max-associations must be a whole number, not '{value}'.";
+                            return null;
+                        }
+                        parsed.MaxAssociations = associations;
+                        break;
+                    case "--idle-wait":
+                        if (!TrySeconds(name, value, out var idle, out error)) return null;
+                        parsed.IdleWaitSeconds = idle;
+                        break;
+                    case "--artim-wait":
+                        if (!TrySeconds(name, value, out var artim, out error)) return null;
+                        parsed.ArtimWaitSeconds = artim;
+                        break;
+                    case "--fault-settle":
+                        if (!TrySeconds(name, value, out var settle, out error)) return null;
+                        parsed.FaultSettleSeconds = settle;
+                        break;
                     default:
                         error = $"Unknown option {name}.";
                         return null;
@@ -144,6 +174,10 @@ namespace DCST4.Cli
                 CommitLingerSeconds = parsed.CommitLingerSeconds,
                 CommitWaitSeconds = parsed.CommitWaitSeconds,
                 CommitGraceSeconds = parsed.CommitGraceSeconds,
+                MaxAssociations = parsed.MaxAssociations,
+                IdleWaitSeconds = parsed.IdleWaitSeconds,
+                ArtimWaitSeconds = parsed.ArtimWaitSeconds,
+                FaultSettleSeconds = parsed.FaultSettleSeconds,
             }.Validate();
             return error == null ? parsed : null;
         }
