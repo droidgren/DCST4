@@ -371,18 +371,49 @@
                                 <ColumnDefinition Width="4"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <ListBox ItemsSource="{Binding TestSuite.Choices}" IsEnabled="{Binding IsIdle}">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}">
-                                            <TextBlock>
-                                                <Run Text="{Binding Name, Mode=OneWay}"/>
-                                                <Run Text="{Binding Category, Mode=OneWay}" Foreground="#FF505050"/>
-                                            </TextBlock>
-                                        </CheckBox>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                            <Border BorderBrush="#FFABADB3" BorderThickness="1" Background="White" IsEnabled="{Binding IsIdle}">
+                                <DockPanel>
+                                    <DockPanel DockPanel.Dock="Top" Margin="4,3,4,3">
+                                        <TextBlock DockPanel.Dock="Right" Text="{Binding TestSuite.SelectionText}" Foreground="#FF505050" VerticalAlignment="Center"/>
+                                        <CheckBox Content="Check all" IsChecked="{Binding TestSuite.AllSelected, Mode=TwoWay}" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                  ToolTip="Tick or clear every test on this tab. Nothing is ticked when DCST4 starts"/>
+                                    </DockPanel>
+                                    <Separator DockPanel.Dock="Top" Margin="0"/>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl ItemsSource="{Binding TestSuite.Groups}" Margin="2,2,2,2">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}" Margin="0,1,0,1">
+                                                        <Expander.Header>
+                                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center"
+                                                                      ToolTip="Tick or clear every test in the group">
+                                                                <TextBlock>
+                                                                    <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold"/>
+                                                                    <Run Text="{Binding CountText, Mode=OneWay}" Foreground="#FF505050"/>
+                                                                </TextBlock>
+                                                            </CheckBox>
+                                                        </Expander.Header>
+                                                        <ItemsControl ItemsSource="{Binding Tests}" Margin="18,1,0,2">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" Margin="0,1,0,1" ToolTipService.ShowDuration="60000">
+                                                                        <CheckBox.ToolTip>
+                                                                            <ToolTip>
+                                                                                <TextBlock Text="{Binding ToolTipText}" MaxWidth="420" TextWrapping="Wrap"/>
+                                                                            </ToolTip>
+                                                                        </CheckBox.ToolTip>
+                                                                        <TextBlock Text="{Binding Name}" TextWrapping="Wrap"/>
+                                                                    </CheckBox>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </Expander>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </Border>
                             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent"/>
                             <Grid Grid.Column="2">
                                 <Grid.RowDefinitions>

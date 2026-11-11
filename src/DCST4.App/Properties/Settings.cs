@@ -7,6 +7,20 @@ namespace DCST4.Properties
     {
         public static Settings Default { get; } = (Settings)Synchronized(new Settings());
 
+        /// <summary>
+        /// Puts every setting except <paramref name="keep"/> back to its <see cref="DefaultSettingValueAttribute"/>, in memory.
+        /// <see cref="ApplicationSettingsBase.Reset"/> cannot do it, as the provider is not an IApplicationSettingsProvider.
+        /// </summary>
+        public void ResetToDefaults(params string[] keep)
+        {
+            foreach (SettingsProperty property in Properties)
+            {
+                if (System.Array.IndexOf(keep, property.Name) >= 0) continue;
+                var value = new SettingsPropertyValue(property) { SerializedValue = property.DefaultValue, Deserialized = false };
+                this[property.Name] = value.PropertyValue;
+            }
+        }
+
         // ------------------------------------------------------------ Connection
         [UserScopedSetting, DefaultSettingValue("DCST4")]
         public string CallingAET { get => (string)this[nameof(CallingAET)]; set => this[nameof(CallingAET)] = value; }

@@ -54,6 +54,9 @@ namespace DCST4.Core.Testing.Cases
         public abstract string Id { get; }
         public abstract string Name { get; }
         public TestCategory Category => TestCategory.Limits;
+        public abstract string Description { get; }
+        public string Group => TestGroups.Tls;
+        public bool StoresObjects => false;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
         {
@@ -84,6 +87,7 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "tls-association";
         public override string Name => "TLS: association with the profile's settings";
+        public override string Description => "Opens an association over TLS with the profile's own settings and records the TLS version and cipher. INDETERMINATE when the profile does not use TLS. Stores nothing.";
 
         protected override async Task<TestResult> RunAsync(TestContext context, CancellationToken token)
         {
@@ -132,6 +136,7 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "tls-server-certificate";
         public override string Name => "TLS: the server certificate matches the host name and is trusted";
+        public override string Description => "Checks the destination's certificate strictly against the host name, also when the profile accepts certificate errors: name mismatch, unknown authority, expiry. Stores nothing.";
 
         protected override async Task<TestResult> RunAsync(TestContext context, CancellationToken token)
         {
@@ -350,6 +355,7 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "tls-client-cert-wrong-ca";
         public override string Name => "TLS: client certificate from an unknown authority";
+        public override string Description => "Presents a client certificate from an authority DCST4 makes up for the test. The destination should refuse it. Stores nothing.";
         protected override string What => "from a certificate authority that DCST4 made up for this test";
         protected override string Finding => "accepted-client-certificate-from-unknown-ca";
 
@@ -371,6 +377,7 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "tls-client-cert-expired";
         public override string Name => "TLS: expired client certificate";
+        public override string Description => "Presents an expired client certificate that you have installed, named by its thumbprint on this tab. The destination should refuse it. NOT_SUPPORTED when no thumbprint is set. Stores nothing.";
         protected override string What => "that has expired";
         protected override string Finding => "accepted-expired-client-certificate";
 

@@ -23,6 +23,9 @@ namespace DCST4.Core.Testing.Cases
         public abstract string Id { get; }
         public abstract string Name { get; }
         public TestCategory Category => TestCategory.Performance;
+        public abstract string Description { get; }
+        public string Group => TestGroups.Performance;
+        public bool StoresObjects => true;
         public abstract LoadMode Mode { get; }
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -264,6 +267,7 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "load-throughput";
         public override string Name => "Load: throughput and latency";
+        public override string Description => "Stores many new objects on several associations at once, for a duration or a count, and measures throughput and latency.";
         public override LoadMode Mode => LoadMode.Load;
 
         protected override async Task RunAsync(LoadRun run, CancellationToken token)
@@ -316,6 +320,7 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "load-ramp";
         public override string Name => "Load: ramp to saturation";
+        public override string Description => "Stores many new objects on 1, 2, 4, 8 ... associations in turn, to find where more associations stop helping.";
         public override LoadMode Mode => LoadMode.Ramp;
 
         protected override int MaxAssociations(LoadSettings settings) => settings.RampSteps.Max();
@@ -394,6 +399,7 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "load-soak";
         public override string Name => "Load: soak";
+        public override string Description => "Stores new objects at a steady rate for a long time, with snapshots as it goes, to see whether the destination gets slower.";
         public override LoadMode Mode => LoadMode.Soak;
 
         protected override async Task RunAsync(LoadRun run, CancellationToken token)

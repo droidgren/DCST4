@@ -27,11 +27,14 @@ namespace DCST4.Core.Testing.Cases
         public abstract string Id { get; }
         public abstract string Name { get; }
         public TestCategory Category => TestCategory.Limits;
+        public abstract string Description { get; }
+        public string Group => TestGroups.Faults;
+        public bool StoresObjects => true;
 
         /// <summary>abort-mid-dataset and so on, as written to the result file.</summary>
         protected abstract string Kind { get; }
         /// <summary>What was done, as it reads after "After ".</summary>
-        protected abstract string Description { get; }
+        protected abstract string FaultDescription { get; }
         /// <summary>Whether the whole dataset reaches the system under test, so that a complete instance afterwards is no surprise.</summary>
         protected abstract bool SendsEverything { get; }
 
@@ -236,7 +239,7 @@ namespace DCST4.Core.Testing.Cases
             result.Details["retry"] = record.Retry.ToString();
             result.Details["stateAfterRetry"] = record.StateAfterRetry.ToString();
 
-            var after = $"After {Description}, {StateText(record.StateAfterFault)}";
+            var after = $"After {FaultDescription}, {StateText(record.StateAfterFault)}";
             var retried = RetryText(record);
 
             if (record.StateAfterFault == InstanceState.Partial)
@@ -319,8 +322,9 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "fault-abort-mid-dataset";
         public override string Name => "Fault: A-ABORT in the middle of a C-STORE";
+        public override string Description => "Breaks off a C-STORE with an A-ABORT halfway through, checks whether the instance is there, and then sends the whole object again, as a modality would.";
         protected override string Kind => "abort-mid-dataset";
-        protected override string Description => "an A-ABORT halfway through the dataset";
+        protected override string FaultDescription => "an A-ABORT halfway through the dataset";
         protected override bool SendsEverything => false;
 
         private protected override async Task<int> BreakAsync(RawAssociation raw, byte contextId, byte[] dataset, uint pduLength, FaultRecord record)
@@ -335,8 +339,9 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "fault-drop-mid-dataset";
         public override string Name => "Fault: connection lost in the middle of a C-STORE";
+        public override string Description => "Resets the connection halfway through a C-STORE, checks whether the instance is there, and then sends the whole object again, as a modality would.";
         protected override string Kind => "drop-mid-dataset";
-        protected override string Description => "the TCP connection was reset halfway through the dataset, in the middle of a PDU and without an A-ABORT";
+        protected override string FaultDescription => "the TCP connection was reset halfway through the dataset, in the middle of a PDU and without an A-ABORT";
         protected override bool SendsEverything => false;
 
         private protected override async Task<int> BreakAsync(RawAssociation raw, byte contextId, byte[] dataset, uint pduLength, FaultRecord record)
@@ -355,8 +360,9 @@ namespace DCST4.Core.Testing.Cases
 
         public override string Id => "fault-drop-before-response";
         public override string Name => "Fault: connection lost before the C-STORE response";
+        public override string Description => "Sends a whole object and closes the connection before reading the response, checks whether the instance is there, and then sends it again, as a modality would.";
         protected override string Kind => "drop-before-response";
-        protected override string Description => "the connection was closed when the whole dataset had been delivered, without reading the C-STORE response";
+        protected override string FaultDescription => "the connection was closed when the whole dataset had been delivered, without reading the C-STORE response";
         protected override bool SendsEverything => true;
 
         private protected override async Task<int> BreakAsync(RawAssociation raw, byte contextId, byte[] dataset, uint pduLength, FaultRecord record)

@@ -338,9 +338,19 @@
                         explanation and the steps of the association, with the raw status of each response.
                         <Bold>Cancel</Bold> stops the run, and what was finished is still saved. While a run is going,
                         the status bar shows which test is running, what it is doing or waiting for, and for how many
-                        seconds. The tests marked
-                        <Italic>Limits</Italic> are not ticked from the start, see the topic Limits and faults. The load
-                        tests are on the <Bold>Performance</Bold> tab, see the topic Performance.
+                        seconds. The load tests are on the <Bold>Performance</Bold> tab, see the topic Performance.
+                    </Paragraph>
+                    <Paragraph>
+                        The tests are grouped: Association, Store, Query, Retrieve &amp; integrity, Storage Commitment,
+                        Duplicates, TLS, Limits and Faults. Click the arrow of a group to fold it away, and its box to tick
+                        or clear all its tests. <Bold>Check all</Bold> above the list does the same for every test, and the
+                        count beside it says how many are ticked. Nothing is ticked when the program starts. Hover over a
+                        test to see what it does, what it needs, whether it stores objects and its id for the command line.
+                    </Paragraph>
+                    <Paragraph>
+                        <Bold>A run that stores objects asks first.</Bold> If any ticked test can leave new objects on the
+                        destination, DCST4 names those tests and the destination and starts only when you say yes. Assume
+                        that a PACS cannot delete what it receives.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Results</Paragraph>
                     <Table>
@@ -410,8 +420,9 @@
                     <Paragraph>
                         These tests store small, marked test objects on the destination and check that it can find them,
                         return them and return them unchanged. <Bold>Assume that a PACS cannot delete what it receives.</Bold>
-                        The tests are ticked by default, so make sure the destination under <Bold>Server</Bold> is the one you
-                        mean before you click <Bold>Run tests</Bold>. Untick the store tests to run only the others.
+                        DCST4 asks before a run with any of them and names the destination, so check that the destination
+                        under <Bold>Server</Bold> is the one you mean. The query, retrieve and Storage Commitment tests work
+                        on what the store tests of the same run stored, so tick a store test with them.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Settings on the Tests tab</Paragraph>
                     <Paragraph>
@@ -505,9 +516,9 @@
                     <Paragraph Style="{StaticResource H1}">Limits and faults</Paragraph>
                     <Paragraph>
                         The tests marked <Italic>Limits</Italic> find the limits of the PACS and show what it does when a
-                        transfer goes wrong. <Bold>They are not ticked by default</Bold>: they hold associations open on the
-                        PACS, break transfers on purpose, leave up to eight more test images on it, and take minutes with the
-                        default waits. Tick the ones you want. They depend on no other test.
+                        transfer goes wrong. They are in the TLS, Limits and Faults groups. They hold associations open on
+                        the PACS, break transfers on purpose, leave up to eight more test images on it, and take minutes with
+                        the default waits, so tick only the ones you want. They depend on no other test.
                     </Paragraph>
                     <Table>
                         <Table.Columns>
@@ -717,6 +728,12 @@
                 <Section Tag="Settings">
                     <Paragraph Style="{StaticResource H1}">Settings</Paragraph>
                     <Paragraph>Open <Bold>File &gt; Settings</Bold>. Changes are applied with <Bold>OK</Bold>, and <Bold>Cancel</Bold> discards them.</Paragraph>
+                    <Paragraph>
+                        <Bold>Reset to defaults...</Bold> puts every setting back to how it was on a first start, also those
+                        outside the dialog: the destination fields, the exam, the Tests and Performance tabs and the results
+                        folder. The saved destination profiles are kept, and nothing is ticked on the Tests tab. DCST4 asks
+                        first, and cannot reset while a test or a send is running.
+                    </Paragraph>
                     <Table>
                         <Table.Columns>
                             <TableColumn Width="210"/>

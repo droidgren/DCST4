@@ -169,9 +169,13 @@
             </TabItem>
         </TabControl>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="OK" Click="OkButton_Click" Width="80" Height="25" Margin="0,0,10,0" IsDefault="True"/>
-            <Button Content="Cancel" Width="80" Height="25" IsCancel="True"/>
-        </StackPanel>
+        <DockPanel Grid.Row="1">
+            <Button DockPanel.Dock="Left" Content="Reset to defaults..." Click="ResetButton_Click" Width="130" Height="25"
+                    ToolTip="Put all settings back to their defaults, also those outside this window, such as the destination fields and the Tests and Performance tabs. The saved destination profiles are kept. You are asked first"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="OK" Click="OkButton_Click" Width="80" Height="25" Margin="0,0,10,0" IsDefault="True"/>
+                <Button Content="Cancel" Width="80" Height="25" IsCancel="True"/>
+            </StackPanel>
+        </DockPanel>
     </Grid>
 </Window>

@@ -14,6 +14,9 @@ namespace DCST4.Core.Testing.Cases
         public string Id => "c-echo";
         public string Name => "C-ECHO (Verification)";
         public TestCategory Category => TestCategory.Capability;
+        public string Description => "Sends C-ECHO and checks that the destination answers Success. Stores nothing.";
+        public string Group => TestGroups.Association;
+        public bool StoresObjects => false;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
         {

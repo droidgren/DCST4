@@ -27,6 +27,11 @@ namespace DCST4.Core.Testing.Cases
         public string Id => "store-" + _objectType;
         public string Name => "C-STORE: " + DisplayName;
         public TestCategory Category => TestCategory.Integrity;
+        public string Description => _edgeCases == EdgeCases.None
+            ? $"Sends one small {_profile.DisplayName} object with C-STORE and keeps a copy to compare with later. The query, retrieve, integrity and Storage Commitment tests later in the run work on what it stored."
+            : $"Sends one small {_profile.DisplayName} object with private tags, long strings and nested sequences, and checks what the destination keeps of them when it is retrieved later in the run.";
+        public string Group => TestGroups.Store;
+        public bool StoresObjects => true;
 
         private string DisplayName => _edgeCases == EdgeCases.None ? _profile.DisplayName : _profile.DisplayName + " with private tags and edge cases";
 

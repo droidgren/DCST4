@@ -95,6 +95,7 @@ namespace DCST4.Tests
                         RunHelpWindow(check);
                         await RunTestSuite(port, closedPort, temp, check);
                         await RunPerformanceTab(port, temp, check);
+                        await RunResetSettings(port, check);
                     }
                     catch (Exception ex) { failure = ex; }
                     finally { dispatcher.InvokeShutdown(); }
@@ -105,6 +106,81 @@ namespace DCST4.Tests
             thread.Start();
             thread.Join();
             if (failure != null) throw new InvalidOperationException("View model tests failed: " + failure, failure);
+        }
+
+        /// <summary>
+        /// Reset to defaults, in memory only: SaveSettings is replaced, and every setting is put back afterwards so that no later
+        /// section runs with the default results folder under %LocalAppData%.
+        /// </summary>
+        private static async Task RunResetSettings(int port, Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nReset to default settings");
+            var settings = (System.Configuration.ApplicationSettingsBase)typeof(MainViewModel).Assembly.GetType("DCST4.Properties.Settings")
+                .GetProperty("Default", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static).GetValue(null);
+            var snapshot = settings.Properties.Cast<System.Configuration.SettingsProperty>().ToDictionary(p => p.Name, p => settings[p.Name]);
+            try
+            {
+                var h = new Harness(port);
+                var vm = h.Vm;
+                var questions = new List<string>();
+                vm.Confirm = question => { questions.Add(question); return h.ConfirmAnswer; };
+
+                settings["ConnectionProfiles"] = "<kept on purpose/>";
+                vm.TestUidRoot = "1.2.3";
+                vm.CommitWaitSeconds = 7;
+                vm.LimitMaxAssociations = 3;
+                vm.Performance.SelectedMode = vm.Performance.Modes[2];
+                vm.Performance.Associations = 13;
+                vm.TestSuite.ResultsFolder = @"C:\Temp\DCST4 reset";
+                vm.TestSuite.SelectedStoreSyntax = vm.TestSuite.StoreSyntaxChoices[1];
+                vm.TestSuite.Choices[0].IsSelected = true;
+                vm.BurnInText = true;
+                settings["TestPatientNaming"] = "RegistrySwedishName";
+                vm.ProfileName = "Something";
+
+                h.ConfirmAnswer = false;
+                var savesBefore = h.Saves;
+                vm.ResetSettings();
+                check("Declined: nothing changes", questions.Count == 1 && questions[0] == MainViewModel.ResetQuestion && vm.TestUidRoot == "1.2.3" && vm.TestSuite.Choices[0].IsSelected && h.Saves == savesBefore, vm.TestUidRoot);
+                check("The question says what is kept", MainViewModel.ResetQuestion.Contains("saved destination profiles are kept"), null);
+
+                h.ConfirmAnswer = true;
+                var raised = new List<string>();
+                vm.PropertyChanged += (s, e) => raised.Add(e.PropertyName);
+                vm.ResetSettings();
+                check("Confirmed: the destination fields are the defaults", vm.ServerHost == "ServerHostname" && vm.ServerPort == 104 && vm.ServerAET == "ServerAET" && vm.CallingAET == "DCST4" && !vm.UseTLS && vm.ProfileName == string.Empty, vm.ServerHost);
+                check("Confirmed: the Tests tab is the defaults, with nothing ticked", vm.TestUidRoot == "2.25" && vm.CommitWaitSeconds == 60 && vm.LimitMaxAssociations == 10 && vm.TestSuite.ResultsFolder == TestSuiteViewModel.DefaultResultsFolder
+                    && vm.TestSuite.SelectedStoreSyntax == vm.TestSuite.StoreSyntaxChoices[0] && vm.TestSuite.Choices.All(c => !c.IsSelected), vm.TestSuite.ResultsFolder);
+                check("Confirmed: the Performance tab is the defaults", vm.Performance.SelectedMode == vm.Performance.Modes[0] && vm.Performance.Associations == Core.Performance.LoadSettings.DefaultAssociations, vm.Performance.Associations.ToString());
+                check("Confirmed: the exam and File > Settings are the defaults", vm.SelectedModality.Code == "CT" && vm.SeriesCount == 1 && !vm.BurnInText && (string)settings["TestPatientNaming"] == "MarkedTestName" && (int)settings["ResponseTimeoutSeconds"] == 60, (string)settings["TestPatientNaming"]);
+                check("Confirmed: the saved destination profiles are kept", (string)settings["ConnectionProfiles"] == "<kept on purpose/>", null);
+                check("Confirmed: saved once, and every binding told", h.Saves == savesBefore + 1 && raised.Contains(string.Empty) && vm.StatusText.Contains("reset"), vm.StatusText);
+
+                // ------------------------------------------------ not while a run is going on
+                vm.ServerHost = "127.0.0.1";
+                vm.ServerPort = port;
+                vm.ServerAET = "MOCKSCP";
+                vm.TestSuite.ResultsFolder = Path.Combine(Path.GetTempPath(), "DCST4-reset-" + Guid.NewGuid().ToString("N"));
+                foreach (var choice in vm.TestSuite.Choices) choice.IsSelected = choice.Test.Id == "c-echo";
+                Scp.Reset();
+                Scp.EchoDelayMs = 3000;
+                questions.Clear();
+                var tried = false;
+                await h.Execute(vm.RunTestsCommand, () =>
+                {
+                    if (tried || !vm.IsBusy || Scp.EchoCount == 0) return;
+                    tried = true;
+                    vm.ResetSettings();
+                    vm.CancelCommand.Execute(null);
+                });
+                Scp.EchoDelayMs = 0;
+                check("While a run is going on: refused with a message, nothing asked or reset", tried && questions.Count == 0 && h.Messages.Any(m => m.Contains("before resetting")) && vm.ServerHost == "127.0.0.1", string.Join("; ", h.Messages));
+                try { Directory.Delete(vm.TestSuite.ResultsFolder, true); } catch (IOException) { }
+            }
+            finally
+            {
+                foreach (var pair in snapshot) settings[pair.Key] = pair.Value;
+            }
         }
 
         private static async Task RunAll(int port, Action<string, bool, string> check)
@@ -674,6 +750,16 @@ namespace DCST4.Tests
             }
         }
 
+        private static IEnumerable<DependencyObject> VisualDescendants(DependencyObject parent)
+        {
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                yield return child;
+                foreach (var below in VisualDescendants(child)) yield return below;
+            }
+        }
+
         private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
         {
             for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
@@ -776,6 +862,44 @@ namespace DCST4.Tests
             check("Axis maxima are round", DCST4.Controls.LoadChart.NiceMax(37) == 50 && DCST4.Controls.LoadChart.NiceMax(101) == 200 && DCST4.Controls.LoadChart.NiceMax(0) == 1, null);
         }
 
+        /// <summary>The groups, the Check all box and the tooltips of the list on the Tests tab. Leaves nothing ticked.</summary>
+        private static void TestGroupsInTheList(TestSuiteViewModel suite, Action<string, bool, string> check)
+        {
+            var total = suite.Choices.Count;
+            check("Check all: clear at the start", suite.AllSelected == false && suite.SelectionText == $"0 of {total} ticked", suite.SelectionText);
+            check("Groups: every test in exactly one, the one it names", suite.Groups.Sum(g => g.Tests.Count) == total && suite.Choices.All(c => suite.Groups.Single(g => g.Tests.Contains(c)).Name == c.Group), null);
+            check("Groups: in the order of TestGroups, none empty, no Performance group",
+                suite.Groups.Select(g => g.Name).SequenceEqual(TestGroups.All.Where(n => suite.Groups.Any(g => g.Name == n))) && suite.Groups.All(g => g.Tests.Count > 0 && g.IsExpanded) && suite.Groups.All(g => g.Name != TestGroups.Performance),
+                string.Join(", ", suite.Groups.Select(g => g.Name)));
+
+            var store = suite.Groups.Single(g => g.Name == TestGroups.Store);
+            store.IsSelected = true;
+            check("Group: the header ticks its own tests and no others", store.Tests.All(c => c.IsSelected) && store.IsSelected == true && suite.Choices.Where(c => c.Group != TestGroups.Store).All(c => !c.IsSelected) && suite.AllSelected == null, suite.SelectionText);
+            store.Tests[0].IsSelected = false;
+            check("Group: one cleared makes it mixed, and the count follows", store.IsSelected == null && store.CountText == $"{store.Tests.Count - 1} of {store.Tests.Count}" && suite.SelectionText == $"{store.Tests.Count - 1} of {total} ticked", store.CountText);
+            store.IsSelected = false;
+            check("Group: the header clears its tests", store.Tests.All(c => !c.IsSelected) && store.IsSelected == false && suite.AllSelected == false, null);
+
+            suite.AllSelected = true;
+            check("Check all: ticks every test and so every group", suite.Choices.All(c => c.IsSelected) && suite.Groups.All(g => g.IsSelected == true) && suite.SelectionText == $"{total} of {total} ticked", suite.SelectionText);
+            suite.AllSelected = false;
+            check("Check all: clears every test", suite.Choices.All(c => !c.IsSelected) && suite.Groups.All(g => g.IsSelected == false), null);
+
+            var raised = new List<string>();
+            System.ComponentModel.PropertyChangedEventHandler listen = (s, e) => raised.Add(e.PropertyName);
+            suite.PropertyChanged += listen;
+            store.PropertyChanged += listen;
+            store.Tests[0].IsSelected = true;
+            suite.PropertyChanged -= listen;
+            store.PropertyChanged -= listen;
+            store.Tests[0].IsSelected = false;
+            check("A tick tells the Check all box, the group and both counts", raised.Count(n => n == nameof(TestSuiteViewModel.AllSelected) || n == nameof(TestGroupChoice.IsSelected)) == 2 && raised.Contains(nameof(TestSuiteViewModel.SelectionText)) && raised.Contains(nameof(TestGroupChoice.CountText)), string.Join(",", raised));
+
+            check("Tooltips: what the test does, a note when it stores, and its id",
+                suite.Choices.All(c => c.ToolTipText.StartsWith(c.Test.Description) && c.ToolTipText.EndsWith("Id: " + c.Test.Id) && c.ToolTipText.Contains(TestChoice.StoresNote) == c.Test.StoresObjects),
+                null);
+        }
+
         private static async Task RunTestSuite(int port, int closedPort, string temp, Action<string, bool, string> check)
         {
             Console.WriteLine("\nTests tab");
@@ -786,13 +910,18 @@ namespace DCST4.Tests
             suite.ResultsFolder = Path.Combine(folder, "app");
             vm.ProfileName = "Comparison";
 
-            check("The list holds the catalog without the Performance tests, ticked except the Limits tests", suite.Choices.Count == TestCatalog.All.Count(t => t.Category != TestCategory.Performance) && suite.Choices.All(c => c.IsSelected == (c.Test.Category != TestCategory.Limits)), suite.Choices.Count.ToString());
+            var questions = new List<string>();
+            vm.Confirm = question => { questions.Add(question); return h.ConfirmAnswer; };
+
+            check("The list holds the catalog without the Performance tests, none ticked", suite.Choices.Count == TestCatalog.All.Count(t => t.Category != TestCategory.Performance) && suite.Choices.All(c => !c.IsSelected), suite.Choices.Count.ToString());
+            TestGroupsInTheList(suite, check);
             foreach (var choice in suite.Choices) choice.IsSelected = choice.Test.Id == "c-echo";
 
             // ------------------------------------------------ the same content as the command line
             Scp.Reset();
             await h.Execute(vm.RunTestsCommand);
             check("Run: no dialog", h.Messages.Count == 0, string.Join("; ", h.Messages));
+            check("Run: c-echo stores nothing, so nothing is asked", questions.Count == 0, string.Join("; ", questions));
             check("Run: one row with the result", suite.Rows.Count == 1 && suite.Rows[0].Result == TestResultClass.PASS && suite.Rows[0].Status == "0x0000", suite.Rows.Count.ToString());
             check("Run: the row holds the timeline", suite.Rows[0].Timeline.Count == 6, null);
             check("Run: went through the busy state and is idle again", !vm.IsBusy && vm.RunTestsCommand.CanExecute(null), null);
@@ -837,6 +966,11 @@ namespace DCST4.Tests
             check("Commitment settings: passed to the run", runOptions.CommitLingerSeconds == 0 && runOptions.CommitWaitSeconds == 5 && runOptions.CommitGraceSeconds == 1, null);
             foreach (var choice in suite.Choices) choice.IsSelected = new[] { "store-ct", "query-index", "retrieve-cget", "retrieve-cmove", "verify-integrity", "commit-stored" }.Contains(choice.Test.Id);
             await h.Execute(vm.RunTestsCommand);
+            var storeCt = TestCatalog.All.Single(t => t.Id == "store-ct");
+            check("Store warning: asked once, with the destination and the test that stores",
+                questions.Count == 1 && questions[0].Contains("MOCKSCP at 127.0.0.1:" + port) && questions[0].Contains("1 of the ticked tests stores") && questions[0].Contains("- " + storeCt.Name) && questions[0].Contains("not be possible to delete"),
+                string.Join("; ", questions));
+            check("Store warning: the tests that store nothing are not listed", !questions[0].Contains(TestCatalog.All.Single(t => t.Id == "query-index").Name), questions[0]);
             check("Chain: one row per object type", suite.Chain.Rows.Count == 1 && suite.Chain.Rows[0].ObjectType.Length > 0, suite.Chain.Rows.Count.ToString());
             var chainRow = suite.Chain.Rows.Single();
             check("Chain: every step PASS, none invented", chainRow.Accepted == "PASS" && chainRow.Indexed == "PASS" && chainRow.Retrievable == "PASS" && chainRow.Intact == "PASS" && chainRow.Committed == "PASS", chainRow.Detail);
@@ -852,6 +986,17 @@ namespace DCST4.Tests
             check("Chain: the detail explains it, level by level", chainRow.Detail.Contains("C-GET") && chainRow.Detail.Contains("C-MOVE") && chainRow.Detail.Contains("Attributes: PASS"), chainRow.Detail);
             check("Chain: the JSON holds the same", File.ReadAllText(suite.LastResultFiles.Json, Encoding.UTF8).Contains("\"chain\""), null);
             check("Chain: the CSV is written", suite.LastResultFiles.ChainCsv != null && File.Exists(suite.LastResultFiles.ChainCsv), null);
+
+            // ------------------------------------------------ declining the store warning
+            questions.Clear();
+            h.Messages.Clear();
+            Scp.Reset();
+            h.ConfirmAnswer = false;
+            var rowsBefore = suite.Rows.Count;
+            await h.Execute(vm.RunTestsCommand);
+            check("Store warning: a no runs nothing and leaves the last results", questions.Count == 1 && Scp.AssociationCount == 0 && suite.Rows.Count == rowsBefore && vm.StatusText == "Tests not started." && h.Messages.Count == 0, vm.StatusText);
+            h.ConfirmAnswer = true;
+            questions.Clear();
 
             foreach (var choice in suite.Choices) choice.IsSelected = choice.Test.Id == "c-echo";
             await h.Execute(vm.RunTestsCommand);
@@ -1092,8 +1237,11 @@ namespace DCST4.Tests
                 await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
 
                 check("Tests tab: is laid out", testsTab.IsSelected && content.ActualWidth > 0, null);
-                var problems = listener.Errors.Where(e => e.Contains("TestSuite") || e.Contains("Timeline") || e.Contains("Explanation") || e.Contains("Choices")).ToList();
+                var problems = listener.Errors.Where(e => e.Contains("TestSuite") || e.Contains("Timeline") || e.Contains("Explanation") || e.Contains("Choices")
+                    || e.Contains("TestChoice") || e.Contains("TestGroupChoice") || e.Contains("Groups") || e.Contains("AllSelected") || e.Contains("SelectionText")).ToList();
                 check("Tests tab: every binding resolves", problems.Count == 0, string.Join("\n", problems));
+                var expanders = VisualDescendants(content).OfType<Expander>().ToList();
+                check("Tests tab: one expander per group, drawn", expanders.Count == vm.TestSuite.Groups.Count && expanders.All(e => e.ActualHeight > 0), expanders.Count.ToString());
 
                 var picture = Environment.GetEnvironmentVariable("DCST4_TESTS_TAB_PNG");
                 if (!string.IsNullOrEmpty(picture))

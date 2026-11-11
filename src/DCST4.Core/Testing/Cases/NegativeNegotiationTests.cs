@@ -39,6 +39,9 @@ namespace DCST4.Core.Testing.Cases
         public abstract string Id { get; }
         public abstract string Name { get; }
         public TestCategory Category => TestCategory.Capability;
+        public abstract string Description { get; }
+        public string Group => TestGroups.Association;
+        public bool StoresObjects => false;
         public abstract Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token);
 
         /// <summary>An AE title the target should not know, and never the one the profile uses.</summary>
@@ -161,6 +164,7 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "negotiation-unknown-calling-ae";
         public override string Name => "Unknown calling AE title";
+        public override string Description => "Opens an association with a calling AE title the destination should not know. A refusal passes. Accepting it is a finding, since anyone could then connect. Stores nothing.";
         protected override string Change => "an unknown calling AE title";
         protected override string Finding => "accepted-unknown-calling-ae";
 
@@ -175,6 +179,7 @@ namespace DCST4.Core.Testing.Cases
     {
         public override string Id => "negotiation-wrong-called-ae";
         public override string Name => "Wrong called AE title";
+        public override string Description => "Opens an association to a called AE title that is not the destination's. A refusal passes. Accepting it is a finding. Stores nothing.";
         protected override string Change => "a wrong called AE title";
         protected override string Finding => "accepted-wrong-called-ae";
 
@@ -195,6 +200,7 @@ namespace DCST4.Core.Testing.Cases
 
         public override string Id => "negotiation-unsupported-contexts";
         public override string Name => "Only unsupported presentation contexts";
+        public override string Description => "Proposes only a SOP class that cannot exist. Refusing the association and accepting it with every context rejected both pass, and which one the destination did is recorded. Stores nothing.";
 
         public override async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
         {

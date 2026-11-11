@@ -105,6 +105,15 @@ namespace DCST4
             DialogResult = true;
         }
 
+        /// <summary>True when the dialog was closed with Reset to defaults. The main window then asks and resets, so nothing here is saved.</summary>
+        public bool ResetRequested { get; private set; }
+
+        private void ResetButton_Click(object sender, RoutedEventArgs e)
+        {
+            ResetRequested = true;
+            DialogResult = false;
+        }
+
         private void TagBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (!AdditionalTagParser.TryResolve(TagBox.Text, out var group, out var element))

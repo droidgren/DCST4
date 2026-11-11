@@ -130,7 +130,9 @@ namespace DCST4
 
         private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            if (new SettingsDialog { Owner = this }.ShowDialog() == true) _viewModel.ReloadAdditionalTags();
+            var dialog = new SettingsDialog { Owner = this };
+            if (dialog.ShowDialog() == true) _viewModel.ReloadAdditionalTags();
+            else if (dialog.ResetRequested) _viewModel.ResetSettings();
         }
 
         private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
