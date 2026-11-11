@@ -818,7 +818,7 @@ namespace DCST4.Tests
             p.WarmUpSeconds = 0;
             p.MaxInstances = 0;
 
-            check("The plan states the count before anything is sent", p.PlanText.StartsWith("Stores 6 new objects", StringComparison.Ordinal) && p.PlanText.Contains("may not be possible to delete"), p.PlanText);
+            check("The plan states the count before anything is sent", p.PlanText.StartsWith("Stores 6 new objects", StringComparison.Ordinal) && !p.PlanText.Contains("delete"), p.PlanText);
             check("The Performance tests are not on the Tests tab", vm.TestSuite.Choices.All(c => c.Test.Category != TestCategory.Performance), null);
 
             Scp.Reset();

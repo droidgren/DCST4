@@ -430,7 +430,7 @@ DCST4.Cli.exe run --profile target.json --tests limit-max-associations,limit-art
 Three tests measure throughput and latency: `load-throughput`, `load-ramp` and `load-soak`, in the `Performance` category. **Every image they send is a new object on the destination, and a PACS may not be able to delete it.** So they are not part of `all`. Name them, or use `--tests Performance`. In the program they have a tab of their own, **Performance**, and are not listed on the Tests tab. Before anything is sent, DCST4 says how many objects the run will store at most and about how much data that is. The program asks for a yes with the destination's AE title, host and port in the question, and the command line prints it:
 
 ```
-Plan for the load test: Stores up to 1,000 new objects (about 135 MB, mix ct) on PACS at pacs.example.org:104. They may not be possible to delete.
+Plan for the load test: Stores up to 1,000 new objects (about 135 MB, mix ct) on PACS at pacs.example.org:104.
 ```
 
 | Test              | What it does                                                                                       | Result |
@@ -774,6 +774,12 @@ What this means for a reader: compare a system with itself only over several run
 | Series of a Performance test, written as it runs | Next to the result files, as `DCST4-run-<start>-<test id>.csv`, and for the soak also `-windows.csv` |
 
 ## Changelog
+
+### Unreleased
+
+Changed:
+
+- The plan before a Performance test, on the tab and on the command line, no longer ends with "They may not be possible to delete."
 
 ### 1.9.1
 

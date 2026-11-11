@@ -282,7 +282,7 @@ namespace DCST4.Tests
             Check("Ramp: its own ceiling, 2000", new LoadSettings().PlannedInstances(LoadMode.Ramp) == 2000);
             Check("Soak: rate x duration", new LoadSettings { SoakRatePerSecond = 2, SoakSeconds = 1800 }.PlannedInstances(LoadMode.Soak) == 3600);
             Check("An explicit ceiling wins", new LoadSettings { MaxInstances = 50, InstanceCount = 300 }.PlannedInstances(LoadMode.Load) == 50);
-            Check("The plan names the size and that objects may stay", new LoadSettings().DescribePlan(LoadMode.Load, "PACS at h:104").Contains("MB, mix ct) on PACS at h:104. They may not be possible to delete."));
+            Check("The plan names the size and the destination", new LoadSettings().DescribePlan(LoadMode.Load, "PACS at h:104").Contains("MB, mix ct) on PACS at h:104.") && !new LoadSettings().DescribePlan(LoadMode.Load, "PACS at h:104").Contains("delete"));
             Check("Without a rate, the plan says from what rate the ceiling ends the run early", new LoadSettings().DescribePlan(LoadMode.Load, "PACS").EndsWith("If the system takes more than 50 per second, the ceiling ends the run before the 20 s are up.", StringComparison.Ordinal)
                 && !new LoadSettings { RatePerSecond = 5 }.DescribePlan(LoadMode.Load, "PACS").Contains("ceiling ends"), new LoadSettings().DescribePlan(LoadMode.Load, "PACS"));
 

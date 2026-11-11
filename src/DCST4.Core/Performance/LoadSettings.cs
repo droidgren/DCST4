@@ -131,7 +131,7 @@ namespace DCST4.Core.Performance
             var size = PlannedMegabytes(mode);
             var sizeText = size >= 1000 ? (size / 1000).ToString("0.0", CultureInfo.InvariantCulture) + " GB" : size.ToString("0", CultureInfo.InvariantCulture) + " MB";
             var mix = ResolvedMix;
-            var plan = $"{(exact ? "Stores" : "Stores up to")} {count.ToString("N0", CultureInfo.InvariantCulture)} new objects ({(mix != null && mix.Syntax.IsEncapsulated ? "at most " : "about ")}{sizeText}, mix {mix?.Id ?? Mix}) on {target}. They may not be possible to delete.";
+            var plan = $"{(exact ? "Stores" : "Stores up to")} {count.ToString("N0", CultureInfo.InvariantCulture)} new objects ({(mix != null && mix.Syntax.IsEncapsulated ? "at most " : "about ")}{sizeText}, mix {mix?.Id ?? Mix}) on {target}.";
 
             // Without a rate, a fast system uses up the ceiling before the duration is over, and the measured window shrinks.
             if (mode == LoadMode.Load && InstanceCount == 0 && RatePerSecond <= 0 && DurationSeconds > 0)
