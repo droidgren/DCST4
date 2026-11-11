@@ -6,14 +6,17 @@ namespace DCST4.Core.TestData
     /// <summary>How test-suite datasets name the patient. The Patient ID comes from TestPersonnummerRegistry in both. Generate &amp; Send does not use this.</summary>
     public enum TestPatientNaming
     {
-        /// <summary>An invented Swedish name, as Generate &amp; Send uses.</summary>
+        /// <summary>An invented Swedish name, as Generate &amp; Send uses. Not the default since 1.9.0.</summary>
         RegistrySwedishName,
-        /// <summary>DCST4^TEST^&lt;random number&gt;, which is plainly not a person.</summary>
+        /// <summary>DCST4^TEST^&lt;random number&gt;, which is plainly not a person. The default, see <see cref="TestPatientNames.Default"/>.</summary>
         MarkedTestName,
     }
 
     public static class TestPatientNames
     {
+        /// <summary>What a run uses when nothing else is chosen: a name that is plainly not a person.</summary>
+        public const TestPatientNaming Default = TestPatientNaming.MarkedTestName;
+
         public const string MarkedPrefix = "DCST4^TEST^";
 
         /// <summary>The six letters that show whether a character set is handled correctly.</summary>
@@ -37,7 +40,7 @@ namespace DCST4.Core.TestData
                     return true;
                 }
             }
-            naming = TestPatientNaming.RegistrySwedishName;
+            naming = Default;
             return false;
         }
     }

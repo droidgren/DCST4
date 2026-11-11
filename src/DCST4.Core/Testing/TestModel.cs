@@ -27,7 +27,7 @@ namespace DCST4.Core.Testing
 
     public sealed class TestContext
     {
-        public TestContext(TargetProfile profile, TestPatientNaming patientNaming = TestPatientNaming.RegistrySwedishName, TestRunSession session = null)
+        public TestContext(TargetProfile profile, TestPatientNaming patientNaming = TestPatientNames.Default, TestRunSession session = null)
         {
             Profile = profile ?? throw new ArgumentNullException(nameof(profile));
             PatientNaming = patientNaming;

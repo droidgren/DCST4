@@ -96,6 +96,9 @@ namespace DCST4.ViewModels
         {
             OnPropertyChanged(name);
             OnPropertyChanged(nameof(PlanText));
+            // The default ceiling depends on the test, and for the soak on its rate and duration.
+            if (name != nameof(MaxInstances)) OnPropertyChanged(nameof(MaxInstances));
+            OnPropertyChanged(nameof(MaxInstancesNote));
             SettingsChanged?.Invoke();
         }
 
@@ -141,7 +144,16 @@ namespace DCST4.ViewModels
         public double RatePerSecond { get => _settings.RatePerSecond; set { _settings.RatePerSecond = value; Changed(); } }
         public uint MaxPdu { get => _settings.MaxPdu; set { _settings.MaxPdu = value; Changed(); } }
         public double WarmUpSeconds { get => _settings.WarmUpSeconds; set { _settings.WarmUpSeconds = value; Changed(); } }
-        public int MaxInstances { get => _settings.MaxInstances; set { _settings.MaxInstances = value; Changed(); } }
+        /// <summary>
+        /// The ceiling that applies to the selected test: the one you set, or the test's default while you have set none.
+        /// Setting 0 goes back to the defaults. A value you set applies to all three tests.
+        /// </summary>
+        public int MaxInstances { get => _settings.ResolvedMaxInstances(_mode.Mode); set { _settings.MaxInstances = Math.Max(0, value); Changed(); } }
+
+        /// <summary>Says whether <see cref="MaxInstances"/> is the default or set by you.</summary>
+        public string MaxInstancesNote => _settings.MaxInstances == 0
+            ? "(the default for this test)"
+            : "(set by you, for all three tests. 0 goes back to the default)";
         public double RampStepSeconds { get => _settings.RampStepSeconds; set { _settings.RampStepSeconds = value; Changed(); } }
         public double SoakRatePerSecond { get => _settings.SoakRatePerSecond; set { _settings.SoakRatePerSecond = value; Changed(); } }
         public double SnapshotSeconds { get => _settings.SnapshotSeconds; set { _settings.SnapshotSeconds = value; Changed(); } }
@@ -233,6 +245,38 @@ namespace DCST4.ViewModels
             }
             if (added) SeriesVersion++;
             return added;
+        }
+
+        private LoadSettings _runSettings;
+        private LoadMode _runMode;
+
+        /// <summary>How far a run has come, from 0 to 1, from the seconds the chart has received.</summary>
+        public double Progress
+        {
+            get
+            {
+                if (_runSettings == null || _series.Count == 0) return 0;
+                var s = _runSettings;
+                if (_runMode == LoadMode.Load && s.InstanceCount > 0)
+                {
+                    // A count: images that got an answer, or none, against the count, or the ceiling if that is lower.
+                    var target = Math.Min(s.InstanceCount, s.ResolvedMaxInstances(LoadMode.Load));
+                    return Math.Min(1, _series.Sum(r => r.Attempts) / (double)Math.Max(1, target));
+                }
+
+                // A duration: seconds run against the seconds planned. The ramp's steps follow each other in the series.
+                var planned = _runMode == LoadMode.Ramp ? s.RampSteps.Count * s.RampStepSeconds
+                    : _runMode == LoadMode.Soak ? s.SoakSeconds
+                    : s.DurationSeconds;
+                return planned <= 0 ? 0 : Math.Min(1, (_series[_series.Count - 1].Second + 1) / planned);
+            }
+        }
+
+        /// <summary>Remembers what the run that starts now was asked to do, for <see cref="Progress"/>.</summary>
+        public void StartRun(LoadSettings settings, LoadMode mode)
+        {
+            _runSettings = settings;
+            _runMode = mode;
         }
 
         public void Clear()

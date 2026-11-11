@@ -229,9 +229,11 @@ namespace DCST4.Tests
                 settings["TestPatientNaming"] = "MarkedTestName";
                 check("Settings: the saved naming is selected", shownNaming() == "MarkedTestName", shownNaming());
                 settings["TestPatientNaming"] = "RegistrySwedishName";
-                check("Settings: the default is the Swedish name", shownNaming() == "RegistrySwedishName", shownNaming());
+                check("Settings: the Swedish name can be chosen", shownNaming() == "RegistrySwedishName", shownNaming());
+                settings["TestPatientNaming"] = "MarkedTestName";
+                check("Settings: the default is the marked test name", shownNaming() == "MarkedTestName" && settings.Properties["TestPatientNaming"].DefaultValue as string == "MarkedTestName", shownNaming());
                 settings["TestPatientNaming"] = "nonsense";
-                check("Settings: an unreadable value shows the default", shownNaming() == "RegistrySwedishName", shownNaming());
+                check("Settings: an unreadable value shows the default", shownNaming() == "MarkedTestName", shownNaming());
             }
             finally
             {
@@ -715,13 +717,42 @@ namespace DCST4.Tests
             check("Run: the summary table has the whole run", p.Rows.Count == 1 && p.Rows[0].Stored >= 0 && p.Rows[0].Associations == 2 && p.Verdict.StartsWith("PASS", StringComparison.Ordinal), p.Verdict);
             check("Run: the chart got its seconds, drawn at most once a second", p.Series.Count >= 1 && chartUpdates >= 1 && chartUpdates <= p.Series.Count + 2, p.Series.Count + " seconds, " + chartUpdates + " updates");
             check("Run: the result and series files are named", p.Files != null && p.Files.Contains(".json") && p.Files.Contains("-load-throughput.csv"), p.Files);
-            check("Run: idle again, progress at the end", !vm.IsBusy && vm.ProgressValue == 1, vm.ProgressValue.ToString());
+            check("Run: idle again, progress at the end", !vm.IsBusy && vm.ProgressValue == vm.ProgressMaximum && vm.ProgressMaximum == MainViewModel.PerformanceProgressSteps, vm.ProgressValue + " of " + vm.ProgressMaximum);
+
+            // The progress bar follows a soak while it runs, against its duration.
+            p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Soak);
+            p.SoakDurationText = "4s";
+            p.SoakRatePerSecond = 5;
+            p.SnapshotSeconds = 1;
+            var seen = new List<int>();
+            Scp.Reset();
+            await h.Execute(vm.RunPerformanceCommand, () => { if (seen.Count == 0 || seen[seen.Count - 1] != vm.ProgressValue) seen.Add(vm.ProgressValue); });
+            var during = seen.Where(v => v > 0 && v < vm.ProgressMaximum).ToList();
+            check("Soak: the progress bar rises while it runs, and is full at the end",
+                during.Count >= 2 && seen.SequenceEqual(seen.OrderBy(v => v)) && vm.ProgressValue == vm.ProgressMaximum && p.Verdict != null,
+                string.Join(",", seen) + " " + p.Verdict);
+            p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Load);
 
             p.RampStepsText = "4,2";
             p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Ramp);
             check("Falling ramp steps: the plan line says what is wrong", p.Problem != null && p.PlanText == p.Problem, p.PlanText);
             p.RampStepsText = "1,2,4";
             check("Valid steps again: the plan is back", p.Problem == null && p.PlanText.StartsWith("Stores up to", StringComparison.Ordinal), p.PlanText);
+
+            // The ceiling box shows the ceiling that applies, not 0.
+            var notified = new List<string>();
+            p.PropertyChanged += (s, e) => notified.Add(e.PropertyName);
+            check("Max instances shows the ramp's default, 2000, and says it is the default", p.MaxInstances == 2000 && p.MaxInstancesNote.Contains("default for this test"), p.MaxInstances + " " + p.MaxInstancesNote);
+            p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Load);
+            check("Another test: its own default, 1000, and the box is told", p.MaxInstances == 1000 && notified.Contains(nameof(p.MaxInstances)), p.MaxInstances.ToString());
+            p.MaxInstances = 5000;
+            p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Soak);
+            check("A value you set applies to all three tests and is said to be yours", p.MaxInstances == 5000 && p.MaxInstancesNote.Contains("set by you") && p.Settings.MaxInstances == 5000, p.MaxInstances + " " + p.MaxInstancesNote);
+            p.MaxInstances = 0;
+            p.SoakRatePerSecond = 3;
+            p.SoakDurationText = "10m";
+            check("0 goes back to the default, which for the soak follows rate and duration", p.MaxInstances == 1800 && p.Settings.MaxInstances == 0, p.MaxInstances.ToString());
+            p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Ramp);
 
             var restored = new PerformanceViewModel(p.SaveSettings(), "Ramp");
             check("The settings are saved and come back", restored.Associations == 2 && restored.InstanceCount == 6 && restored.RampStepsText == "1,2,4" && restored.IsRamp, restored.RampStepsText);

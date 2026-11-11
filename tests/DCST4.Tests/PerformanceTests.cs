@@ -319,7 +319,7 @@ namespace DCST4.Tests
             Check("Another run gives other UIDs", new UidStamper(Root, "abd", 0).Stamp(item).SopInstanceUid != new UidStamper(Root, "abc", 0).Stamp(item).SopInstanceUid);
 
             // What goes on the wire is read back by fo-dicom and compared with what the generator made.
-            var original = new TestDatasetGenerator(new TestDatasetRequest { ProfileId = "ct", Seed = 5, UidRoot = Root, InstancesPerSeries = 2, Rows = 64, Columns = 64, BitsStored = 16 })
+            var original = new TestDatasetGenerator(new TestDatasetRequest { ProfileId = "ct", Seed = 5, UidRoot = Root, InstancesPerSeries = 2, Rows = 64, Columns = 64, BitsStored = 16, PatientNaming = TestPatientNaming.RegistrySwedishName })
                 .GetImages(CancellationToken.None).First().File;
             var decoded = Decode(original, sends[1]);
             var stamped = new HashSet<DicomTag> { DicomTag.SOPInstanceUID, DicomTag.StudyInstanceUID, DicomTag.SeriesInstanceUID, DicomTag.AccessionNumber, DicomTag.SeriesNumber, DicomTag.InstanceNumber, DicomTag.FrameOfReferenceUID };
@@ -476,11 +476,12 @@ namespace DCST4.Tests
         {
             Console.WriteLine("\nPerformance: ramp to saturation");
             ResetScp();
-            Scp.ResponseDelayMs = 100;
+            // About 80 images per step, so that one image more or less moves a step's throughput by about 1 %, well inside the 10 % threshold.
+            Scp.ResponseDelayMs = 50;
             Scp.StoreConcurrency = 2;
 
             var folder = Path.Combine(_temp, "ramp");
-            var result = await One("load-ramp", Settings(s => { s.RampSteps = new List<int> { 1, 2, 4 }; s.RampStepSeconds = 1.5; s.WarmUpSeconds = 0.3; }), folder);
+            var result = await One("load-ramp", Settings(s => { s.RampSteps = new List<int> { 1, 2, 4 }; s.RampStepSeconds = 2.5; s.WarmUpSeconds = 0.5; }), folder);
             var verdict = result.Performance?.Saturation;
             Console.WriteLine("  INFO  ramp stored/s per step: " + string.Join(" / ", result.Performance?.Steps?.Select(st => N(st.Summary.StoredPerSecond)) ?? new string[0]));
             Check("Ramp: PASS", result.Result == TestResultClass.PASS, Show(result));

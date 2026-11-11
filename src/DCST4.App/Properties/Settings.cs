@@ -94,7 +94,7 @@ namespace DCST4.Properties
         public bool NewValuesAfterRun { get => (bool)this[nameof(NewValuesAfterRun)]; set => this[nameof(NewValuesAfterRun)] = value; }
 
         /// <summary>How test-suite datasets name the patient: a TestPatientNaming name. Does not affect Generate &amp; Send.</summary>
-        [UserScopedSetting, DefaultSettingValue("RegistrySwedishName")]
+        [UserScopedSetting, DefaultSettingValue("MarkedTestName")]
         public string TestPatientNaming { get => (string)this[nameof(TestPatientNaming)]; set => this[nameof(TestPatientNaming)] = value; }
 
         /// <summary>Tags added on top of the fixed identifier fields, serialized as XML.</summary>

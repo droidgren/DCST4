@@ -19,7 +19,7 @@ namespace DCST4.Core.Testing
         /// <summary>Raised on a background thread.</summary>
         public event Action<TestProgress> Progress;
 
-        public async Task<TestRunReport> RunAsync(TargetProfile profile, IReadOnlyList<ITestCase> tests, CancellationToken token, TestPatientNaming patientNaming = TestPatientNaming.RegistrySwedishName, TestRunOptions options = null)
+        public async Task<TestRunReport> RunAsync(TargetProfile profile, IReadOnlyList<ITestCase> tests, CancellationToken token, TestPatientNaming patientNaming = TestPatientNames.Default, TestRunOptions options = null)
         {
             if (profile == null) throw new ArgumentNullException(nameof(profile));
             if (tests == null) throw new ArgumentNullException(nameof(tests));

@@ -1082,8 +1082,10 @@ namespace DCST4.ViewModels
             options.Load = settings;
             options.MetricsFolder = folder;
             Performance.Clear();
+            Performance.StartRun(settings, mode);
             ProgressValue = 0;
-            ProgressMaximum = 1;
+            // In thousandths, filled once a second as the chart is: time against the planned duration, or images against the count.
+            ProgressMaximum = PerformanceProgressSteps;
             LastRunText = string.Empty;
             StatusText = $"Running {Performance.SelectedTest.Name} against {profile.Endpoint.CalledAe}...";
 
@@ -1101,7 +1103,10 @@ namespace DCST4.ViewModels
             DCST4.Core.TestData.TestPatientNames.TryParse(Settings.Default.TestPatientNaming, out var patientNaming);
 
             var ticker = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (s, e) => { if (!token.IsCancellationRequested) ShowTestStatus(); }, _dispatcher);
-            var chart = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (s, e) => Performance.Drain(), _dispatcher);
+            var chart = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (s, e) =>
+            {
+                if (Performance.Drain()) ProgressValue = (int)(Performance.Progress * PerformanceProgressSteps);
+            }, _dispatcher);
             TestRunReport report;
             try
             {
@@ -1133,11 +1138,15 @@ namespace DCST4.ViewModels
             }
         }
 
+        /// <summary>The progress bar of a Performance run counts in thousandths.</summary>
+        public const int PerformanceProgressSteps = 1000;
+
         private void ShowPerformanceProgress(TestProgress progress)
         {
             if (progress.Stage == TestProgressStage.Completed)
             {
-                ProgressValue = 1;
+                // A cancelled run stays where it stopped. A finished one is full, also when the ceiling ended it early.
+                if (progress.Result.Result != TestResultClass.INDETERMINATE) ProgressValue = ProgressMaximum;
                 return;
             }
             _testHeading = progress.Test.Name;
