@@ -22,7 +22,7 @@ namespace DCST4.Core.Reporting
             var threshold = comparison.Options.ThresholdPercent.ToString("0.##", CultureInfo.InvariantCulture) + " %";
 
             var html = HtmlPage.Begin("DCST4 comparison of " + (comparison.Runs.Count + 1).ToString(CultureInfo.InvariantCulture) + " runs");
-            html.Element("h1", "DCST4 run comparison").Line();
+            html.Element("h1", ProductInfo.FullName + ": run comparison").Line();
             html.Element("p", $"Each run against the baseline, {comparison.Baseline.Name}.", "class", "sub").Line();
 
             html.Open("section", "id", "verdict").Line();

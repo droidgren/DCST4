@@ -192,6 +192,22 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("")]
         public string SaveFolder { get => (string)this[nameof(SaveFolder)]; set => this[nameof(SaveFolder)] = value; }
 
+        /// <summary>Whether a run writes its JSON file, and the capability matrix as JSON.</summary>
+        [UserScopedSetting, DefaultSettingValue("True")]
+        public bool WriteResultJson { get => (bool)this[nameof(WriteResultJson)]; set => this[nameof(WriteResultJson)] = value; }
+
+        /// <summary>Whether a run writes its CSV file, and the capability matrix and the chain as CSV.</summary>
+        [UserScopedSetting, DefaultSettingValue("True")]
+        public bool WriteResultCsv { get => (bool)this[nameof(WriteResultCsv)]; set => this[nameof(WriteResultCsv)] = value; }
+
+        /// <summary>Whether a run writes its HTML report.</summary>
+        [UserScopedSetting, DefaultSettingValue("True")]
+        public bool WriteResultHtml { get => (bool)this[nameof(WriteResultHtml)]; set => this[nameof(WriteResultHtml)] = value; }
+
+        /// <summary>After a run, result files in the results folder older than this many days are deleted. 0 = never.</summary>
+        [UserScopedSetting, DefaultSettingValue("0")]
+        public int ResultsKeepDays { get => (int)this[nameof(ResultsKeepDays)]; set => this[nameof(ResultsKeepDays)] = value; }
+
         /// <summary>Where test runs write their JSON and CSV. Empty = the default folder under %LocalAppData%\DCST4.</summary>
         [UserScopedSetting, DefaultSettingValue("")]
         public string TestResultsFolder { get => (string)this[nameof(TestResultsFolder)]; set => this[nameof(TestResultsFolder)] = value; }

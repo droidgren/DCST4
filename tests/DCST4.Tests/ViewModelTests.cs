@@ -137,6 +137,10 @@ namespace DCST4.Tests
                 vm.Performance.Associations = 13;
                 vm.TestSuite.ResultsFolder = @"C:\Temp\DCST4 reset";
                 settings["CompareThresholdPercent"] = 25.0;
+                vm.WriteResultJson = false;
+                vm.WriteResultCsv = false;
+                vm.WriteResultHtml = false;
+                vm.ResultsKeepDays = 14;
                 vm.Comparison.ReloadFromSettings();
                 var thresholdBefore = vm.Comparison.ThresholdText;
                 vm.TestSuite.SelectedStoreSyntax = vm.TestSuite.StoreSyntaxChoices[1];
@@ -161,6 +165,8 @@ namespace DCST4.Tests
                 check("Confirmed: the Performance tab is the defaults", vm.Performance.SelectedMode == vm.Performance.Modes[0] && vm.Performance.Associations == Core.Performance.LoadSettings.DefaultAssociations, vm.Performance.Associations.ToString());
                 check("Confirmed: the exam and File > Settings are the defaults", vm.SelectedModality.Code == "CT" && vm.SeriesCount == 1 && !vm.BurnInText && (string)settings["TestPatientNaming"] == "MarkedTestName" && (int)settings["ResponseTimeoutSeconds"] == 60, (string)settings["TestPatientNaming"]);
                 check("Confirmed: the comparison threshold is the default", thresholdBefore == "25" && vm.Comparison.ThresholdText == "10" && (double)settings["CompareThresholdPercent"] == 10, vm.Comparison.ThresholdText);
+                check("Confirmed: every result file is written again and nothing is deleted", vm.WriteResultJson && vm.WriteResultCsv && vm.WriteResultHtml && vm.ResultsKeepDays == 0
+                    && (bool)settings["WriteResultJson"] && (int)settings["ResultsKeepDays"] == 0, null);
                 check("Confirmed: the saved destination profiles are kept", (string)settings["ConnectionProfiles"] == "<kept on purpose/>", null);
                 check("Confirmed: saved once, and every binding told", h.Saves == savesBefore + 1 && raised.Contains(string.Empty) && vm.StatusText.Contains("reset"), vm.StatusText);
 
@@ -883,7 +889,83 @@ namespace DCST4.Tests
             choices.SelectedRun = first.Json;
             choices.RemoveSelected();
             check("Compare: Remove takes the run out of the list and leaves the file", choices.Runs.Count == 1 && choices.SelectedRun == second.Json && File.Exists(first.Json) && !choices.CanCompare, null);
+
+            // ------------------------------------------------ which files a run writes, and clearing old ones
+            // The settings object is shared by every view model of the harness, so what is changed here is put back.
+            try
+            {
+                h.Messages.Clear();
+                var copy = new TestSettingsViewModel(vm);
+                check("Test settings: all three files are written and nothing is deleted, by default", copy.WriteJson && copy.WriteCsv && copy.WriteHtml && copy.KeepDays == "0", copy.KeepDays);
+                copy.WriteHtml = false;
+                copy.KeepDays = "a week";
+                var settingsProblem = copy.Apply();
+                check("Test settings: days that are no number are named, and nothing is applied", settingsProblem != null && settingsProblem.Contains("Delete results older than") && vm.WriteResultHtml && vm.ResultsKeepDays == 0, settingsProblem);
+                copy.KeepDays = "3651";
+                settingsProblem = copy.Apply();
+                check("Test settings: more than 3650 days is refused", settingsProblem != null && settingsProblem.Contains("3650") && vm.ResultsKeepDays == 0, settingsProblem);
+                copy.KeepDays = "30";
+                settingsProblem = copy.Apply();
+                check("Test settings: applied at OK", settingsProblem == null && !vm.WriteResultHtml && vm.WriteResultJson && vm.WriteResultCsv && vm.ResultsKeepDays == 30, settingsProblem);
+
+                // Planted in the results folder: an old run, an old comparison and a file that is not ours.
+                Func<string, int, string> plant = (name, daysOld) =>
+                {
+                    var file = Path.Combine(suite.ResultsFolder, name);
+                    File.WriteAllText(file, "x");
+                    File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddDays(-daysOld));
+                    return file;
+                };
+                var oldRun = plant("DCST4-run-20250101-080000-000.json", 60);
+                var oldCompare = plant("DCST4-compare-20250101-080000-000.html", 60);
+                var foreign = plant("my notes.json", 600);
+                var existing = Directory.GetFiles(suite.ResultsFolder, "DCST4-run-*.json").Where(f => f != oldRun).ToList();
+
+                h.Opened.Clear();
+                await h.Execute(vm.RunTestsCommand);
+                var withoutHtml = suite.LastResultFiles;
+                check("Without the HTML box: JSON and CSV are written and no report", withoutHtml != null && File.Exists(withoutHtml.Json) && File.Exists(withoutHtml.Csv) && withoutHtml.Html == null
+                    && !File.Exists(Path.ChangeExtension(withoutHtml.Json, ".html")), vm.StatusText);
+                check("After the run, files older than 30 days are deleted and the status says how many", !File.Exists(oldRun) && !File.Exists(oldCompare) && vm.StatusText.EndsWith(", 2 older result files deleted"), vm.StatusText);
+                check("Newer runs, and a file that is not a result file, are kept", existing.All(File.Exists) && File.Exists(foreign) && File.Exists(first.Json), null);
+                await h.Execute(vm.OpenReportCommand);
+                check("Open report still works: the report is made from the JSON file", h.Opened.Count == 1 && File.Exists(h.Opened[0]) && h.Opened[0] == Path.ChangeExtension(withoutHtml.Json, ".html"), string.Join("; ", h.Opened));
+
+                vm.WriteResultJson = false;
+                vm.WriteResultCsv = false;
+                vm.WriteResultHtml = true;
+                vm.ResultsKeepDays = 0;
+                h.Opened.Clear();
+                await h.Execute(vm.RunTestsCommand);
+                var onlyHtml = suite.LastResultFiles;
+                check("Only the HTML box: the report alone", onlyHtml != null && onlyHtml.Json == null && onlyHtml.Csv == null && File.Exists(onlyHtml.Html) && vm.StatusText.Contains("Results saved in"), vm.StatusText);
+                await h.Execute(vm.OpenReportCommand);
+                check("Open report opens it without a JSON file", h.Opened.Count == 1 && h.Opened[0] == onlyHtml.Html && h.Messages.Count == 0, string.Join("; ", h.Opened.Concat(h.Messages)));
+
+                vm.WriteResultHtml = false;
+                var before = Directory.GetFiles(suite.ResultsFolder).Length;
+                await h.Execute(vm.RunTestsCommand);
+                check("No box ticked: the run writes nothing, and the status says so", Directory.GetFiles(suite.ResultsFolder).Length == before && vm.StatusText == "Tests finished. " + MainViewModel.NoResultFilesText
+                    && suite.Rows.Count == 1, vm.StatusText);
+                check("No box ticked: there is no report to open", !vm.OpenReportCommand.CanExecute(null), null);
+                check("The settings are what the next start reads", !(bool)Properties("WriteResultJson") && !(bool)Properties("WriteResultHtml") && (int)Properties("ResultsKeepDays") == 0, null);
+            }
+            finally
+            {
+                vm.WriteResultJson = true;
+                vm.WriteResultCsv = true;
+                vm.WriteResultHtml = true;
+                vm.ResultsKeepDays = 0;
+            }
             Scp.Reset();
+        }
+
+        /// <summary>A value of the app's settings object, which is internal to the app.</summary>
+        private static object Properties(string name)
+        {
+            var settings = (System.Configuration.ApplicationSettingsBase)typeof(MainViewModel).Assembly.GetType("DCST4.Properties.Settings")
+                .GetProperty("Default", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static).GetValue(null);
+            return settings[name];
         }
 
         private static async Task RunPerformanceTab(int port, string temp, Action<string, bool, string> check)
@@ -1492,7 +1574,7 @@ namespace DCST4.Tests
                     dialogEncoder.Frames.Add(BitmapFrame.Create(dialogBitmap));
                     using (var stream = File.Create(Path.ChangeExtension(picture, ".settings.png"))) dialogEncoder.Save(stream);
                 }
-                check("Test settings: every binding resolves and every box shows its value", dialogProblems.Count == 0 && boxes.Count == 10 && boxes.Where(b => b.Name != "ExpiredCertBox").All(b => b.Text.Length > 0),
+                check("Test settings: every binding resolves and every box shows its value", dialogProblems.Count == 0 && boxes.Count == 11 && boxes.Where(b => b.Name != "ExpiredCertBox").All(b => b.Text.Length > 0),
                     string.Join("\n", dialogProblems) + " " + boxes.Count);
 
                 // ------------------------------------------------ the Capabilities tab, with a real probe in it

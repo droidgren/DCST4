@@ -392,6 +392,21 @@
                         <Bold>Open report</Bold> opens, and <Bold>Compare runs...</Bold> compares saved runs. See the topic
                         Reports and comparison.
                     </Paragraph>
+                    <Paragraph>
+                        Under <Bold>Results</Bold> in <Bold>Test settings...</Bold>, the boxes after
+                        <Bold>Each run writes</Bold> choose which of the three files a run writes: JSON, CSV and the HTML
+                        report. All three are ticked from the start. <Bold>Compare runs...</Bold> reads the JSON file, so a
+                        run saved without it cannot be compared later. With no box ticked a run writes nothing, and the
+                        status bar says so. The series files of a Performance test are always written.
+                    </Paragraph>
+                    <Paragraph>
+                        <Bold>Delete results older than</Bold> makes DCST4 tidy the results folder. After each run it
+                        deletes the result files, reports and comparisons there that are older than the number of days you
+                        enter: the files whose names start with <Italic>DCST4-run-</Italic> or
+                        <Italic>DCST4-compare-</Italic> and end in <Italic>.json</Italic>, <Italic>.csv</Italic> or
+                        <Italic>.html</Italic>. Nothing else in the folder is touched, no subfolder is looked into, and
+                        nothing is deleted until a run has been saved. 0, which it is from the start, keeps everything.
+                    </Paragraph>
                 </Section>
 
                 <!-- ===================================================================== -->
@@ -645,7 +660,8 @@
                         Every run on the Tests and Performance tabs writes a report beside its result files, with the same
                         name and the ending <Italic>.html</Italic>. <Bold>Open report</Bold> on each tab opens the report of
                         the last run in your browser. The report is one file that is complete in itself: it loads nothing
-                        from the network and holds no script, so it can be mailed or archived as it is.
+                        from the network and holds no script, so it can be mailed or archived as it is. Its last line
+                        links to the DCST4 project on GitHub, which is the only address in it that leaves the page.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">What the report holds</Paragraph>
                     <List>
