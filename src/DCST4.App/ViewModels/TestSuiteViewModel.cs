@@ -11,27 +11,76 @@ using System.Runtime.CompilerServices;
 
 namespace DCST4.ViewModels
 {
-    /// <summary>One test in the list on the Tests tab.</summary>
+    /// <summary>One test in the list on the Tests tab. Nothing is ticked at the start: many tests store objects that may not be possible to delete.</summary>
     public sealed class TestChoice : INotifyPropertyChanged
     {
+        public const string StoresNote = "Stores new objects on the destination, which may not be possible to delete.";
+
         private bool _isSelected;
 
         public TestChoice(ITestCase test)
         {
             Test = test;
-            // The limit and fault tests strain the system under test and break transfers on purpose, so they are asked for, not assumed.
-            _isSelected = test.Category != TestCategory.Limits;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
+        /// <summary>Raised when <see cref="IsSelected"/> changes, for the group and the Check all box.</summary>
+        public event Action SelectionChanged;
 
         public ITestCase Test { get; }
         public string Name => Test.Name;
         public string Category => Test.Category.ToString();
+        public string Group => Test.Group;
+        public string Description => Test.Description;
+
+        /// <summary>What the test does, whether it stores objects, and its id for DCST4.Cli.exe.</summary>
+        public string ToolTipText => Test.Description + (Test.StoresObjects ? "\n\n" + StoresNote : string.Empty) + "\n\nId: " + Test.Id;
+
         public bool IsSelected
         {
             get => _isSelected;
-            set { _isSelected = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected))); }
+            set
+            {
+                if (_isSelected == value) return;
+                _isSelected = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
+                SelectionChanged?.Invoke();
+            }
+        }
+    }
+
+    /// <summary>A group of tests in the list on the Tests tab, with a box that ticks or clears all of them.</summary>
+    public sealed class TestGroupChoice : INotifyPropertyChanged
+    {
+        private bool _isExpanded = true;
+
+        public TestGroupChoice(string name, IEnumerable<TestChoice> tests)
+        {
+            Name = name;
+            Tests = new ObservableCollection<TestChoice>(tests);
+            foreach (var test in Tests) test.SelectionChanged += () => { OnPropertyChanged(nameof(IsSelected)); OnPropertyChanged(nameof(CountText)); };
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        public string Name { get; }
+        public ObservableCollection<TestChoice> Tests { get; }
+
+        /// <summary>True when all are ticked, false when none is, and null in between. Setting true or false ticks or clears all.</summary>
+        public bool? IsSelected
+        {
+            get => TestSuiteViewModel.StateOf(Tests);
+            set { if (value.HasValue) foreach (var test in Tests) test.IsSelected = value.Value; }
+        }
+
+        /// <summary>"2 of 5"</summary>
+        public string CountText => $"{Tests.Count(t => t.IsSelected)} of {Tests.Count}";
+
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set { _isExpanded = value; OnPropertyChanged(nameof(IsExpanded)); }
         }
     }
 
@@ -90,7 +139,20 @@ namespace DCST4.ViewModels
         public TestSuiteViewModel()
         {
             // The Performance tests have a tab of their own, with their settings, the planned total and the chart.
-            foreach (var test in TestCatalog.All.Where(t => t.Category != TestCategory.Performance)) Choices.Add(new TestChoice(test));
+            foreach (var test in TestCatalog.All.Where(t => t.Category != TestCategory.Performance))
+            {
+                var choice = new TestChoice(test);
+                choice.SelectionChanged += () => { OnPropertyChanged(nameof(AllSelected)); OnPropertyChanged(nameof(SelectionText)); };
+                Choices.Add(choice);
+            }
+
+            // In the order of TestGroups, and within a group in catalog order. A group the catalog has no test in is left out.
+            foreach (var group in TestGroups.All)
+            {
+                var members = Choices.Where(c => c.Group == group).ToList();
+                if (members.Count > 0) Groups.Add(new TestGroupChoice(group, members));
+            }
+
             var saved = Settings.Default.TestResultsFolder;
             _resultsFolder = string.IsNullOrWhiteSpace(saved) ? DefaultResultsFolder : saved;
         }
@@ -98,7 +160,39 @@ namespace DCST4.ViewModels
         public event PropertyChangedEventHandler PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
+        /// <summary>Every test of the tab, in catalog order.</summary>
         public ObservableCollection<TestChoice> Choices { get; } = new ObservableCollection<TestChoice>();
+
+        /// <summary>The same tests as <see cref="Choices"/>, by group, as the list shows them.</summary>
+        public ObservableCollection<TestGroupChoice> Groups { get; } = new ObservableCollection<TestGroupChoice>();
+
+        /// <summary>The Check all box: true when all are ticked, false when none is, null in between.</summary>
+        public bool? AllSelected
+        {
+            get => StateOf(Choices);
+            set { if (value.HasValue) foreach (var choice in Choices) choice.IsSelected = value.Value; }
+        }
+
+        /// <summary>"12 of 35 ticked"</summary>
+        public string SelectionText => $"{Choices.Count(c => c.IsSelected)} of {Choices.Count} ticked";
+
+        internal static bool? StateOf(ICollection<TestChoice> choices)
+        {
+            var ticked = choices.Count(c => c.IsSelected);
+            if (ticked == 0) return false;
+            if (ticked == choices.Count) return true;
+            return null;
+        }
+
+        /// <summary>After the settings were reset: the results folder from the settings, the store syntax from the matrix and nothing ticked.</summary>
+        public void ReloadFromSettings()
+        {
+            var saved = Settings.Default.TestResultsFolder;
+            _resultsFolder = string.IsNullOrWhiteSpace(saved) ? DefaultResultsFolder : saved;
+            OnPropertyChanged(nameof(ResultsFolder));
+            SelectedStoreSyntax = StoreSyntaxChoices[0];
+            AllSelected = false;
+        }
         public ObservableCollection<TestResultRow> Rows { get; } = new ObservableCollection<TestResultRow>();
         public CapabilityViewModel Capabilities { get; } = new CapabilityViewModel();
         public ChainSummaryViewModel Chain { get; } = new ChainSummaryViewModel();

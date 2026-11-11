@@ -96,6 +96,9 @@ namespace DCST4.Tests
             public string Id => "capture-naming";
             public string Name => "Capture naming";
             public TestCategory Category => TestCategory.Capability;
+            public string Description => "Records the patient naming it was given.";
+            public string Group => TestGroups.Association;
+            public bool StoresObjects => false;
 
             public Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
             {

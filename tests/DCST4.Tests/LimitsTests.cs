@@ -384,7 +384,7 @@ namespace DCST4.Tests
             };
             var beforePerformance = TestCatalog.All.Where(t => t.Category != TestCategory.Performance).ToList();
             _check("Catalog: the Limits tests, last before the Performance tests and in this order", ids.SequenceEqual(expected) && beforePerformance.Skip(beforePerformance.Count - expected.Length).All(t => t.Category == TestCategory.Limits) && TestCatalog.All.Skip(beforePerformance.Count).All(t => t.Category == TestCategory.Performance), string.Join(",", ids));
-            _check("Tests tab: Limits tests are not ticked by default, the others are", TestCatalog.All.All(t => new TestChoice(t).IsSelected == (t.Category != TestCategory.Limits)), null);
+            _check("Tests tab: no test is ticked by default", TestCatalog.All.All(t => !new TestChoice(t).IsSelected), null);
 
             _check("Options: defaults", new TestRunOptions().MaxAssociations == 10 && new TestRunOptions().IdleWaitSeconds == 120 && new TestRunOptions().ArtimWaitSeconds == 60 && new TestRunOptions().FaultSettleSeconds == 5 && new TestRunOptions().Validate() == null, null);
             _check("Options: a ceiling of 0 or above 500 is refused", new TestRunOptions { MaxAssociations = 0 }.Validate() != null && new TestRunOptions { MaxAssociations = 501 }.Validate() != null, null);

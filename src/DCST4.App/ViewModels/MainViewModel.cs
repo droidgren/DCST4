@@ -437,6 +437,48 @@ namespace DCST4.ViewModels
         }
 
         #region Settings
+        public const string ResetQuestion =
+            "Put all settings back to their defaults?\n\nThis includes the destination fields, the exam, the Tests and Performance tabs, " +
+            "File > Settings and the results folder. The saved destination profiles are kept.";
+
+        /// <summary>
+        /// Puts every setting back to its default, as on a first start, except the saved destination profiles. Asks first, and
+        /// refuses while something runs.
+        /// </summary>
+        public void ResetSettings()
+        {
+            if (IsBusy)
+            {
+                ShowMessage("Wait until the run is over, or cancel it, before resetting the settings.", MessageBoxImage.Warning, null);
+                return;
+            }
+            if (!Confirm(ResetQuestion)) return;
+
+            Settings.Default.ResetToDefaults(nameof(Settings.ConnectionProfiles));
+
+            _loading = true;
+            try
+            {
+                LoadSettings();
+                FillModalityLists();
+                _selectedProfile = null;
+                _profileName = string.Empty;
+                Performance.ResetToDefaults();
+                TestSuite.ReloadFromSettings();
+                ReloadAdditionalTags();
+            }
+            finally
+            {
+                _loading = false;
+            }
+            UpdateManualUidRules();
+            OnPropertyChanged(string.Empty);
+            RefreshPreview();
+            SaveSettings();
+            _logger.Information("Settings reset to their defaults. The saved destination profiles were kept");
+            StatusText = "Settings reset to their defaults. The saved destination profiles were kept.";
+        }
+
         private void LoadSettings()
         {
             var s = Settings.Default;
@@ -1006,6 +1048,14 @@ namespace DCST4.ViewModels
             var tests = TestSuite.SelectedTests;
             var folder = TestSuite.ResultsFolder.Trim();
 
+            // What a PACS has stored may not be possible to delete, so a run that stores anything is confirmed with the destination named.
+            var storing = tests.Where(t => t.StoresObjects).ToList();
+            if (storing.Count > 0 && !Confirm(DescribeStoring(storing, profile)))
+            {
+                StatusText = "Tests not started.";
+                return;
+            }
+
             TestSuite.Rows.Clear();
             TestSuite.SelectedRow = null;
             TestSuite.LastResultFiles = null;
@@ -1051,6 +1101,16 @@ namespace DCST4.ViewModels
                 _logger.Error(ex, "Could not write the test results to {folder}", folder);
                 StatusText = $"{ending} The results could not be saved: {ex.Message}";
             }
+        }
+
+        /// <summary>The question asked before a run with tests that store objects.</summary>
+        private static string DescribeStoring(IReadOnlyList<ITestCase> storing, TargetProfile profile)
+        {
+            var target = $"{profile.Endpoint.CalledAe} at {profile.Endpoint.Host}:{profile.Endpoint.Port}";
+            var count = storing.Count == 1 ? "1 of the ticked tests stores" : $"{storing.Count} of the ticked tests store";
+            return $"{count} new objects on {target}. They may not be possible to delete.\n\n"
+                + string.Join("\n", storing.Select(t => "- " + t.Name))
+                + "\n\nStart the tests?";
         }
 
         /// <summary>

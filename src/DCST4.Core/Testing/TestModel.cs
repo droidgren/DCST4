@@ -64,6 +64,12 @@ namespace DCST4.Core.Testing
         string Id { get; }
         string Name { get; }
         TestCategory Category { get; }
+        /// <summary>What the test does and what it needs, in a sentence or two, for a tooltip or a list.</summary>
+        string Description { get; }
+        /// <summary>One of <see cref="TestGroups"/>. Only for display.</summary>
+        string Group { get; }
+        /// <summary>True if the test may leave new objects on the destination, which may not be possible to delete.</summary>
+        bool StoresObjects { get; }
         Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token);
     }
 

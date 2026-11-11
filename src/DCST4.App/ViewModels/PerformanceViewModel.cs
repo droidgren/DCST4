@@ -279,6 +279,15 @@ namespace DCST4.ViewModels
             _runMode = mode;
         }
 
+        /// <summary>Every setting of the tab back to its default and the first test selected, as on a first start. The last run stays on screen.</summary>
+        public void ResetToDefaults()
+        {
+            _settings = new LoadSettings();
+            _mode = Modes[0];
+            OnPropertyChanged(string.Empty);
+            SettingsChanged?.Invoke();
+        }
+
         public void Clear()
         {
             while (_incoming.TryDequeue(out _)) { }

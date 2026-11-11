@@ -21,6 +21,9 @@ namespace DCST4.Core.Testing.Cases
         public string Id => "negotiation-probe";
         public string Name => "Negotiation probe (capability matrix)";
         public TestCategory Category => TestCategory.Capability;
+        public string Description => "Proposes the SOP classes and transfer syntaxes DCST4 knows and records which the destination accepts. Fills the Capabilities tab, and the store tests use it to choose what to send in. Stores nothing.";
+        public string Group => TestGroups.Association;
+        public bool StoresObjects => false;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
         {

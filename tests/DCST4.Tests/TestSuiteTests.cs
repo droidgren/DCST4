@@ -41,6 +41,9 @@ namespace DCST4.Tests
             public string Id { get; }
             public string Name => "Stub " + Id;
             public TestCategory Category { get; }
+            public string Description => "A stub.";
+            public string Group => TestGroups.Association;
+            public bool StoresObjects => false;
             public Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token) => _run(token);
         }
 
@@ -311,6 +314,18 @@ namespace DCST4.Tests
                 string.Join(",", Enum.GetNames(typeof(TestResultClass))) == "PASS,FAIL,NOT_SUPPORTED,EXPECTED_FAILURE,TIMEOUT,INDETERMINATE,TOOL_ERROR", null);
             check("Categories", string.Join(",", Enum.GetNames(typeof(TestCategory))) == "Capability,Integrity,Limits,Performance", null);
             check("Test ids are unique", TestCatalog.All.Select(t => t.Id).Distinct().Count() == TestCatalog.All.Count, null);
+            var undescribed = TestCatalog.All.Where(t => string.IsNullOrWhiteSpace(t.Description) || !t.Description.EndsWith(".") || t.Description.Contains("\n")).Select(t => t.Id).ToList();
+            check("Every test describes itself in a sentence or two", undescribed.Count == 0, string.Join(", ", undescribed));
+            var ungrouped = TestCatalog.All.Where(t => !TestGroups.All.Contains(t.Group)).Select(t => t.Id).ToList();
+            check("Every test is in one of the groups", ungrouped.Count == 0, string.Join(", ", ungrouped));
+
+            // A PACS may not be able to delete what it stored, so the App asks before these. A test that stores and is not marked would go unannounced.
+            Func<string, bool> stores = id => id.StartsWith("store-") || id.StartsWith("duplicate-") || id.StartsWith("fault-") || id.StartsWith("load-")
+                || id == "query-matching" || id == "conflict-demographics" || id == "limit-max-pdu" || id == "limit-oversized-pdu";
+            var wrongStores = TestCatalog.All.Where(t => t.StoresObjects != stores(t.Id)).Select(t => t.Id).ToList();
+            check("The tests that store objects are the ones marked so", wrongStores.Count == 0, string.Join(", ", wrongStores));
+            var claimsNothing = TestCatalog.All.Where(t => t.StoresObjects && t.Description.Contains("Stores nothing")).Select(t => t.Id).ToList();
+            check("A test that stores objects never says it stores nothing", claimsNothing.Count == 0, string.Join(", ", claimsNothing));
 
             var thrower = new StubTest("throws", async _ => { await Task.Yield(); throw new InvalidOperationException("Broken on purpose"); });
             var syncThrower = new StubTest("throws-at-once", _ => throw new ArgumentException("Thrown before any await"));

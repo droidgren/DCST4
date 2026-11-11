@@ -199,6 +199,9 @@ namespace DCST4.Core.Testing.Cases
     {
         public string Id => "limit-max-associations";
         public string Name => "Limit: simultaneous associations";
+        public string Description => "Opens associations one at a time and holds them, until one is refused or the ceiling on this tab is reached. All are released afterwards. Stores nothing.";
+        public string Group => TestGroups.Limits;
+        public bool StoresObjects => false;
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -384,6 +387,9 @@ namespace DCST4.Core.Testing.Cases
     {
         public string Id => "limit-idle-timeout";
         public string Name => "Limit: idle association timeout";
+        public string Description => "Opens an association, sends nothing, and measures how long the destination keeps it open, up to the idle wait on this tab. Stores nothing.";
+        public string Group => TestGroups.Limits;
+        public bool StoresObjects => false;
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -477,6 +483,9 @@ namespace DCST4.Core.Testing.Cases
     {
         public string Id => "limit-artim";
         public string Name => "Limit: connection without an association request (ARTIM)";
+        public string Description => "Opens a TCP connection without an association request and measures how long the destination keeps it, up to the ARTIM wait on this tab. Stores nothing.";
+        public string Group => TestGroups.Limits;
+        public bool StoresObjects => false;
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -581,6 +590,9 @@ namespace DCST4.Core.Testing.Cases
 
         public string Id => "limit-max-pdu";
         public string Name => "Limit: maximum PDU length";
+        public string Description => "Announces several maximum PDU lengths, records what the destination announces back, and stores one small object per association with PDUs of exactly that length.";
+        public string Group => TestGroups.Limits;
+        public bool StoresObjects => true;
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -744,6 +756,9 @@ namespace DCST4.Core.Testing.Cases
 
         public string Id => "limit-oversized-pdu";
         public string Name => "Limit: PDU longer than the announced maximum";
+        public string Description => "Sends an object in PDUs longer than the destination said it takes. It should refuse them, but it may store the object.";
+        public string Group => TestGroups.Limits;
+        public bool StoresObjects => true;
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)

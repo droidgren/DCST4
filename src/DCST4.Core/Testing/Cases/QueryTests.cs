@@ -66,6 +66,9 @@ namespace DCST4.Core.Testing.Cases
     {
         public string Id => "query-index";
         public string Name => "C-FIND: stored objects are indexed";
+        public string Description => "Asks with C-FIND for every object the store tests stored, until each is found or the wait is over. Needs a store test earlier in the same run.";
+        public string Group => TestGroups.Query;
+        public bool StoresObjects => false;
         public TestCategory Category => TestCategory.Integrity;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -130,6 +133,9 @@ namespace DCST4.Core.Testing.Cases
 
         public string Id => "query-levels";
         public string Name => "C-FIND: levels under Patient Root and Study Root";
+        public string Description => "Tries C-FIND at patient, study, series and image level under Patient Root and Study Root, and records which levels work. Needs a store test earlier in the same run.";
+        public string Group => TestGroups.Query;
+        public bool StoresObjects => false;
         public TestCategory Category => TestCategory.Capability;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -263,6 +269,9 @@ namespace DCST4.Core.Testing.Cases
 
         public string Id => "query-return-keys";
         public string Name => "C-FIND: return keys that are populated";
+        public string Description => "Asks for a broad set of return keys at each level and records which ones the destination fills in. Needs a store test earlier in the same run.";
+        public string Group => TestGroups.Query;
+        public bool StoresObjects => false;
         public TestCategory Category => TestCategory.Capability;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -377,6 +386,9 @@ namespace DCST4.Core.Testing.Cases
 
         public string Id => "query-matching";
         public string Name => "C-FIND: wildcards, date ranges, case and Swedish characters";
+        public string Description => "Stores two small CT studies of one patient, one in Latin-1 and one in UTF-8, and tries wildcards, date ranges, case and å, ä and ö in the matching.";
+        public string Group => TestGroups.Query;
+        public bool StoresObjects => true;
         public TestCategory Category => TestCategory.Capability;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)

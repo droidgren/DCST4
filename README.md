@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.9.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.9.1-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -24,11 +24,12 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Full response logging:** status code, state, description, Error Comment, Offending Element and time for every image, including warnings and vendor-specific codes.
 - **Save to disk:** instead of, or in addition to, sending, as a DICOM File-set with a DICOMDIR that viewers can open.
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
-- **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). Each run is saved as JSON and CSV for comparison over time. See [Testing a PACS](#testing-a-pacs).
+- **Reset to defaults:** **File > Settings** puts every setting back to its default in one go, and keeps the saved destination profiles.
+- **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). Each run is saved as JSON and CSV for comparison over time. On the Tests tab the tests are grouped, each says in a tooltip what it does, nothing is ticked at the start, and a run that stores objects names them and the destination and asks first. See [Testing a PACS](#testing-a-pacs).
 - **Capability matrix:** finds out from association negotiation alone, with no images sent, which SOP classes and transfer syntaxes a PACS supports, and compares that with what the vendor's Conformance Statement claims. See [What the PACS supports](#what-the-pacs-supports).
 - **Store, query and retrieve:** proves the chain accepted, indexed, retrievable and intact for each object type, with C-STORE, C-FIND, C-GET and C-MOVE. What comes back is compared with what was sent, level by level. See [Store, query and retrieve](#store-query-and-retrieve).
 - **Storage Commitment:** asks the PACS to commit to what it stored, with N-ACTION, and takes its N-EVENT-REPORT either on the same association or on one the PACS opens to this computer. It records which way the PACS used, how long the report took and the Failure Reason of each instance that was not committed. See [Storage Commitment](#storage-commitment).
-- **Limits and faults:** finds how many associations the PACS holds at once, how long it keeps an idle association or a connection that never sends a request, and whether it keeps to the maximum PDU length it announces. Breaks a C-STORE off on purpose in three ways, and checks what the PACS kept and how it takes the retry. With TLS, checks that a client certificate from an unknown authority or an expired one is refused. These tests are not ticked by default. See [Limits and faults](#limits-and-faults).
+- **Limits and faults:** finds how many associations the PACS holds at once, how long it keeps an idle association or a connection that never sends a request, and whether it keeps to the maximum PDU length it announces. Breaks a C-STORE off on purpose in three ways, and checks what the PACS kept and how it takes the retry. With TLS, checks that a client certificate from an unknown authority or an expired one is refused. See [Limits and faults](#limits-and-faults).
 - **Performance:** throughput and latency under load, on N parallel associations, from images encoded in advance with new UIDs for every send. A ramp of 1, 2, 4, 8 ... associations finds where the PACS saturates, a soak of hours writes snapshots as it goes and flags degradation, and time-to-available says how soon a stored image can be found. A live chart on the Performance tab, and the plan of how many objects will be stored before anything is sent. See [Performance](#performance).
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
 - **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, Enhanced CT and MR, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
@@ -156,9 +157,13 @@ A test run is a set of tests against one destination. The result of each test is
 
 Open the **Tests** tab below the exam settings, tick the tests and click **Run tests**. They run against the destination entered under Server. Select a row to see its explanation and protocol timeline. **Cancel** stops the run, and what was finished is still saved.
 
+The list is grouped: Association, Store, Query, Retrieve & integrity, Storage Commitment, Duplicates, TLS, Limits and Faults. Each group can be folded away, and its box ticks or clears all its tests. **Check all** above the list does the same for every test, and the count beside it says how many are ticked. Nothing is ticked when the program starts. Hover over a test to see what it does, what it needs, whether it stores objects and its id for the command line.
+
+**A run that stores objects asks first.** If any ticked test can leave new objects on the destination, a question names those tests and the destination, and the run starts only on a yes. These are the store tests, `query-matching`, the duplicate and conflict tests, the two PDU limit tests and the fault tests. The command line does not ask.
+
 While a run is going, the status bar shows which test is running, what it is doing or waiting for, and for how many seconds, for example `Test 51 of 51: Limit: connection without an association request (ARTIM). Connected without sending an A-ASSOCIATE-RQ. Waiting up to 60 s for the system to close the connection (23 s)`. The command line prints the same as a line of its own.
 
-The row below the buttons holds the local AE title and port that C-MOVE and Storage Commitment reports go to, the UID root of the objects the tests send, and the transfer syntax of the store tests. The row below that holds the Storage Commitment times, see [Storage Commitment](#storage-commitment), and the last row the settings of the Limits tests, which are not ticked by default, see [Limits and faults](#limits-and-faults).
+The row below the buttons holds the local AE title and port that C-MOVE and Storage Commitment reports go to, the UID root of the objects the tests send, and the transfer syntax of the store tests. The row below that holds the Storage Commitment times, see [Storage Commitment](#storage-commitment), and the last row the settings of the Limits tests, see [Limits and faults](#limits-and-faults).
 
 ![The Tests tab after a run against the mock SCP](screenshots/tests.png)
 
@@ -261,7 +266,7 @@ A PACS that accepts an unknown AE title gets `FAIL` as a finding to report, with
 
 These tests prove, per object type, that what the PACS accepted can be found, can be fetched back and has not changed. They run in this order, and a later test works on what the earlier ones stored in the same run. A test without its input gives `INDETERMINATE` and says what was missing.
 
-**These tests store objects on the destination, and are ticked by default.** Assume that a PACS cannot delete them. Each object is small, 128 by 128 pixels and marked as a test image, but the duplicate and conflict tests also leave a changed object and a study with two patients behind.
+**These tests store objects on the destination.** The program asks before a run with any of them. Assume that a PACS cannot delete them. Each object is small, 128 by 128 pixels and marked as a test image, but the duplicate and conflict tests also leave a changed object and a study with two patients behind.
 
 | Test                                 | What it answers                                                                                                                 |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -345,7 +350,7 @@ DCST4.Cli.exe run --profile target.json --tests store-ct,commit-stored,commit-un
 
 ### Limits and faults
 
-These tests find the limits of the PACS and show what it does when a transfer goes wrong. They are in the `Limits` category, come last in a run and depend on no other test. **On the Tests tab they are not ticked by default**, because they hold associations open on the PACS, break transfers on purpose and take minutes with the default waits. Tick the ones you want, or use `--tests Limits` or the test ids on the command line.
+These tests find the limits of the PACS and show what it does when a transfer goes wrong. They are in the `Limits` category, come last in a run and depend on no other test. They hold associations open on the PACS, break transfers on purpose and take minutes with the default waits, so tick only the ones you want, in the TLS, Limits and Faults groups on the Tests tab, or use `--tests Limits` or the test ids on the command line.
 
 | Test                         | What it does                                                                                                   | Result                                                                                                             |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -554,15 +559,15 @@ src\DCST4.Core\     No WPF reference
   Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
   Verification\     IntegrityOracle and IntegrityReport: what came back against what was sent
   Output\           DICOM File-set and DICOMDIR
-  Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestResult, ResultFileWriter
+  Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestGroups, TestResult, ResultFileWriter
     Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category, PerformanceTests.cs the Performance category
-src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs
+src\DCST4.App\      WPF app. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
 tools\              List refresh script
 ```
 
-The app and the command line are front-ends on the same engine in `Testing\`. To add a test, implement `ITestCase` in `Testing\Cases\` and add it to `TestCatalog.All`, and it appears in both. Its `Id` must stay the same across versions, because result files are compared by it. Change `TestRunReport.CurrentSchemaVersion` when the result files change.
+The app and the command line are front-ends on the same engine in `Testing\`. To add a test, implement `ITestCase` in `Testing\Cases\` and add it to `TestCatalog.All`, and it appears in both. Its `Id` must stay the same across versions, because result files are compared by it. `Description` is the tooltip on the Tests tab, `Group` one of `TestGroups` that the tab groups by, and `StoresObjects` decides whether the program asks before a run. The harness checks that every test has a description and a group, and that `StoresObjects` is true for exactly the tests it knows to store, so a new test that stores must be added there too. Groups are for display only: result files and `--tests` go by id and `TestCategory`. Change `TestRunReport.CurrentSchemaVersion` when the result files change.
 
 `AssociationTimeline` is built on `IDicomClient`, because fo-dicom's own event collector is internal. It settles how an association ended only after `SendAsync` is over, since `AssociationReleased` is also raised after an abort. C-ECHO and the negotiation tests are wired to it so far.
 
@@ -742,6 +747,21 @@ What this means for a reader: compare a system with itself only over several run
 | Series of a Performance test, written as it runs | Next to the result files, as `DCST4-run-<start>-<test id>.csv`, and for the soak also `-windows.csv` |
 
 ## Changelog
+
+### 1.9.1
+
+New:
+
+- The Tests tab groups the tests: Association, Store, Query, Retrieve & integrity, Storage Commitment, Duplicates, TLS, Limits and Faults. Each group folds away and has a box that ticks or clears all its tests
+- **Check all** above the list, with a count of the ticked tests
+- A tooltip on every test says what it does, what it needs, whether it stores objects and its id for the command line
+- Before a run with tests that can store objects on the destination, the program names them and the destination and asks for a yes
+- **Reset to defaults...** under File > Settings puts every setting back to its default, also those outside the dialog, and keeps the saved destination profiles. It asks first
+
+Changed:
+
+- Nothing is ticked on the Tests tab when the program starts. Before, every test but the Limits tests was
+- Every test has a description and a group in DCST4.Core (`ITestCase.Description`, `Group` and `StoresObjects`), for any front-end
 
 ### 1.9.0
 
