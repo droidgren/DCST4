@@ -45,6 +45,10 @@ namespace DCST4.Tests
         public List<string> ExtendedNegotiationSopClasses;
         public volatile bool Released;
         public volatile bool AbortedByPeer;
+        /// <summary>The connection is gone, however it ended.</summary>
+        public volatile bool Closed;
+        /// <summary>C-STOREs received on this association.</summary>
+        public int Stores;
     }
 
     /// <summary>How the mock answers one presentation context.</summary>
@@ -166,6 +170,17 @@ namespace DCST4.Tests
         public static Func<int, DicomStatus> StatusFor;
         public static Tag OffendingElement;
         public static int ResponseDelayMs;
+        /// <summary>The delay for the n-th image, counted from 0, in place of <see cref="ResponseDelayMs"/>. Null uses that.</summary>
+        public static Func<int, int> ResponseDelayFor;
+        /// <summary>Keep a copy of every image in <see cref="Received"/>. Off for load tests, so that memory stays flat.</summary>
+        public static bool RecordReceived = true;
+        /// <summary>Receive C-STOREs in memory instead of fo-dicom's temporary file. For the load tests.</summary>
+        public static bool ReceiveInMemory;
+        /// <summary>At most this many stores are processed at once, over all associations, as a system with few workers. 0 means no limit.</summary>
+        public static int StoreConcurrency;
+        internal static SemaphoreSlim StoreGate;
+        /// <summary>When each archived instance was stored, as Stopwatch ticks, by SOP Instance UID, in order.</summary>
+        public static readonly ConcurrentQueue<Tuple<string, long>> StoredAt = new ConcurrentQueue<Tuple<string, long>>();
         public static int HangFromImage = -1;
         public static int EchoDelayMs;
         /// <summary>Answer C-ECHO with A-ABORT instead of a response.</summary>
@@ -277,6 +292,12 @@ namespace DCST4.Tests
             StatusFor = null;
             OffendingElement = null;
             ResponseDelayMs = 0;
+            ResponseDelayFor = null;
+            RecordReceived = true;
+            ReceiveInMemory = false;
+            StoreConcurrency = 0;
+            StoreGate = null;
+            while (StoredAt.TryDequeue(out _)) { }
             HangFromImage = -1;
             EchoDelayMs = 0;
             AbortOnEcho = false;
@@ -354,6 +375,30 @@ namespace DCST4.Tests
 
         public MockStorageScp(INetworkStream stream, Encoding fallbackEncoding, ILogger log, DicomServiceDependencies deps)
             : base(stream, fallbackEncoding, log, deps) { }
+
+        /// <summary>
+        /// fo-dicom writes every incoming C-STORE to a temporary file, which with a virus scanner adds tens of milliseconds
+        /// to each one. The load tests measure the mock's scripted delay, so with <see cref="Scp.ReceiveInMemory"/> it is kept in memory.
+        /// </summary>
+        protected override void CreateCStoreReceiveStream(DicomFile file)
+        {
+            if (!Scp.ReceiveInMemory)
+            {
+                base.CreateCStoreReceiveStream(file);
+                return;
+            }
+            var stream = new System.IO.MemoryStream();
+            file.Save(stream);
+            _dimseStream = stream;
+            _dimseStreamFile = null;
+        }
+
+        protected override DicomFile GetCStoreDicomFile()
+        {
+            if (!(_dimseStream is System.IO.MemoryStream received)) return base.GetCStoreDicomFile();
+            received.Position = 0;
+            return DicomFile.Open(received, FileReadOption.ReadAll);
+        }
 
         public async Task OnReceiveAssociationRequestAsync(DicomAssociation association)
         {
@@ -478,6 +523,7 @@ namespace DCST4.Tests
 
         public void OnConnectionClosed(Exception exception)
         {
+            if (_received != null) _received.Closed = true;
             _ended = true;
             Uncount();
         }
@@ -501,17 +547,36 @@ namespace DCST4.Tests
         {
             var generation = Scp.Generation;
             var index = Interlocked.Increment(ref Scp.StoreCount) - 1;
-            Scp.Received.Enqueue(new ReceivedImage
+            if (_received != null) Interlocked.Increment(ref _received.Stores);
+            if (Scp.RecordReceived)
             {
-                Dataset = request.Dataset.Clone(),
-                Syntax = request.Dataset.InternalTransferSyntax,
-                Frame = request.Dataset.Contains(DicomTag.PixelData) ? DicomPixelData.Create(request.Dataset).GetFrame(0).Data.ToArray() : null,
-                CalledAe = _calledAe,
-                CallingAe = _callingAe,
-            });
+                Scp.Received.Enqueue(new ReceivedImage
+                {
+                    Dataset = request.Dataset.Clone(),
+                    Syntax = request.Dataset.InternalTransferSyntax,
+                    Frame = request.Dataset.Contains(DicomTag.PixelData) ? DicomPixelData.Create(request.Dataset).GetFrame(0).Data.ToArray() : null,
+                    CalledAe = _calledAe,
+                    CallingAe = _callingAe,
+                });
+            }
 
-            if (Scp.HangFromImage >= 0 && index >= Scp.HangFromImage) await Task.Delay(TimeSpan.FromSeconds(30));
-            if (Scp.ResponseDelayMs > 0) await Task.Delay(Scp.ResponseDelayMs);
+            var gate = Scp.StoreGate;
+            if (gate == null && Scp.StoreConcurrency > 0)
+            {
+                Interlocked.CompareExchange(ref Scp.StoreGate, new SemaphoreSlim(Scp.StoreConcurrency, Scp.StoreConcurrency), null);
+                gate = Scp.StoreGate;
+            }
+            if (gate != null) await gate.WaitAsync();
+            try
+            {
+                if (Scp.HangFromImage >= 0 && index >= Scp.HangFromImage) await Task.Delay(TimeSpan.FromSeconds(30));
+                var delay = Scp.ResponseDelayFor?.Invoke(index) ?? Scp.ResponseDelayMs;
+                if (delay > 0) await Task.Delay(delay);
+            }
+            finally
+            {
+                gate?.Release();
+            }
 
             // A store that was held back for a test that is over must not land in the archive of the next one.
             if (generation != Scp.Generation) return new DicomCStoreResponse(request, DicomStatus.Success);
@@ -556,6 +621,7 @@ namespace DCST4.Tests
                 }
 
                 Scp.Archive.Add(new ArchivedObject { Dataset = dataset });
+                Scp.StoredAt.Enqueue(Tuple.Create(sop, System.Diagnostics.Stopwatch.GetTimestamp()));
                 return DicomStatus.Success;
             }
         }

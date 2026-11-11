@@ -89,7 +89,8 @@ namespace DCST4.ViewModels
 
         public TestSuiteViewModel()
         {
-            foreach (var test in TestCatalog.All) Choices.Add(new TestChoice(test));
+            // The Performance tests have a tab of their own, with their settings, the planned total and the chart.
+            foreach (var test in TestCatalog.All.Where(t => t.Category != TestCategory.Performance)) Choices.Add(new TestChoice(test));
             var saved = Settings.Default.TestResultsFolder;
             _resultsFolder = string.IsNullOrWhiteSpace(saved) ? DefaultResultsFolder : saved;
         }

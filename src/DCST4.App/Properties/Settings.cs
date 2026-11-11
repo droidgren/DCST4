@@ -156,6 +156,14 @@ namespace DCST4.Properties
         /// <summary>Thumbprint of an expired client certificate in CurrentUser\My for the TLS test, or empty for none.</summary>
         [UserScopedSetting, DefaultSettingValue("")]
         public string TlsExpiredClientCertThumbprint { get => (string)this[nameof(TlsExpiredClientCertThumbprint)]; set => this[nameof(TlsExpiredClientCertThumbprint)] = value; }
+
+        /// <summary>The settings of the Performance tab, as the JSON of a LoadSettings. Empty = the defaults.</summary>
+        [UserScopedSetting, DefaultSettingValue("")]
+        public string PerformanceSettings { get => (string)this[nameof(PerformanceSettings)]; set => this[nameof(PerformanceSettings)] = value; }
+
+        /// <summary>Load, Ramp or Soak.</summary>
+        [UserScopedSetting, DefaultSettingValue("Load")]
+        public string PerformanceMode { get => (string)this[nameof(PerformanceMode)]; set => this[nameof(PerformanceMode)] = value; }
         // ------------------------------------------------------------ Output
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool SendImages { get => (bool)this[nameof(SendImages)]; set => this[nameof(SendImages)] = value; }

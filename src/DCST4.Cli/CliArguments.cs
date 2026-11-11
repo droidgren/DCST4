@@ -13,6 +13,7 @@ namespace DCST4.Cli
             "  DCST4.Cli.exe generate --dataset <id> --out <folder> [options below]\n" +
             "  DCST4.Cli.exe list-datasets\n" +
             "  DCST4.Cli.exe list-codecs [--log-dir <folder>]\n" +
+            "  DCST4.Cli.exe list-mixes\n" +
             "  DCST4.Cli.exe --version\n" +
             "\n" +
             "  --tests            Comma-separated test ids or categories, for example c-echo, negotiation-probe or Capability.\n" +
@@ -33,6 +34,26 @@ namespace DCST4.Cli
             "  --idle-wait <seconds>            How long limit-idle-timeout waits for an idle association to be ended. Default 120\n" +
             "  --artim-wait <seconds>           How long limit-artim waits on a connection with no association request. Default 60\n" +
             "  --fault-settle <seconds>         How long a fault test looks for the instance after a broken transfer. Default 5\n" +
+            "\n" +
+            "Options of run for the Performance tests (load-throughput, load-ramp, load-soak), which store many new objects.\n" +
+            "They are not part of 'all': name them or use --tests Performance. The plan is printed before anything is sent.\n" +
+            "  --load-associations <n>          Associations at once. Default 4\n" +
+            "  --load-duration <time>           How long load-throughput runs, as 20, 90s, 5m or 1h. Default 20 s\n" +
+            "  --load-count <n>                 Send exactly this many instead of running for a duration\n" +
+            "  --load-per-association <n>       Release and open a new association after this many. 0 (default) keeps one\n" +
+            "  --load-rate <n>                  Instances per second over all associations. 0 (default) is as fast as answered\n" +
+            "  --load-mix <id>                  What is sent, from list-mixes. Default ct\n" +
+            "  --load-pdu <bytes>               Maximum PDU length announced and sent with. 0 (default) is fo-dicom's default\n" +
+            "  --load-warmup <seconds>          Left out of the summary at the start of the run and of each ramp step. Default 2\n" +
+            "  --load-max-instances <n>         The most instances a run sends. Default 1000, 2000 for the ramp, rate x duration for the soak\n" +
+            "  --ramp-steps <list>              Associations per ramp step. Default 1,2,4,8\n" +
+            "  --ramp-step-duration <time>      How long each ramp step runs. Default 10 s\n" +
+            "  --soak-duration <time>           How long load-soak runs. Default 30m\n" +
+            "  --soak-rate <n>                  Instances per second during the soak. Default 2\n" +
+            "  --soak-snapshot <time>           How often the soak writes a snapshot. Default 60 s\n" +
+            "  --tta-sample <n>                 Query for 1 in n stored instances, for time-to-available. 0 is off. Default 50\n" +
+            "  --tta-interval <seconds>         How often the sampled instances are queried. Default 2\n" +
+            "  --tta-timeout <seconds>          How long a sampled instance may take to be found. Default 60\n" +
             "\n" +
             "Options of generate:\n" +
             "  --seed <n>  --uid-root <root>  --patients <n>  --studies <n>  --series <n>  --instances <n>\n" +
@@ -59,6 +80,83 @@ namespace DCST4.Cli
         public int IdleWaitSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultIdleWaitSeconds;
         public int ArtimWaitSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultArtimWaitSeconds;
         public int FaultSettleSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultFaultSettleSeconds;
+        public DCST4.Core.Performance.LoadSettings Load { get; } = new DCST4.Core.Performance.LoadSettings();
+
+        private static bool TryWhole(string name, string value, out int number, out string error)
+        {
+            error = null;
+            if (int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out number)) return true;
+            error = $"{name} must be a whole number, not '{value}'.";
+            return false;
+        }
+
+        private static bool TryNumber(string name, string value, out double number, out string error)
+        {
+            error = null;
+            if (double.TryParse(value, System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out number)) return true;
+            error = $"{name} must be a number, not '{value}'.";
+            return false;
+        }
+
+        private static bool TryDuration(string name, string value, out double seconds, out string error)
+        {
+            error = null;
+            if (DCST4.Core.Performance.LoadSettings.TryParseDuration(value, out seconds)) return true;
+            error = $"{name} must be a time such as 90, 90s, 30m or 8h, not '{value}'.";
+            return false;
+        }
+
+        /// <summary>The options of the Performance tests. Returns false with an error, true if the option was one of them, null if it was not.</summary>
+        private bool? TryLoadOption(string name, string value, out string error)
+        {
+            error = null;
+            var load = Load;
+            int whole;
+            double number;
+            switch (name)
+            {
+                case "--load-associations": if (!TryWhole(name, value, out whole, out error)) return false; load.Associations = whole; return true;
+                case "--load-duration": if (!TryDuration(name, value, out number, out error)) return false; load.DurationSeconds = number; return true;
+                case "--load-count": if (!TryWhole(name, value, out whole, out error)) return false; load.InstanceCount = whole; return true;
+                case "--load-per-association": if (!TryWhole(name, value, out whole, out error)) return false; load.InstancesPerAssociation = whole; return true;
+                case "--load-rate": if (!TryNumber(name, value, out number, out error)) return false; load.RatePerSecond = number; return true;
+                case "--load-mix":
+                    if (DCST4.Core.Performance.DataMixCatalog.Find(value) == null)
+                    {
+                        error = $"Unknown data mix '{value}'. Use one from list-mixes.";
+                        return false;
+                    }
+                    load.Mix = value.Trim().ToLowerInvariant();
+                    return true;
+                case "--load-pdu":
+                    if (!uint.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var pdu))
+                    {
+                        error = $"{name} must be a number of bytes, not '{value}'.";
+                        return false;
+                    }
+                    load.MaxPdu = pdu;
+                    return true;
+                case "--load-warmup": if (!TryNumber(name, value, out number, out error)) return false; load.WarmUpSeconds = number; return true;
+                case "--load-max-instances": if (!TryWhole(name, value, out whole, out error)) return false; load.MaxInstances = whole; return true;
+                case "--ramp-steps":
+                    var steps = DCST4.Core.Performance.LoadSettings.ParseSteps(value);
+                    if (steps == null)
+                    {
+                        error = $"{name} must be a list of whole numbers such as 1,2,4,8, not '{value}'.";
+                        return false;
+                    }
+                    load.RampSteps = steps;
+                    return true;
+                case "--ramp-step-duration": if (!TryDuration(name, value, out number, out error)) return false; load.RampStepSeconds = number; return true;
+                case "--soak-duration": if (!TryDuration(name, value, out number, out error)) return false; load.SoakSeconds = number; return true;
+                case "--soak-rate": if (!TryNumber(name, value, out number, out error)) return false; load.SoakRatePerSecond = number; return true;
+                case "--soak-snapshot": if (!TryDuration(name, value, out number, out error)) return false; load.SnapshotSeconds = number; return true;
+                case "--tta-sample": if (!TryWhole(name, value, out whole, out error)) return false; load.SampleEvery = whole; return true;
+                case "--tta-interval": if (!TryNumber(name, value, out number, out error)) return false; load.PollIntervalSeconds = number; return true;
+                case "--tta-timeout": if (!TryNumber(name, value, out number, out error)) return false; load.PollTimeoutSeconds = number; return true;
+                default: return null;
+            }
+        }
 
         private static bool TrySeconds(string name, string value, out int seconds, out string error)
         {
@@ -160,7 +258,9 @@ namespace DCST4.Cli
                         parsed.FaultSettleSeconds = settle;
                         break;
                     default:
-                        error = $"Unknown option {name}.";
+                        var load = parsed.TryLoadOption(name.ToLowerInvariant(), value, out error);
+                        if (load == true) break;
+                        if (load == null) error = $"Unknown option {name}.";
                         return null;
                 }
             }

@@ -94,6 +94,7 @@ namespace DCST4.Tests
                         await RunSizeEstimate(port, check);
                         RunHelpWindow(check);
                         await RunTestSuite(port, closedPort, temp, check);
+                        await RunPerformanceTab(port, temp, check);
                     }
                     catch (Exception ex) { failure = ex; }
                     finally { dispatcher.InvokeShutdown(); }
@@ -642,7 +643,7 @@ namespace DCST4.Tests
             help.UpdateLayout();
             try
             {
-                check("All the topics are listed", help.Topics.Count == 19 && help.Topics.Any(t => t.Title == "Limits and faults"), help.Topics.Count.ToString());
+                check("All the topics are listed", help.Topics.Count == 20 && help.Topics.Any(t => t.Title == "Limits and faults") && help.Topics.Any(t => t.Title == "Performance"), help.Topics.Count.ToString());
                 check("Topic titles are unique", help.Topics.Select(t => t.Title).Distinct().Count() == help.Topics.Count, null);
                 check("Estimated size is explained", new System.Windows.Documents.TextRange(help.Topics[2].Section.ContentStart, help.Topics[2].Section.ContentEnd).Text.Contains("Estimated size"), null);
 
@@ -682,6 +683,68 @@ namespace DCST4.Tests
             return null;
         }
 
+        private static async Task RunPerformanceTab(int port, string temp, Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nPerformance tab");
+            var h = new Harness(port);
+            var vm = h.Vm;
+            var p = vm.Performance;
+            vm.TestSuite.ResultsFolder = Path.Combine(temp, "perf-app");
+            p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Load);
+            p.SelectedMix = Core.Performance.DataMixCatalog.Find("ct");
+            p.Associations = 2;
+            p.InstanceCount = 6;
+            p.SampleEvery = 0;
+            p.WarmUpSeconds = 0;
+            p.MaxInstances = 0;
+
+            check("The plan states the count before anything is sent", p.PlanText.StartsWith("Stores 6 new objects", StringComparison.Ordinal) && p.PlanText.Contains("may not be possible to delete"), p.PlanText);
+            check("The Performance tests are not on the Tests tab", vm.TestSuite.Choices.All(c => c.Test.Category != TestCategory.Performance), null);
+
+            Scp.Reset();
+            string asked = null;
+            vm.Confirm = message => { asked = message; return false; };
+            await h.Execute(vm.RunPerformanceCommand);
+            check("Run asks first, naming the destination, and a No sends nothing", asked != null && asked.Contains("MOCKSCP at 127.0.0.1:" + port) && Scp.StoreCount == 0 && vm.StatusText.Contains("not started"), asked);
+
+            vm.Confirm = message => true;
+            var chartUpdates = 0;
+            p.PropertyChanged += (s, e) => { if (e.PropertyName == nameof(p.SeriesVersion)) chartUpdates++; };
+            await h.Execute(vm.RunPerformanceCommand);
+            check("Run: the test stored what the plan said", Scp.StoreCount == 6 && h.Messages.Count == 0, Scp.StoreCount + " " + string.Join("; ", h.Messages));
+            check("Run: the summary table has the whole run", p.Rows.Count == 1 && p.Rows[0].Stored >= 0 && p.Rows[0].Associations == 2 && p.Verdict.StartsWith("PASS", StringComparison.Ordinal), p.Verdict);
+            check("Run: the chart got its seconds, drawn at most once a second", p.Series.Count >= 1 && chartUpdates >= 1 && chartUpdates <= p.Series.Count + 2, p.Series.Count + " seconds, " + chartUpdates + " updates");
+            check("Run: the result and series files are named", p.Files != null && p.Files.Contains(".json") && p.Files.Contains("-load-throughput.csv"), p.Files);
+            check("Run: idle again, progress at the end", !vm.IsBusy && vm.ProgressValue == 1, vm.ProgressValue.ToString());
+
+            p.RampStepsText = "4,2";
+            p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Ramp);
+            check("Falling ramp steps: the plan line says what is wrong", p.Problem != null && p.PlanText == p.Problem, p.PlanText);
+            p.RampStepsText = "1,2,4";
+            check("Valid steps again: the plan is back", p.Problem == null && p.PlanText.StartsWith("Stores up to", StringComparison.Ordinal), p.PlanText);
+
+            var restored = new PerformanceViewModel(p.SaveSettings(), "Ramp");
+            check("The settings are saved and come back", restored.Associations == 2 && restored.InstanceCount == 6 && restored.RampStepsText == "1,2,4" && restored.IsRamp, restored.RampStepsText);
+            check("Saved settings that cannot be read give the defaults", new PerformanceViewModel("{not json", "nonsense").Associations == Core.Performance.LoadSettings.DefaultAssociations, null);
+
+            // The chart draws off-screen, with lines in it.
+            var chart = new DCST4.Controls.LoadChart { Series = p.Series, Version = p.SeriesVersion, Width = 600, Height = 300 };
+            chart.Measure(new Size(600, 300));
+            chart.Arrange(new Rect(0, 0, 600, 300));
+            var bitmap = new RenderTargetBitmap(600, 300, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(chart);
+            var pixels = new byte[600 * 300 * 4];
+            bitmap.CopyPixels(pixels, 600 * 4, 0);
+            var blue = 0;
+            for (var i = 0; i < pixels.Length; i += 4) if (pixels[i] > 150 && pixels[i + 2] < 110) blue++;
+            check("The chart renders, with the blue series in it", blue > 20, blue + " blue pixels");
+
+            var many = Enumerable.Range(0, 1500).Select(i => new Core.Performance.LoadSecond { Second = i, Stored = 10, LatencyP95Ms = i == 700 ? 999 : 5 }).ToList();
+            var drawn = DCST4.Controls.LoadChart.Downsample(many);
+            check("A long soak is drawn as at most 600 points, keeping the highest p95", drawn.Count <= 600 && drawn.Max(r => r.LatencyP95Ms) == 999 && drawn.All(r => r.Stored == 10), drawn.Count.ToString());
+            check("Axis maxima are round", DCST4.Controls.LoadChart.NiceMax(37) == 50 && DCST4.Controls.LoadChart.NiceMax(101) == 200 && DCST4.Controls.LoadChart.NiceMax(0) == 1, null);
+        }
+
         private static async Task RunTestSuite(int port, int closedPort, string temp, Action<string, bool, string> check)
         {
             Console.WriteLine("\nTests tab");
@@ -692,7 +755,7 @@ namespace DCST4.Tests
             suite.ResultsFolder = Path.Combine(folder, "app");
             vm.ProfileName = "Comparison";
 
-            check("The list holds the catalog, ticked except the Limits tests", suite.Choices.Count == TestCatalog.All.Count && suite.Choices.All(c => c.IsSelected == (c.Test.Category != TestCategory.Limits)), suite.Choices.Count.ToString());
+            check("The list holds the catalog without the Performance tests, ticked except the Limits tests", suite.Choices.Count == TestCatalog.All.Count(t => t.Category != TestCategory.Performance) && suite.Choices.All(c => c.IsSelected == (c.Test.Category != TestCategory.Limits)), suite.Choices.Count.ToString());
             foreach (var choice in suite.Choices) choice.IsSelected = choice.Test.Id == "c-echo";
 
             // ------------------------------------------------ the same content as the command line

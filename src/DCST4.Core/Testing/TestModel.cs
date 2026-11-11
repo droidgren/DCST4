@@ -45,6 +45,12 @@ namespace DCST4.Core.Testing
         /// <summary>Set by <see cref="TestRunner"/> for the test that is running.</summary>
         internal Action<string> Reporter { get; set; }
 
+        /// <summary>Set by <see cref="TestRunner"/> for the test that is running.</summary>
+        internal Action<DCST4.Core.Performance.LoadSecond> MetricsReporter { get; set; }
+
+        /// <summary>One second of a load test, for a live chart. It is not part of the result.</summary>
+        public void ReportMetrics(DCST4.Core.Performance.LoadSecond second) => MetricsReporter?.Invoke(second);
+
         /// <summary>
         /// Says what the test is doing right now, above all what it is waiting for and for how long at most, so that a
         /// front-end can show it. It is not part of the result.
@@ -103,6 +109,9 @@ namespace DCST4.Core.Testing
         /// <summary>Only set by the limit, fault and TLS tests.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public LimitsResult Limits { get; set; }
+        /// <summary>Only set by the load, ramp and soak tests.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public PerformanceResult Performance { get; set; }
     }
 
     /// <summary>
@@ -149,9 +158,9 @@ namespace DCST4.Core.Testing
         /// <summary>
         /// 2: added the capability matrix and the association number on protocol events. 3: added the seed, the chain summary,
         /// the integrity report and the query report. 4: added the commitment report and the committed step of the chain.
-        /// 5: added the limits section of the limit, fault and TLS tests.
+        /// 5: added the limits section of the limit, fault and TLS tests. 6: added the performance section of the load tests.
         /// </summary>
-        public const int CurrentSchemaVersion = 5;
+        public const int CurrentSchemaVersion = 6;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ToolVersion { get; set; }
@@ -193,6 +202,8 @@ namespace DCST4.Core.Testing
         Completed,
         /// <summary>The running test says what it is doing, see <see cref="TestContext.Report"/>. Any number of times between the other two.</summary>
         Activity,
+        /// <summary>A load test measured one more second, see <see cref="TestContext.ReportMetrics"/>.</summary>
+        Metrics,
     }
 
     public sealed class TestProgress
@@ -206,5 +217,7 @@ namespace DCST4.Core.Testing
         public TestResult Result { get; set; }
         /// <summary>Only when <see cref="Stage"/> is Activity: what the test is doing, for example what it waits for.</summary>
         public string Activity { get; set; }
+        /// <summary>Only when <see cref="Stage"/> is Metrics.</summary>
+        public DCST4.Core.Performance.LoadSecond Metrics { get; set; }
     }
 }

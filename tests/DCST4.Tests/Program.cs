@@ -87,6 +87,12 @@ namespace DCST4.Tests
                 return 0;
             }
 
+            if (args.Length == 2 && args[0] == "chart")
+            {
+                PerformanceTests.RenderChart(args[1]).GetAwaiter().GetResult();
+                return 0;
+            }
+
             if (args.Length >= 8 && args[0] == "send")
             {
                 return SendTo(args);
@@ -101,11 +107,12 @@ namespace DCST4.Tests
             var temp = Path.Combine(Path.GetTempPath(), "DCST4Tests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(temp);
 
-            if (args.Length == 1 && args[0] == "limits")
+            if (args.Length == 1 && (args[0] == "limits" || args[0] == "perf"))
             {
                 try
                 {
-                    LimitsTests.Run(temp, Check).GetAwaiter().GetResult();
+                    if (args[0] == "limits") LimitsTests.Run(temp, Check).GetAwaiter().GetResult();
+                    else PerformanceTests.Run(temp, Check).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
@@ -180,6 +187,7 @@ namespace DCST4.Tests
                 }
                 TestTls().GetAwaiter().GetResult();
                 LimitsTests.Run(temp, Check).GetAwaiter().GetResult();
+                PerformanceTests.Run(temp, Check).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {

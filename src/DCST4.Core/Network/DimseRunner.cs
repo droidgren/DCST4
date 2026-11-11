@@ -35,10 +35,21 @@ namespace DCST4.Core.Network
         /// restart the watch for each response. They are also called with fo-dicom's own answer when no context was accepted,
         /// which <see cref="DimseExchange.ContextAccepted"/> tells apart from an answer from the SCP.
         /// </param>
-        public static async Task<DimseExchange> RunAsync(
+        public static Task<DimseExchange> RunAsync(
             DicomEndpoint endpoint,
             NetworkOptions options,
             DicomRequest request,
+            DicomUID sopClass,
+            AssociationTimeline timeline,
+            Action<IDicomClient, TimeoutWatch, DimseExchange> configure,
+            CancellationToken token) =>
+            RunAsync(endpoint, options, new[] { request }, sopClass, timeline, configure, token);
+
+        /// <summary>Several requests of one SOP class on one association, sent one after the other.</summary>
+        public static async Task<DimseExchange> RunAsync(
+            DicomEndpoint endpoint,
+            NetworkOptions options,
+            IReadOnlyList<DicomRequest> requests,
             DicomUID sopClass,
             AssociationTimeline timeline,
             Action<IDicomClient, TimeoutWatch, DimseExchange> configure,
@@ -77,7 +88,7 @@ namespace DCST4.Core.Network
 
                 configure(client, watch, exchange);
 
-                await client.AddRequestAsync(request).ConfigureAwait(false);
+                foreach (var request in requests) await client.AddRequestAsync(request).ConfigureAwait(false);
                 await client.SendAsync(watch.Token, DicomClientCancellationMode.ImmediatelyAbortAssociation).ConfigureAwait(false);
 
                 Conclude(exchange, watch, token, rejection, null);

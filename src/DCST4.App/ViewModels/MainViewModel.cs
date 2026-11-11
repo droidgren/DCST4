@@ -366,7 +366,11 @@ namespace DCST4.ViewModels
         public ICommand DicomEchoCommand { get; }
         public ICommand RunCommand { get; }
         public ICommand RunTestsCommand { get; }
+        public ICommand RunPerformanceCommand { get; }
         public ICommand CancelCommand { get; }
+
+        /// <summary>The Performance tab.</summary>
+        public PerformanceViewModel Performance { get; private set; }
         public ICommand NewValuesCommand { get; }
         public ICommand SaveProfileCommand { get; }
         public ICommand DeleteProfileCommand { get; }
@@ -406,6 +410,7 @@ namespace DCST4.ViewModels
             PingCommand = new RelayCommand(async _ => await RunBusyAsync(ct => DoPingAsync(), cancellable: false), _ => !IsBusy);
             RunCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunAsync), _ => !IsBusy);
             RunTestsCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunTestsAsync), _ => !IsBusy);
+            RunPerformanceCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunPerformanceAsync), _ => !IsBusy);
             CancelCommand = new RelayCommand(_ => CancelOperation(), _ => _cts != null && !_cts.IsCancellationRequested);
             NewValuesCommand = new RelayCommand(_ => GenerateNewValues(), _ => !IsBusy);
             SaveProfileCommand = new RelayCommand(_ => SaveProfile(), _ => !IsBusy);
@@ -413,6 +418,13 @@ namespace DCST4.ViewModels
             ClearLogCommand = new RelayCommand(_ => LogLines.Clear());
 
             LoadSettings();
+            Performance = new PerformanceViewModel(Settings.Default.PerformanceSettings, Settings.Default.PerformanceMode);
+            Performance.SetTarget(() => "the destination above");
+            Performance.SettingsChanged += () =>
+            {
+                Settings.Default.PerformanceSettings = Performance.SaveSettings();
+                Settings.Default.PerformanceMode = Performance.SelectedMode.Mode.ToString();
+            };
             LoadProfiles();
             ReloadAdditionalTags();
             _loading = false;
@@ -1039,6 +1051,99 @@ namespace DCST4.ViewModels
                 _logger.Error(ex, "Could not write the test results to {folder}", folder);
                 StatusText = $"{ending} The results could not be saved: {ex.Message}";
             }
+        }
+
+        /// <summary>
+        /// Runs the load, ramp or soak test of the Performance tab. It stores many new objects, so the plan is shown with the
+        /// destination and has to be confirmed first. The chart is fed once a second from what the test reports.
+        /// </summary>
+        private async Task DoRunPerformanceAsync(CancellationToken token)
+        {
+            var profile = BuildTargetProfile();
+            var options = BuildTestRunOptions();
+            var mode = Performance.SelectedMode.Mode;
+            var problem = profile.Validate() ?? options.Validate() ?? Performance.Problem;
+            if (problem == null && string.IsNullOrWhiteSpace(TestSuite.ResultsFolder)) problem = "Enter a folder for the results on the Tests tab.";
+            if (problem != null)
+            {
+                ShowMessage(problem, MessageBoxImage.Warning, null);
+                return;
+            }
+
+            var settings = Performance.Settings;
+            var target = $"{profile.Endpoint.CalledAe} at {profile.Endpoint.Host}:{profile.Endpoint.Port}";
+            if (!Confirm(settings.DescribePlan(mode, target) + "\n\nStart the test?"))
+            {
+                StatusText = "Performance test not started.";
+                return;
+            }
+
+            var folder = TestSuite.ResultsFolder.Trim();
+            options.Load = settings;
+            options.MetricsFolder = folder;
+            Performance.Clear();
+            ProgressValue = 0;
+            ProgressMaximum = 1;
+            LastRunText = string.Empty;
+            StatusText = $"Running {Performance.SelectedTest.Name} against {profile.Endpoint.CalledAe}...";
+
+            var runner = new TestRunner();
+            runner.Progress += progress =>
+            {
+                // A second of metrics goes to the chart's queue, which a timer drains once a second on the UI thread.
+                if (progress.Stage == TestProgressStage.Metrics)
+                {
+                    Performance.Enqueue(progress.Metrics);
+                    return;
+                }
+                _dispatcher.BeginInvoke(new Action(() => ShowPerformanceProgress(progress)), DispatcherPriority.Background);
+            };
+            DCST4.Core.TestData.TestPatientNames.TryParse(Settings.Default.TestPatientNaming, out var patientNaming);
+
+            var ticker = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (s, e) => { if (!token.IsCancellationRequested) ShowTestStatus(); }, _dispatcher);
+            var chart = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (s, e) => Performance.Drain(), _dispatcher);
+            TestRunReport report;
+            try
+            {
+                report = await runner.RunAsync(profile, new[] { Performance.SelectedTest }, token, patientNaming, options);
+                await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            }
+            finally
+            {
+                ticker.Stop();
+                chart.Stop();
+                _testHeading = null;
+                _testActivity = null;
+            }
+
+            var result = report.Results.Single();
+            Performance.Show(result);
+            LastRunText = result.Result.ToString();
+            var ending = report.Cancelled ? "Performance test cancelled." : "Performance test finished.";
+            try
+            {
+                var files = await Task.Run(() => ResultFileWriter.Write(report, folder));
+                Performance.Files = string.Join("   ", new[] { files.Json, result.Performance?.SeriesFile, result.Performance?.WindowsFile }.Where(f => f != null));
+                StatusText = $"{ending} Results saved in {folder}";
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException)
+            {
+                _logger.Error(ex, "Could not write the test results to {folder}", folder);
+                StatusText = $"{ending} The results could not be saved: {ex.Message}";
+            }
+        }
+
+        private void ShowPerformanceProgress(TestProgress progress)
+        {
+            if (progress.Stage == TestProgressStage.Completed)
+            {
+                ProgressValue = 1;
+                return;
+            }
+            _testHeading = progress.Test.Name;
+            _testActivity = progress.Activity;
+            _testActivityClock.Restart();
+            ShowTestStatus();
         }
 
         /// <summary>Writes the matrix on the Capabilities tab as JSON or as CSV.</summary>

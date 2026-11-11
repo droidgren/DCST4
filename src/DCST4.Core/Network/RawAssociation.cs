@@ -85,6 +85,8 @@ namespace DCST4.Core.Network
         public byte[] Body;
         /// <summary>On the association's clock.</summary>
         public long AtMs;
+        /// <summary><see cref="Stopwatch.GetTimestamp"/> when the read loop had the whole PDU, for latency measurement.</summary>
+        public long AtTicks;
         public string Error;
 
         public bool IsEnding => Kind != RawEventKind.Pdu;
@@ -144,15 +146,18 @@ namespace DCST4.Core.Network
         /// <summary>Raw (0000,0900).</summary>
         public ushort? Status;
         public string ErrorComment;
+        /// <summary><see cref="Stopwatch.GetTimestamp"/> of the PDU that completed the response command.</summary>
+        public long ArrivedTicks;
     }
 
     /// <summary>
-    /// A DICOM association on a socket of our own, for the limit and fault tests only.
+    /// A DICOM association on a socket of our own, for the limit, fault and load tests.
     ///
     /// fo-dicom's client cannot stop in the middle of a dataset, cannot hold a TCP connection without sending an
     /// A-ASSOCIATE-RQ, does not show the size of the PDUs on the wire and closes an association when its queue is empty.
     /// These tests need all four, so this class writes and reads the PDUs itself (PS3.8 section 9.3). It knows only what
     /// those tests use: association negotiation, C-ECHO, C-STORE, release, abort and three ways of breaking off.
+    /// The load tests use it because it sends bytes encoded in advance and shows when a request went on the wire.
     /// Everything else in DCST4 goes through fo-dicom.
     /// </summary>
     internal sealed class RawAssociation : IDisposable
@@ -186,6 +191,8 @@ namespace DCST4.Core.Network
         private int _closed;
         private int _messageId;
         private long _largestReceived;
+        /// <summary>Reused for every data PDU of the segmented <c>SendDatasetAsync</c>.</summary>
+        private byte[] _sendBuffer;
 
         private RawAssociation(TcpClient tcp, Stream stream, DicomEndpoint endpoint, Stopwatch clock, AssociationTimeline timeline)
         {
@@ -369,6 +376,7 @@ namespace DCST4.Core.Network
 
         private void Post(RawEvent entry)
         {
+            entry.AtTicks = Stopwatch.GetTimestamp();
             entry.AtMs = _clock.ElapsedMilliseconds;
             if (entry.IsEnding) _ending = entry;
             if (entry.Kind == RawEventKind.Pdu && entry.PduType == PduAbort) _abortedByPeer = true;
@@ -516,6 +524,59 @@ namespace DCST4.Core.Network
         public Task<int> SendDatasetAsync(byte contextId, byte[] dataset, uint pduLength, int stopAfter = -1) =>
             SendFragmentsAsync(contextId, dataset, false, pduLength, stopAfter);
 
+        /// <summary>
+        /// Sends a dataset made of several parts, such as a header encoded per send and pixel data shared by every send, in
+        /// P-DATA-TF PDUs whose length field is <paramref name="pduLength"/>, except the last. Each PDU is copied into one
+        /// buffer that the association keeps and written with one call, so nothing is allocated per PDU.
+        /// </summary>
+        public async Task SendDatasetAsync(byte contextId, IReadOnlyList<ArraySegment<byte>> parts, uint pduLength)
+        {
+            var room = (int)Math.Min(pduLength, int.MaxValue / 2) - PdvOverhead;
+            if (room < 1) throw new InvalidOperationException("The PDU length leaves no room for data.");
+
+            long remaining = 0;
+            foreach (var part in parts) remaining += part.Count;
+
+            var size = 6 + PdvOverhead + (int)Math.Min(room, Math.Max(remaining, 1));
+            if (_sendBuffer == null || _sendBuffer.Length < size) _sendBuffer = new byte[size];
+            var buffer = _sendBuffer;
+
+            var partIndex = 0;
+            var partOffset = 0;
+            while (remaining > 0)
+            {
+                var chunk = (int)Math.Min(room, remaining);
+                var last = chunk == remaining;
+
+                buffer[0] = PduData;
+                buffer[1] = 0;
+                WriteUInt32(buffer, 2, (uint)(PdvOverhead + chunk));
+                WriteUInt32(buffer, 6, (uint)(chunk + 2));
+                buffer[10] = contextId;
+                buffer[11] = (byte)(last ? 0x02 : 0x00);
+
+                var filled = 0;
+                while (filled < chunk)
+                {
+                    var part = parts[partIndex];
+                    var take = Math.Min(chunk - filled, part.Count - partOffset);
+                    Buffer.BlockCopy(part.Array, part.Offset + partOffset, buffer, 12 + filled, take);
+                    filled += take;
+                    partOffset += take;
+                    if (partOffset == part.Count)
+                    {
+                        partIndex++;
+                        partOffset = 0;
+                    }
+                }
+
+                await _stream.WriteAsync(buffer, 0, 12 + chunk).ConfigureAwait(false);
+                if ((uint)(PdvOverhead + chunk) > LargestPduSent) LargestPduSent = (uint)(PdvOverhead + chunk);
+                remaining -= chunk;
+            }
+            await _stream.FlushAsync().ConfigureAwait(false);
+        }
+
         private async Task<int> SendFragmentsAsync(byte contextId, byte[] data, bool isCommand, uint pduLength, int stopAfter)
         {
             var room = (int)Math.Min(pduLength, int.MaxValue / 2) - PdvOverhead;
@@ -606,6 +667,7 @@ namespace DCST4.Core.Network
                 }
                 if (!complete) continue;
 
+                reply.ArrivedTicks = next.AtTicks;
                 ParseCommand(commandBytes.ToArray(), reply);
                 if (command != null && reply.Status.HasValue) Timeline?.RecordResponse(dimseIndex, command, reply.Status.Value, StoreStatus.Describe(reply.Status.Value));
                 return reply;

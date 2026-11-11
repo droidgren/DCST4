@@ -339,7 +339,8 @@
                         <Bold>Cancel</Bold> stops the run, and what was finished is still saved. While a run is going,
                         the status bar shows which test is running, what it is doing or waiting for, and for how many
                         seconds. The tests marked
-                        <Italic>Limits</Italic> are not ticked from the start, see the topic Limits and faults.
+                        <Italic>Limits</Italic> are not ticked from the start, see the topic Limits and faults. The load
+                        tests are on the <Bold>Performance</Bold> tab, see the topic Performance.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Results</Paragraph>
                     <Table>
@@ -556,6 +557,57 @@
                 </Section>
 
                 <!-- ===================================================================== -->
+                <Section Tag="Performance">
+                    <Paragraph Style="{StaticResource H1}">Performance</Paragraph>
+                    <Paragraph>
+                        The <Bold>Performance</Bold> tab measures throughput and latency against the destination above.
+                        <Bold>Every image sent is a new object on the PACS, which may not be possible to delete.</Bold> Before a
+                        run starts, DCST4 shows how many objects it will store at most, about how much data that is, and the
+                        destination, and starts only when you say yes. <Bold>At most</Bold> caps every run. A fast PACS can
+                        reach it before the duration is over. The run then ends early, and the result and the table say that
+                        throughput and latency come from a shorter window. Raise <Bold>At most</Bold>, shorten the duration or
+                        set a <Bold>Rate</Bold>.
+                    </Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="160"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>Load</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Sends on <Bold>Associations</Bold> associations at once, for a duration or a count, optionally at a fixed <Bold>Rate</Bold> over all of them. PASS when everything was stored. FAIL when the PACS refused images, left one without a response, ended an association or rejected one.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Ramp</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Runs the <Bold>Steps</Bold> one after the other, for example 1, 2, 4 and 8 associations, and finds the step where more associations stop helping: throughput rises less than 10 % over the best step before, p95 latency is more than twice that of step 1, or errors appear. The summary marks that step. PASS when the ramp reached an answer. FAIL when errors came before saturation.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Soak</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Steady load at a <Bold>Rate</Bold> for a long <Bold>Duration</Bold>, such as 30m or 8h. Every <Bold>Snapshot</Bold> seconds a row is written to a file at once, so a crash keeps what was measured. FAIL, as a finding, when p95 latency rises by more than 50 % or throughput falls by more than 20 % over the soak, or errors appear.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource H2}">What is measured</Paragraph>
+                    <Paragraph>
+                        Each association has one C-STORE outstanding at a time. <Bold>Latency</Bold> is the time from the first
+                        byte of the C-STORE request until the whole response has arrived, so it includes sending the image.
+                        <Bold>Setup</Bold> is from opening the connection until the association is accepted.
+                        <Bold>Stored/s</Bold> and <Bold>MB/s</Bold> count what was stored with Success or Warning, after the
+                        <Bold>Warm-up</Bold>. Errors are counted from the start, warm-up included. The images are generated and
+                        encoded before the run, and each send gets new UIDs under the UID root on the Tests tab, so generating
+                        them is not part of what is measured.
+                    </Paragraph>
+                    <Paragraph>
+                        The chart shows stored and failed per second and latency p50 and p95, at most once a second. The
+                        warm-up is shaded and ramp steps are marked. Hover over it to see one second. The table below it fills
+                        in when the run is over. <Bold>Time-to-available</Bold> asks with C-FIND, on an association of its own,
+                        for 1 in the given number of stored images until each is found, and says how long that took.
+                    </Paragraph>
+                    <Paragraph>
+                        <Bold>Mix</Bold> chooses what is sent: small CT images, many small CR and US images, few large
+                        multi-frame images, uncompressed or in JPEG Lossless. <Bold>Max PDU</Bold> is the PDU length DCST4
+                        announces and sends with. The results go to the results folder on the Tests tab, with a file of one
+                        row per second next to them. <Bold>Cancel</Bold> stops the run within a few seconds and releases the
+                        associations.
+                    </Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
                 <Section Tag="Command line and datasets">
                     <Paragraph Style="{StaticResource H1}">Command line and test datasets</Paragraph>
                     <Paragraph>DCST4.Cli.exe is in the program's folder.</Paragraph>
@@ -602,6 +654,14 @@
                     <Paragraph>
                         <Italic>all</Italic> and the <Italic>Limits</Italic> category also include the tests that strain the
                         destination and break transfers on purpose. See the topic Limits and faults.
+                    </Paragraph>
+                    <Paragraph>
+                        <Italic>all</Italic> leaves out the Performance tests, <Italic>load-throughput</Italic>,
+                        <Italic>load-ramp</Italic> and <Italic>load-soak</Italic>. Name them or use
+                        <Italic>--tests Performance</Italic>. Their settings are the <Italic>--load-</Italic>,
+                        <Italic>--ramp-</Italic>, <Italic>--soak-</Italic> and <Italic>--tta-</Italic> options in
+                        <Italic>DCST4.Cli.exe --help</Italic>, and the plan is printed before anything is sent.
+                        <Italic>list-mixes</Italic> shows what can be sent.
                     </Paragraph>
                     <Paragraph>
                         What was sent and retrieved is kept under the <Italic>--out</Italic> folder in
