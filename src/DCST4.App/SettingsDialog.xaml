@@ -52,11 +52,11 @@
 
                     <Label Margin="0,14,0,0" Padding="0,0,0,4" Content="Patient name in test-suite datasets:"/>
                     <ComboBox x:Name="TestPatientNaming" SelectedValuePath="Tag" HorizontalAlignment="Left" MinWidth="280">
+                        <ComboBoxItem Tag="MarkedTestName" Content="Marked test name (DCST4^TEST^number), the default"/>
                         <ComboBoxItem Tag="RegistrySwedishName" Content="Swedish name"/>
-                        <ComboBoxItem Tag="MarkedTestName" Content="Marked test name (DCST4^TEST^number)"/>
                     </ComboBox>
                     <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#FF505050"
-                               Text="Only for the datasets the test suite generates. Generate &amp; Send is not affected. The Patient ID comes from the list of test personnummer in both cases. No test on the Tests tab uses datasets yet, so this has no visible effect until one does."/>
+                               Text="For the objects the tests on the Tests and Performance tabs send. Generate &amp; Send is not affected. The Patient ID comes from the list of test personnummer in both cases."/>
                 </StackPanel>
             </TabItem>
 

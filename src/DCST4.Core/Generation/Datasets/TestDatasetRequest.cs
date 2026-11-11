@@ -43,7 +43,7 @@ namespace DCST4.Core.Generation.Datasets
         /// <summary>Null or empty means 2.25 and a value hashed from the seed and counters.</summary>
         public string UidRoot { get; set; }
         public DateTime ReferenceDate { get; set; } = DefaultReferenceDate;
-        public TestPatientNaming PatientNaming { get; set; } = TestPatientNaming.RegistrySwedishName;
+        public TestPatientNaming PatientNaming { get; set; } = TestPatientNames.Default;
         public int Patients { get; set; } = 1;
         public int StudiesPerPatient { get; set; } = 1;
         public int SeriesPerStudy { get; set; } = 1;

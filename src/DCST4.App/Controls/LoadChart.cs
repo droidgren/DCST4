@@ -97,25 +97,29 @@ namespace DCST4.Controls
             var top = new Rect(Left, Top, plotWidth, panelHeight);
             var bottom = new Rect(Left, Top + panelHeight + Gap, plotWidth, panelHeight);
 
-            ShadeWarmUp(dc, all, x, top);
-            ShadeWarmUp(dc, all, x, bottom);
+            // A partial last second is left out of the lines, so it does not set the scale either: a few slow images in it
+            // would otherwise look like a trend. A second without responses has no latency.
+            Func<LoadSecond, bool> whole = r => !r.Partial;
+            Func<LoadSecond, bool> answered = r => r.Stored > 0 && !r.Partial;
+            var counted = rows.Where(whole).ToList();
+            var timed = rows.Where(answered).ToList();
 
-            var throughputMax = NiceMax(rows.Count == 0 ? 0 : rows.Max(r => Math.Max(r.Stored, r.Failed)));
-            var latencyMax = NiceMax(rows.Count == 0 ? 0 : rows.Max(r => r.LatencyP95Ms));
+            ShadeWarmUp(dc, all, x, top, true);
+            ShadeWarmUp(dc, all, x, bottom, false);
+
+            var throughputMax = NiceMax(counted.Count == 0 ? 0 : counted.Max(r => Math.Max(r.Stored, r.Failed)));
+            var latencyMax = NiceMax(timed.Count == 0 ? 0 : timed.Max(r => r.LatencyP95Ms));
             DrawPanel(dc, top, throughputMax, "Instances per second", "0");
             DrawPanel(dc, bottom, latencyMax, "Latency of a C-STORE, ms", latencyMax < 10 ? "0.0" : "0");
             DrawSteps(dc, all, x, top, bottom);
             DrawTimeAxis(dc, bottom, lastSecond, x);
 
-            // A partial last second would show as a drop that did not happen, and a second without responses has no latency.
-            Func<LoadSecond, bool> whole = r => !r.Partial;
-            Func<LoadSecond, bool> answered = r => r.Stored > 0;
             DrawLine(dc, rows, r => r.Stored, whole, top, throughputMax, x, Blue);
             if (rows.Any(r => r.Failed > 0)) DrawLine(dc, rows, r => r.Failed, whole, top, throughputMax, x, Critical);
             DrawLine(dc, rows, r => r.LatencyP50Ms, answered, bottom, latencyMax, x, Blue);
             DrawLine(dc, rows, r => r.LatencyP95Ms, answered, bottom, latencyMax, x, Orange);
 
-            DrawLegend(dc, top, new[] { Tuple.Create("stored", Blue), Tuple.Create("failed", Critical) });
+            DrawLegend(dc, top, new[] { Tuple.Create("stored", Blue), Tuple.Create("failed", Critical) }, all.Any(r => r.WarmUp));
             DrawLegend(dc, bottom, new[] { Tuple.Create("p50", Blue), Tuple.Create("p95", Orange) });
 
             if (all.Count == 0)
@@ -139,6 +143,7 @@ namespace DCST4.Controls
                 {
                     Second = bucket[bucket.Count / 2].Second,
                     Step = bucket[0].Step,
+                    Partial = bucket.All(b => b.Partial),
                     Stored = (long)Math.Round(bucket.Average(b => b.Stored)),
                     Failed = (long)Math.Round(bucket.Average(b => b.Failed)),
                     LatencyP50Ms = bucket.Average(b => b.LatencyP50Ms),
@@ -148,13 +153,17 @@ namespace DCST4.Controls
             return result;
         }
 
-        private static void ShadeWarmUp(DrawingContext dc, List<LoadSecond> all, Func<double, double> x, Rect panel)
+        /// <summary>The warm-up is drawn but not in the summary. The band is named in the top panel when there is room for the word.</summary>
+        private void ShadeWarmUp(DrawingContext dc, List<LoadSecond> all, Func<double, double> x, Rect panel, bool label)
         {
             foreach (var run in Runs(all, r => r.WarmUp))
             {
                 var from = x(run.Item1);
                 var to = x(run.Item2 + 1);
                 dc.DrawRectangle(WarmUp, null, new Rect(from, panel.Top, Math.Max(0, to - from), panel.Height));
+                if (!label) continue;
+                var text = Format("warm-up", Muted, 10);
+                if (text.Width + 6 <= to - from) dc.DrawText(text, new Point(from + 3, panel.Bottom - text.Height - 2));
             }
         }
 
@@ -272,7 +281,8 @@ namespace DCST4.Controls
             flush();
         }
 
-        private void DrawLegend(DrawingContext dc, Rect panel, IEnumerable<Tuple<string, Color>> items)
+        /// <summary>The series of a panel, right-aligned above it, and with <paramref name="warmUpKey"/> a swatch that names the shaded band.</summary>
+        private void DrawLegend(DrawingContext dc, Rect panel, IEnumerable<Tuple<string, Color>> items, bool warmUpKey = false)
         {
             var right = panel.Right;
             foreach (var item in items.Reverse())
@@ -285,6 +295,13 @@ namespace DCST4.Controls
                 dc.DrawLine(pen, new Point(right, panel.Top - 10), new Point(right + 12, panel.Top - 10));
                 right -= 14;
             }
+            if (!warmUpKey) return;
+
+            var key = Format("warm-up, not in the summary", Secondary, 11);
+            right -= key.Width + 6;
+            dc.DrawText(key, new Point(right, panel.Top - 18));
+            right -= 16;
+            dc.DrawRectangle(WarmUp, Axis, new Rect(right, panel.Top - 15, 12, 10));
         }
 
         private void DrawHover(DrawingContext dc, List<LoadSecond> all, Func<double, double> x, Rect top, Rect bottom, double lastSecond, double plotWidth)

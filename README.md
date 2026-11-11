@@ -453,7 +453,7 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 | Mix                            | `--load-mix`                  | `ct`    | See above |
 | Max PDU                        | `--load-pdu`                  | 0       | See above |
 | Warm-up                        | `--load-warmup`               | 2 s     | Left out of the summary |
-| At most                        | `--load-max-instances`        | 0       | The ceiling of the run. 0 is 1000, 2000 for the ramp, and the rate times the duration for the soak |
+| Max instances                  | `--load-max-instances`        | 0       | The ceiling of the run. 0 is the default of each test: 1000, 2000 for the ramp, and the rate times the duration for the soak. The tab shows the ceiling of the selected test, the default until you set one. A value you set applies to all three tests |
 | Steps                          | `--ramp-steps`                | 1,2,4,8 | Associations per ramp step, rising |
 | Each step                      | `--ramp-step-duration`        | 10 s    | How long each ramp step runs |
 | Duration (soak)                | `--soak-duration`             | 30m     | How long the soak runs |
@@ -465,7 +465,7 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 
 **Files.** Besides the usual result files, each test writes `DCST4-run-<start>-<test id>.csv` while it runs, with one row per second: stored, failed, bytes, MB/s, latency p50, p95 and maximum, open associations, how busy this computer's processor was, and whether the second is the last of a run or ramp step and so shorter than a second (`partial`). The steps of a ramp follow each other in it without the moment between them when associations are released and opened again. The soak also writes `DCST4-run-<start>-load-soak-windows.csv`, one row per snapshot window, and both files are written through to the disk at each snapshot, so a crash or a power cut keeps what was measured. The command line writes them under `--out`, and the program in the results folder of the Tests tab. The `performance` section of the JSON file holds the settings, the plan, why the run stopped, whether the ceiling ended it early, the summary, the steps and the saturation, the windows and the degradation, the time-to-available, and the state of this computer. The explanation never holds a measured number.
 
-**On the Performance tab** the chart shows stored and failed per second above and latency p50 and p95 below. It is drawn by DCST4 itself, as two line charts, and updated at most once a second. The warm-up is shaded, ramp steps are marked and their lines are not joined, a last second shorter than a second is left out, and hovering shows the values of one second. A soak longer than 600 seconds is drawn in buckets, with the mean of the counts and the highest p95 of each bucket, so a peak is not lost. When the run is over, the table below the chart has one row for the run, one per ramp step with the saturated step marked, or one per soak window.
+**On the Performance tab** the chart shows stored and failed per second above and latency p50 and p95 below. It is drawn by DCST4 itself, as two line charts, and updated at most once a second. The warm-up is shaded and labelled, ramp steps are marked and their lines are not joined, a last second shorter than a second is left out of the lines and of the scale, and hovering shows the values of one second. A soak longer than 600 seconds is drawn in buckets, with the mean of the counts and the highest p95 of each bucket, so a peak is not lost. When the run is over, the table below the chart has one row for the run, one per ramp step with the saturated step marked, or one per soak window.
 
 **This computer.** The worker of each association waits on the network without holding a thread, but a TLS handshake does hold one. So while a test runs, DCST4 raises the thread pool's minimum to twice the number of associations plus eight. Otherwise the setup times at a step of 16 or 32 associations would include the wait for new threads. It also asks the garbage collector for `SustainedLowLatency`, which keeps blocking full collections out of the measurement, and puts both settings back afterwards. `DCST4.Cli.exe` runs with workstation GC and background collection, set in `DCST4.Cli.exe.config`, because the tests allocate little while they measure: the pool is encoded in advance and each association reuses one buffer for its PDUs. Server GC would add a heap and a GC thread per processor for no gain. The result records the processor use per second, the garbage collections per generation, the GC mode and the thread pool minimum, so that a busy client can be told from a slow PACS.
 
@@ -488,7 +488,7 @@ DCST4.Cli.exe generate --dataset enhanced-ct --out C:\Temp\enhanced --seed 42 --
 | `--dataset`                                                           | A profile from `list-datasets`                                                                                    |
 | `--seed`                                                              | Everything that varies follows from this. Default 1                                                               |
 | `--uid-root`                                                          | UIDs start with this root. Without it they are `2.25.` and a value hashed from the seed and counters              |
-| `--patient-naming`                                                    | `RegistrySwedishName` (default) or `MarkedTestName`, which gives `DCST4^TEST^<number>`                            |
+| `--patient-naming`                                                    | `MarkedTestName` (default), which gives `DCST4^TEST^<number>`, or `RegistrySwedishName` for a Swedish name       |
 | `--patients` `--studies` `--series` `--instances`                     | How many. Default 1 of each                                                                                       |
 | `--rows` `--columns` `--bits` `--frames`                              | The image. The profile's own values if left out                                                                   |
 | `--transfer-syntax`                                                   | `explicit` (default), `implicit`, or a name from `list-codecs`, or a Transfer Syntax UID                          |
@@ -497,7 +497,7 @@ DCST4.Cli.exe generate --dataset enhanced-ct --out C:\Temp\enhanced --seed 42 --
 
 Assume that a PACS cannot delete what it receives, and keep the volumes small. `tomosynthesis-large`, about 700 MB per object, only runs when asked for by name.
 
-**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name can be a Swedish name or `DCST4^TEST^<number>`, chosen with `--patient-naming` or on the Identifiers tab of **File > Settings**. That setting does not affect Generate & Send. It applies to the objects that the store, query and duplicate tests on the Tests tab send.
+**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name is `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name with `--patient-naming RegistrySwedishName` or on the Identifiers tab of **File > Settings**. That setting does not affect Generate & Send, which always uses Swedish names. It applies to the objects that the store, query, duplicate, limit, fault and Performance tests send.
 
 **What is guaranteed:** the same seed, parameters, personnummer list and reference date give byte-identical files, within one DCST4 version, one fo-dicom and PureCodecs version, and the same Windows GDI+ and Consolas rendering. On another computer the UIDs, names and all non-pixel attributes still match, and the pixels match only if the rendering does. `manifest.json` records these versions. The reference date is fixed, so the same request gives the same result on any day.
 
@@ -757,13 +757,14 @@ New:
 - Data mixes: small CT, many small CR and US, few large Enhanced CT and Breast Tomosynthesis, uncompressed or in JPEG Lossless, and a choice of maximum PDU length. `list-mixes` on the command line
 - Before a run, the program and the command line say how many objects it will store at most and about how much data that is, and from what rate the ceiling would end a run before its duration. The program asks for a yes with the destination in the question
 - When the ceiling ends a run early, the result, its explanation and the table say so, since throughput and latency then come from a shorter window. The first problem of a run, with its raw status, Error Comment and second, is in the result's details
-- A live chart of throughput and latency on the Performance tab, updated at most once a second, and a summary table afterwards
+- A live chart of throughput and latency on the Performance tab, updated at most once a second, a progress bar that follows the run against its duration or count, and a summary table afterwards
 - `--load-*`, `--ramp-*`, `--soak-*` and `--tta-*` options on the command line, with a line of metrics every 5 seconds while a test runs
 
 Changed:
 
 - The result files have schema version 6, with a `performance` section, and doubles in the JSON file are written with at most 15 significant digits
 - `all` on the command line leaves out the Performance tests
+- The objects the tests send, and `generate`, now name the patient `DCST4^TEST^<number>` by default, which is plainly not a person, in place of a Swedish name. The Patient ID still comes from the test personnummer list. A Swedish name is `--patient-naming RegistrySwedishName` or a choice on the Identifiers tab of File > Settings, and it is what a seed gave before 1.9.0. Generate & Send is unchanged
 - `DCST4.Cli.exe.config` sets workstation GC with background collection explicitly. While a Performance test runs, the thread pool minimum is raised and the GC latency mode is SustainedLowLatency
 
 Fixed:

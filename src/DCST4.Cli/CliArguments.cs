@@ -68,7 +68,7 @@ namespace DCST4.Cli
         public string Tests { get; private set; }
         public string OutputFolder { get; private set; }
         public string LogFolder { get; private set; }
-        public TestPatientNaming PatientNaming { get; private set; } = TestPatientNaming.RegistrySwedishName;
+        public TestPatientNaming PatientNaming { get; private set; } = TestPatientNames.Default;
         public int? Seed { get; private set; }
         public string MatrixPath { get; private set; }
         public FellowOakDicom.DicomTransferSyntax TransferSyntax { get; private set; }
@@ -167,7 +167,7 @@ namespace DCST4.Cli
         }
 
         public static string PatientNamingError(string value) =>
-            $"Unknown patient naming '{value}'. Use {nameof(TestPatientNaming.RegistrySwedishName)} or {nameof(TestPatientNaming.MarkedTestName)}.";
+            $"Unknown patient naming '{value}'. Use {nameof(TestPatientNaming.MarkedTestName)} or {nameof(TestPatientNaming.RegistrySwedishName)}.";
 
         /// <summary>Returns null and sets <paramref name="error"/> if the arguments after "run" are not usable.</summary>
         public static CliArguments Parse(IReadOnlyList<string> args, out string error)

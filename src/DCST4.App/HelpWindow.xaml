@@ -563,9 +563,9 @@
                         The <Bold>Performance</Bold> tab measures throughput and latency against the destination above.
                         <Bold>Every image sent is a new object on the PACS, which may not be possible to delete.</Bold> Before a
                         run starts, DCST4 shows how many objects it will store at most, about how much data that is, and the
-                        destination, and starts only when you say yes. <Bold>At most</Bold> caps every run. A fast PACS can
+                        destination, and starts only when you say yes. <Bold>Max instances</Bold> caps every run. It shows the default of the selected test until you change it: 1000 for Load, 2000 for Ramp and the rate times the duration for Soak. A value you set applies to all three tests, and 0 goes back to the defaults. A fast PACS can
                         reach it before the duration is over. The run then ends early, and the result and the table say that
-                        throughput and latency come from a shorter window. Raise <Bold>At most</Bold>, shorten the duration or
+                        throughput and latency come from a shorter window. Raise <Bold>Max instances</Bold>, shorten the duration or
                         set a <Bold>Rate</Bold>.
                     </Paragraph>
                     <Table>
@@ -594,8 +594,17 @@
                     </Paragraph>
                     <Paragraph>
                         The chart shows stored and failed per second and latency p50 and p95, at most once a second. The
-                        warm-up is shaded and ramp steps are marked. Hover over it to see one second. The table below it fills
-                        in when the run is over. <Bold>Time-to-available</Bold> asks with C-FIND, on an association of its own,
+                        warm-up is the shaded band marked <Italic>warm-up</Italic>, and ramp steps are marked. The last second
+                        of a run is usually cut short, so it is left out of the lines. Hover over the chart to see one second. The progress bar at the bottom of the window follows the run once a second: time against the duration, all steps of a ramp, or images against the count.
+                        The table below it fills in when the run is over.
+                    </Paragraph>
+                    <Paragraph>
+                        <Bold>p50, p95 and p99</Bold> are percentiles of the latency. p50 is the median: half the C-STOREs
+                        took less than that and half took longer. p95 means that 95 % took less and the slowest 5 % took
+                        longer, which shows how bad the slow ones get without one odd image deciding it. p99 is the slowest 1 %,
+                        and <Bold>Max</Bold> the slowest single one.
+                    </Paragraph>
+                    <Paragraph> <Bold>Time-to-available</Bold> asks with C-FIND, on an association of its own,
                         for 1 in the given number of stored images until each is found, and says how long that took.
                     </Paragraph>
                     <Paragraph>
@@ -693,14 +702,14 @@
                         compressions work.
                     </Paragraph>
                     <Paragraph>
-                        Patient IDs always come from the list of test personnummer. The name is a Swedish name by default.
-                        To mark every test patient as DCST4^TEST^number instead, choose it on the
+                        Patient IDs always come from the list of test personnummer. The name is DCST4^TEST^number by
+                        default, which is plainly not a person. For a Swedish name instead, choose it on the
                         <Bold>Identifiers</Bold> tab under <Bold>File &gt; Settings</Bold>, or use
-                        <Italic>--patient-naming MarkedTestName</Italic> on the command line.
+                        <Italic>--patient-naming RegistrySwedishName</Italic> on the command line.
                     </Paragraph>
                     <Paragraph Style="{StaticResource Note}">
-                        This naming setting does not affect Generate &amp; Send. It applies to the objects that the store,
-                        query and duplicate tests on the Tests tab send.
+                        This naming setting does not affect Generate &amp; Send, which always uses Swedish names. It applies
+                        to the objects that the tests on the Tests and Performance tabs send.
                     </Paragraph>
                 </Section>
 

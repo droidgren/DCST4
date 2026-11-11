@@ -570,6 +570,10 @@
                                          ToolTip="Each snapshot is written to the windows file at once, so a crash keeps what was measured"/>
                                 <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             </StackPanel>
+                            <TextBlock Text="Max instances:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <TextBox Text="{Binding Performance.MaxInstances, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="55" VerticalAlignment="Center"
+                                     ToolTip="The most new objects the run stores: the ceiling. It shows the default of the selected test until you change it: 1000 for Load, 2000 for Ramp, rate x duration for Soak. A value you set applies to all three tests. 0 goes back to the defaults"/>
+                            <TextBlock Text="{Binding Performance.MaxInstancesNote}" Foreground="#FF505050" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             <TextBlock Text="Per association:" VerticalAlignment="Center" Margin="10,0,4,0"/>
                             <TextBox Text="{Binding Performance.InstancesPerAssociation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
                                      ToolTip="Release and open a new association after this many. 0 keeps one association for the whole run"/>
@@ -579,10 +583,7 @@
                             <TextBlock Text="Warm-up:" VerticalAlignment="Center" Margin="10,0,4,0"/>
                             <TextBox Text="{Binding Performance.WarmUpSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center"
                                      ToolTip="Seconds at the start, and of each ramp step, that are in the chart but not in the summary"/>
-                            <TextBlock Text="s. At most" VerticalAlignment="Center" Margin="4,0,4,0"/>
-                            <TextBox Text="{Binding Performance.MaxInstances, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="55" VerticalAlignment="Center"
-                                     ToolTip="The most instances the run stores. 0 is the default: 1000, 2000 for the ramp, rate x duration for the soak"/>
-                            <TextBlock Text="instances." VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             <StackPanel Orientation="Horizontal" Visibility="{Binding Performance.IsRamp, Converter={StaticResource InverseBoolToVisibility}}">
                                 <TextBlock Text="Time-to-available: 1 in" VerticalAlignment="Center" Margin="10,0,4,0"/>
                                 <TextBox Text="{Binding Performance.SampleEvery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center"

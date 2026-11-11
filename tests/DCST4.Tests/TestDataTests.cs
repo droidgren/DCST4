@@ -92,7 +92,7 @@ namespace DCST4.Tests
 
         private sealed class CaptureNaming : ITestCase
         {
-            public TestPatientNaming Seen { get; private set; } = TestPatientNaming.RegistrySwedishName;
+            public TestPatientNaming Seen { get; private set; } = TestPatientNaming.MarkedTestName;
             public string Id => "capture-naming";
             public string Name => "Capture naming";
             public TestCategory Category => TestCategory.Capability;
@@ -347,7 +347,7 @@ namespace DCST4.Tests
             Console.WriteLine("\nTest data: patient naming");
             var registry = TestPersonnummerRegistry.Default;
 
-            var swedish = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64 });
+            var swedish = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.RegistrySwedishName });
             var marked = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.MarkedTestName });
 
             check("Swedish name: Patient IDs are in the registry", swedish.Images.All(i => registry.Contains(Text(i.File.Dataset, DicomTag.PatientID))), null);
@@ -367,10 +367,10 @@ namespace DCST4.Tests
 
             string parsed;
             check("Naming parses, ignoring case", TestPatientNames.TryParse("markedtestname", out var naming) && naming == TestPatientNaming.MarkedTestName, null);
-            check("Naming: anything else is refused and means the default", !TestPatientNames.TryParse("nonsense", out naming) && naming == TestPatientNaming.RegistrySwedishName, null);
-            check("Naming: a blank setting means the default", !TestPatientNames.TryParse("", out naming) && naming == TestPatientNaming.RegistrySwedishName, null);
-            parsed = TestPatientNaming.RegistrySwedishName.ToString();
-            check("Naming: the default is the Swedish name", new TestDatasetRequest().PatientNaming.ToString() == parsed, null);
+            check("Naming: anything else is refused and means the default", !TestPatientNames.TryParse("nonsense", out naming) && naming == TestPatientNaming.MarkedTestName, null);
+            check("Naming: a blank setting means the default", !TestPatientNames.TryParse("", out naming) && naming == TestPatientNaming.MarkedTestName, null);
+            parsed = TestPatientNaming.MarkedTestName.ToString();
+            check("Naming: the default is the marked test name", new TestDatasetRequest().PatientNaming.ToString() == parsed && TestPatientNames.Default == TestPatientNaming.MarkedTestName, null);
         }
 
         private static byte[] RawValueFromFile(string path, DicomTag tag)
@@ -830,8 +830,8 @@ namespace DCST4.Tests
             check("Core has no WPF reference", !File.ReadAllText(Path.Combine(repository, @"src\DCST4.Core\DCST4.Core.csproj")).Contains("UseWPF"), null);
 
             var captured = new CaptureNaming();
-            new TestRunner().RunAsync(new TargetProfile { Endpoint = new DicomEndpoint { Host = "127.0.0.1", Port = 1, CallingAe = "A", CalledAe = "B" } }, new ITestCase[] { captured }, CancellationToken.None, TestPatientNaming.MarkedTestName).GetAwaiter().GetResult();
-            check("A test run passes the naming on to its tests", captured.Seen == TestPatientNaming.MarkedTestName, captured.Seen.ToString());
+            new TestRunner().RunAsync(new TargetProfile { Endpoint = new DicomEndpoint { Host = "127.0.0.1", Port = 1, CallingAe = "A", CalledAe = "B" } }, new ITestCase[] { captured }, CancellationToken.None, TestPatientNaming.RegistrySwedishName).GetAwaiter().GetResult();
+            check("A test run passes a naming other than the default on to its tests", captured.Seen == TestPatientNaming.RegistrySwedishName, captured.Seen.ToString());
 
             var noPixels = new DicomDataset(DicomTransferSyntax.ExplicitVRLittleEndian)
             {
