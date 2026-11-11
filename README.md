@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.8.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.9.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -29,6 +29,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Store, query and retrieve:** proves the chain accepted, indexed, retrievable and intact for each object type, with C-STORE, C-FIND, C-GET and C-MOVE. What comes back is compared with what was sent, level by level. See [Store, query and retrieve](#store-query-and-retrieve).
 - **Storage Commitment:** asks the PACS to commit to what it stored, with N-ACTION, and takes its N-EVENT-REPORT either on the same association or on one the PACS opens to this computer. It records which way the PACS used, how long the report took and the Failure Reason of each instance that was not committed. See [Storage Commitment](#storage-commitment).
 - **Limits and faults:** finds how many associations the PACS holds at once, how long it keeps an idle association or a connection that never sends a request, and whether it keeps to the maximum PDU length it announces. Breaks a C-STORE off on purpose in three ways, and checks what the PACS kept and how it takes the retry. With TLS, checks that a client certificate from an unknown authority or an expired one is refused. These tests are not ticked by default. See [Limits and faults](#limits-and-faults).
+- **Performance:** throughput and latency under load, on N parallel associations, from images encoded in advance with new UIDs for every send. A ramp of 1, 2, 4, 8 ... associations finds where the PACS saturates, a soak of hours writes snapshots as it goes and flags degradation, and time-to-available says how soon a stored image can be found. A live chart on the Performance tab, and the plan of how many objects will be stored before anything is sent. See [Performance](#performance).
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
 - **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, Enhanced CT and MR, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
 
@@ -122,6 +123,8 @@ So by default, **the run stops with an error and sends nothing if the server doe
 | Failure | Not stored. The run continues with the next image          | `0xA7xx`, `0xA9xx`, `0xCxxx` |
 | NotSent | No response, for example association rejected or timed out |                              |
 
+The **ms** column is the time since the image was queued or the previous response arrived, whichever was later, with up to four images queued at once. It shows where a send slowed down, and is not the latency of a C-STORE. The Performance tests measure that, see [Performance](#performance).
+
 ### Saving to disk
 
 The selected folder becomes a DICOM File-set:
@@ -180,7 +183,7 @@ For TLS, add `"useTls": true` to `endpoint`, and optionally `"tlsIgnoreCertError
 DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results
 ```
 
-`--tests` takes test ids, categories (`Capability`, `Integrity`, `Limits`, `Performance`) or `all`, separated by commas. `--log-dir` chooses another folder for the log. Ctrl+C cancels the run and saves what was finished. A second Ctrl+C ends the program at once. Cancelling while a connection is being opened can take as long as the connection timeout.
+`--tests` takes test ids, categories (`Capability`, `Integrity`, `Limits`, `Performance`) or `all`, separated by commas. `all` leaves out the `Performance` tests, see [Performance](#performance). `--log-dir` chooses another folder for the log. Ctrl+C cancels the run and saves what was finished. A second Ctrl+C ends the program at once. Cancelling while a connection is being opened can take as long as the connection timeout.
 
 **`all` and the `Integrity` category include tests that store objects on the destination**, and those objects may not be possible to delete. Check the profile before running them. `--seed`, `--matrix`, `--transfer-syntax` and `--index-wait` apply to those tests, see [Store, query and retrieve](#store-query-and-retrieve), and `--commit-linger`, `--commit-wait` and `--commit-grace` to the Storage Commitment tests, see [Storage Commitment](#storage-commitment).
 
@@ -392,6 +395,85 @@ Every test releases or aborts what it opened, also when the run is cancelled.
 DCST4.Cli.exe run --profile target.json --tests limit-max-associations,limit-artim --out C:\Temp\results --max-associations 20 --artim-wait 90
 ```
 
+### Performance
+
+Three tests measure throughput and latency: `load-throughput`, `load-ramp` and `load-soak`, in the `Performance` category. **Every image they send is a new object on the destination, and a PACS may not be able to delete it.** So they are not part of `all`. Name them, or use `--tests Performance`. In the program they have a tab of their own, **Performance**, and are not listed on the Tests tab. Before anything is sent, DCST4 says how many objects the run will store at most and about how much data that is. The program asks for a yes with the destination's AE title, host and port in the question, and the command line prints it:
+
+```
+Plan for the load test: Stores up to 1,000 new objects (about 135 MB, mix ct) on PACS at pacs.example.org:104. They may not be possible to delete.
+```
+
+| Test              | What it does                                                                                       | Result |
+| ----------------- | -------------------------------------------------------------------------------------------------- | ------ |
+| `load-throughput` | N associations at once, for a duration or a number of instances, optionally at a fixed rate       | `PASS` if everything was stored. `FAIL` for failure statuses, a C-STORE without a response, an association the PACS ended while a C-STORE was outstanding, or a rejected association |
+| `load-ramp`       | 1, 2, 4, 8 ... associations in turn, a step at a time, to find where more associations stop helping | `PASS` when the ramp reached an answer, saturated or not. `FAIL` when errors came before saturation. Errors at or after the saturation step are part of the answer |
+| `load-soak`       | Steady load at a fixed rate for a long time, with a snapshot written to disk as it goes            | `FAIL`, as a finding, when the PACS got worse over the soak or errors appeared. `PASS` otherwise. `INDETERMINATE` with fewer than three snapshot windows |
+
+For all three, a SOP class or transfer syntax that is not accepted is `NOT_SUPPORTED`, a PACS that answers nothing is `TIMEOUT`, a cancel is `INDETERMINATE`, and a codec that is not available on this computer is `TOOL_ERROR`.
+
+**How it sends.** Each association has a worker of its own, and one C-STORE outstanding at a time, as most modalities send. Before the first send, the objects of the mix are generated and encoded in its transfer syntax, four per object type, so no transcoding or generation happens while the clock runs. Each send gets new UIDs under the profile's UID root: a new SOP Instance UID every time, and a new Study and Series Instance UID and Frame of Reference, an Accession Number and Series and Instance Numbers per 500 sends of one worker. The UIDs also hold a value drawn for each run, so two runs never send the same UID, even with the same `--seed`. The patient is one from the test personnummer list, the same for the whole run, and is named in the result's `details`, so the objects can be found on the PACS. Only the attributes are encoded again per send: the pixel data is encoded once and every send uses the same bytes. The workers write the DICOM PDUs themselves, with `RawAssociation`, the same code as the Limits tests, because fo-dicom's client does not show when a request goes on the wire and encodes the whole dataset again for every send. Nothing is logged per image. The first ten problems are written to the log, then they are only counted. The first of them, with its raw status, Error Comment or the lack of one, and the second of the run it happened in, is also in the result's `details` as `firstProblem`.
+
+**What is measured**, on the monotonic clock:
+
+| Metric                  | Definition |
+| ----------------------- | ---------- |
+| C-STORE latency         | From just before the first byte of the C-STORE-RQ is written until the whole C-STORE-RSP command has been received. With one C-STORE outstanding per association, nothing waits inside DCST4 in that time. It includes sending the dataset |
+| Response wait           | From the last byte of the dataset handed to the socket until the response. A write finishes when Windows has taken the bytes, so for a large object part of the transfer is counted here |
+| Association setup       | From starting the TCP connection until the A-ASSOCIATE-AC, and on its own the connection with any TLS handshake |
+| Stored per second, MB/s | C-STOREs answered with Success or Warning, per second of the measured window, and the bytes of their datasets on the wire. 1 MB is 1,000,000 bytes |
+| Errors per status class | Success, Warning, Failure and Cancel from the raw status, each raw status with its count, and no response, association lost, association rejected and connection failed |
+
+Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a histogram in microseconds that is exact below 0.5 ms and at most 0.4 % below the true value above that, and the maximum is exact. That keeps memory fixed in a soak of many hours. The first `--load-warmup` seconds, 2 by default, of a run and of each ramp step are in the time series but not in the throughput and latency of the summary. The errors count from the start.
+
+**Saturation**, in the ramp, is the first step where throughput rises less than 10 % over the best step before it, p95 latency is more than twice that of step 1, or the error rate rises by more than 1 percentage point or an association is lost. The result names the step, the reason and the step with the highest throughput. The thresholds are fixed in this version, and the result records them in its settings.
+
+**Degradation**, in the soak, compares the end with the start. The first snapshot window is a warm-up. The baseline is the mean of the next 10 % of the windows, at least one, and the end the mean of the last 10 %. The soak counts as degraded when the least-squares trend of p95 latency rises by more than 50 % over the soak and the end is more than 50 % and at least 5 ms above the baseline, when the end's throughput is more than 20 % below the baseline, or when errors appear after an error-free baseline. A last window shorter than half the snapshot interval is left out, since its throughput would come from a few samples.
+
+**Time-to-available**: for 1 in `--tta-sample` stored instances, 50 by default, DCST4 asks with C-FIND at IMAGE level under Study Root, with the Study, Series and SOP Instance UID, every `--tta-interval` seconds until the instance is found or `--tta-timeout` seconds have passed. It uses an association of its own per round and at most 10 queries a round, and none of this is in the load metrics. The time runs from the C-STORE-RSP to the C-FIND response that finds the instance, so its resolution is the interval. The result has p50, p95 and the maximum, how many were found, and how many never were. A PACS that does not accept C-FIND gets a note there, and the load test's own result is unchanged. The ramp does not poll, so polling cannot shift where saturation is found.
+
+**Data mixes**, shown by `DCST4.Cli.exe list-mixes`:
+
+| Mix              | What is sent |
+| ---------------- | ------------ |
+| `ct` (default)   | CT 256 x 256, 16 bits, Explicit VR LE, about 130 KB each |
+| `small`          | Many small objects: CR 512 x 512 and US 800 x 600, in turn, Explicit VR LE |
+| `small-lossless` | The same in JPEG Lossless (Process 14 SV1) |
+| `large`          | Few large objects: Enhanced CT 512 x 512 x 32 frames (16 MB) and Breast Tomosynthesis 1024 x 1024 x 16 frames (32 MB) |
+| `large-lossless` | Enhanced CT in JPEG Lossless. Breast Tomosynthesis is generated uncompressed only |
+
+`--load-pdu` sets the maximum PDU length that DCST4 announces and sends its data PDUs with, at most what the PACS announces. 0, the default, is fo-dicom's default of 262144, which an ordinary send uses.
+
+| Setting on the Performance tab | Command line                  | Default | Meaning |
+| ------------------------------ | ----------------------------- | ------- | ------- |
+| Associations                   | `--load-associations`         | 4       | Associations at once, 1 to 256. In the ramp, the steps decide |
+| Duration                       | `--load-duration`             | 20 s    | How long `load-throughput` runs. `90`, `90s`, `5m` and `1h` all work |
+| Count                          | `--load-count`                | 0       | Send exactly this many instead. 0 runs for the duration |
+| Rate                           | `--load-rate`                 | 0       | Instances per second over all associations. 0 sends as fast as the PACS answers. A late worker sends at once and does not burst to catch up |
+| Per association                | `--load-per-association`      | 0       | Release and open a new association after this many. 0 keeps one association for the whole run |
+| Mix                            | `--load-mix`                  | `ct`    | See above |
+| Max PDU                        | `--load-pdu`                  | 0       | See above |
+| Warm-up                        | `--load-warmup`               | 2 s     | Left out of the summary |
+| At most                        | `--load-max-instances`        | 0       | The ceiling of the run. 0 is 1000, 2000 for the ramp, and the rate times the duration for the soak |
+| Steps                          | `--ramp-steps`                | 1,2,4,8 | Associations per ramp step, rising |
+| Each step                      | `--ramp-step-duration`        | 10 s    | How long each ramp step runs |
+| Duration (soak)                | `--soak-duration`             | 30m     | How long the soak runs |
+| Rate (soak)                    | `--soak-rate`                 | 2       | Instances per second during the soak. A soak needs one |
+| Snapshot every                 | `--soak-snapshot`             | 60 s    | How often a window is closed and written |
+| Time-to-available              | `--tta-sample`, `--tta-interval`, `--tta-timeout` | 50, 2 s, 60 s | See above. 0 turns the polling off |
+
+**Planned total.** A count is exact. Otherwise the plan is the ceiling, or the rate times the duration if that is lower, and the size is that times the uncompressed size of the mix, an upper bound for a compressed mix. With the defaults, `load-throughput` stores at most 1000 CT images of 130 KB, 135 MB, `load-ramp` at most 2000, and `load-soak` 3600 in its 30 minutes. A system that takes images faster than the ceiling divided by the duration, 50 per second with the defaults, reaches the ceiling before the duration is over, and the plan says so. The run then ends early: the result has `endedByCeiling`, the explanation says that throughput and latency come from a shorter window than asked for, and the table on the Performance tab marks the row. Raise the ceiling, shorten the duration or set a rate.
+
+**Files.** Besides the usual result files, each test writes `DCST4-run-<start>-<test id>.csv` while it runs, with one row per second: stored, failed, bytes, MB/s, latency p50, p95 and maximum, open associations, how busy this computer's processor was, and whether the second is the last of a run or ramp step and so shorter than a second (`partial`). The steps of a ramp follow each other in it without the moment between them when associations are released and opened again. The soak also writes `DCST4-run-<start>-load-soak-windows.csv`, one row per snapshot window, and both files are written through to the disk at each snapshot, so a crash or a power cut keeps what was measured. The command line writes them under `--out`, and the program in the results folder of the Tests tab. The `performance` section of the JSON file holds the settings, the plan, why the run stopped, whether the ceiling ended it early, the summary, the steps and the saturation, the windows and the degradation, the time-to-available, and the state of this computer. The explanation never holds a measured number.
+
+**On the Performance tab** the chart shows stored and failed per second above and latency p50 and p95 below. It is drawn by DCST4 itself, as two line charts, and updated at most once a second. The warm-up is shaded, ramp steps are marked and their lines are not joined, a last second shorter than a second is left out, and hovering shows the values of one second. A soak longer than 600 seconds is drawn in buckets, with the mean of the counts and the highest p95 of each bucket, so a peak is not lost. When the run is over, the table below the chart has one row for the run, one per ramp step with the saturated step marked, or one per soak window.
+
+**This computer.** The worker of each association waits on the network without holding a thread, but a TLS handshake does hold one. So while a test runs, DCST4 raises the thread pool's minimum to twice the number of associations plus eight. Otherwise the setup times at a step of 16 or 32 associations would include the wait for new threads. It also asks the garbage collector for `SustainedLowLatency`, which keeps blocking full collections out of the measurement, and puts both settings back afterwards. `DCST4.Cli.exe` runs with workstation GC and background collection, set in `DCST4.Cli.exe.config`, because the tests allocate little while they measure: the pool is encoded in advance and each association reuses one buffer for its PDUs. Server GC would add a heap and a GC thread per processor for no gain. The result records the processor use per second, the garbage collections per generation, the GC mode and the thread pool minimum, so that a busy client can be told from a slow PACS.
+
+```powershell
+DCST4.Cli.exe run --profile target.json --tests load-ramp --out C:\Temp\results --ramp-steps 1,2,4,8,16 --ramp-step-duration 20 --load-max-instances 3000
+DCST4.Cli.exe run --profile target.json --tests load-soak --out C:\Temp\results --soak-duration 8h --soak-rate 5 --load-associations 2
+```
+
 ## Test datasets
 
 The test suite works with datasets that can be generated again, unlike Generate & Send, where every run gets new UIDs and the current date. `DCST4.Cli.exe generate` writes a dataset as a DICOM File-set with a DICOMDIR and a `manifest.json`:
@@ -467,13 +549,14 @@ src\DCST4.Core\     No WPF reference
     Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
   TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
   Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary, ExamSizeEstimator
-  Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), Storage Commitment (StorageCommitment.cs), RawAssociation (limit and fault tests only), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
+  Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), Storage Commitment (StorageCommitment.cs), RawAssociation (limit, fault and load tests), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
+  Performance\      Load engine and its workers (LoadEngine.cs), InstancePool and UidStamper, DataMixCatalog, LoadSettings, MetricsCollector and LatencyHistogram, SaturationDetector, DegradationDetector, RateGate, AvailabilityPoller, MetricsFileWriter
   Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
   Verification\     IntegrityOracle and IntegrityReport: what came back against what was sent
   Output\           DICOM File-set and DICOMDIR
   Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestResult, ResultFileWriter
-    Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category
-src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs
+    Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category, PerformanceTests.cs the Performance category
+src\DCST4.App\      WPF app. The Tests tab is ViewModels\TestSuiteViewModel.cs, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
 tools\              List refresh script
@@ -495,12 +578,13 @@ Storage Commitment is in `Network\StorageCommitment.cs`. `StorageCommitmentServi
 
 The Limits tests are built on `Network\RawAssociation.cs`, which opens a socket, writes the A-ASSOCIATE-RQ, P-DATA-TF, A-RELEASE-RQ and A-ABORT PDUs by hand and reads what comes back on a task of its own, so that an abort or a closed connection is seen with its time even while nothing is being awaited. It knows C-ECHO and C-STORE and nothing else. `RawSupport` in `LimitTests.cs` opens one with the profile's TLS settings and holds what the three case files share, and `CloseOn` makes a cancel send an A-ABORT and close the socket. TLS goes through an `ITlsInitiator` in both worlds: `RecordingTlsInitiator` wraps the one an ordinary send uses and reads the version from the `SslStream`, and `TestTlsInitiator` presents a chosen client certificate through a selection callback, because .NET otherwise leaves out a certificate whose issuer the server did not list. What these tests find goes in `TestResult.Limits` (`Testing\LimitsResult.cs`). In the test harness, `ObservingAcceptor` puts a stream between the socket and the mock SCP through fo-dicom's TLS acceptor hook, without TLS, and that stream is where the mock's ARTIM and idle timers, its enforced maximum PDU length and its record of partial stores live, since fo-dicom's server has no hook for them. The association ceiling is in `MockStorageScp` itself.
 
+The Performance tests are in `Testing\Cases\PerformanceTests.cs`, on an engine in `Performance\`. `LoadTestBase` builds an `InstancePool` from a `DataMix` with `TestDatasetGenerator`, splitting each object at Pixel Data: the attributes before it are a template, and Pixel Data with what follows is encoded once into bytes that every send shares. `LoadEngine` starts one worker per association on `RawAssociation`, which got `SendDatasetAsync` with a list of segments, copying each PDU into one buffer the association keeps, and a timestamp (`RawEvent.AtTicks`, `RawDimseReply.ArrivedTicks`) taken in the read loop when a PDU is complete. Each worker has a `UidStamper` that puts new UIDs in its own copy of the template and encodes that before the clock starts. A worker claims an instance from the run's budget before it opens an association, so it never opens one it has nothing to send on. `RateGate` hands out send times shared by all workers. Everything is recorded in a `MetricsCollector`, by the second in which the response arrived, and a ticker in the engine closes each second, passes it to the test through `TestContext.ReportMetrics`, which `TestRunner` raises as a `TestProgress` with the stage `Metrics`, and closes the soak windows. `SaturationDetector` and `DegradationDetector` are pure functions on the steps and windows, and the harness checks them on fixed input. `AvailabilityPoller` uses `QueryService.FindManyAsync`, several C-FINDs on one fo-dicom association, which `DimseRunner` now takes as a list. What the tests measure goes in `TestResult.Performance` (`Testing\PerformanceResult.cs`), and `TestRunOptions.Load` and `MetricsFolder` carry the settings and where the series files go. Result files have schema version 6, and their doubles are written with at most 15 significant digits (`ShortDoubleConverter`). In the test harness, the mock SCP receives C-STOREs into memory for these tests (`Scp.ReceiveInMemory`), since fo-dicom's temporary file per C-STORE, with a virus scanner, added about 40 ms to each one and hid the scripted delay. It can also limit how many stores it processes at once (`Scp.StoreConcurrency`), which is how the ramp test sees a PACS saturate.
+
 Generation knows nothing about sending. The two meet at `IImageSource`, which supplies images lazily so that a long stack does not sit in memory. That leaves room for:
 
 | Possible addition                                            | Where it plugs in                                                                                  |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
 | Sending existing files from a folder, with optional new UIDs | A new `IImageSource`. Sending does not change.                                                     |
-| Load testing (send N times, measure throughput)              | Repeat `StoreRun` with a new source. `RunSummary` already has timing, bytes and images per second. |
 | MPPS                                                         | `ExamRequest` holds the study and series identity. `Network\` gets a new service.                  |
 
 To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog`. An image type only for datasets goes in `DatasetProfileCatalog` instead, so that it stays out of the Generate & Send list. A non-image object subclasses `ObjectProfile`.
@@ -547,6 +631,9 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe retrieve
 
 # Only the limit, fault and TLS tests
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe limits
+
+# Only the Performance tests: metrics on fixed input, and load, ramp, soak and cancel against scripted delays
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe perf
 
 # Only the Storage Commitment tests
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe commit
@@ -623,6 +710,15 @@ The limit, fault and TLS tests added in 1.8.0 were run by hand against an Orthan
 - The three fault tests left no partial file, and the retry was stored each time.
 - `limit-artim` passed. `limit-max-associations` gave `TIMEOUT` at 1, since `storescp` serves one association at a time and leaves the next one unanswered.
 
+The Performance tests added in 1.9.0 were checked by hand against DCMTK 3.7.1 `storescp` on the same computer, and against an Orthanc test server on the network:
+
+- `storescp` received 216 objects from every data mix: `dcmftest` passes on all, every SOP Instance UID is unique, `dcmdump` reports nothing, and `dcmdjpeg` decodes all 8 JPEG Lossless objects. Against it, the C-STORE latency of the `ct` mix was 2.3 ms at p50. Against the mock SCP of the test harness it had been about 40 ms, which turned out to be fo-dicom's temporary file per received object and not DCST4.
+- Four identical runs against Orthanc, with the same settings and `--seed`, were run within four minutes: `load-throughput` with 4 associations for 10 s, and `load-ramp` with 1, 2, 4 and 8 associations for 8 s each. **The runs varied a lot, and the variance came from the server.** `load-throughput` stored 266, 187, 34 and 204 images per second, with p50 latency between 8.6 and 14.1 ms. The run with 34 per second had stretches of up to 3 s in which Orthanc answered no association, which the per-second series shows as seconds with nothing stored and a p95 of 553 ms. Without such stalls the runs agree well: the ramps of runs 1 and 3 differ by 12, 3, 6 and 1 % in throughput at 1, 2, 4 and 8 associations, and by at most 0.6 ms in p50 latency. The four ramps put the highest throughput at 4 associations three times and at 2 once, and saturation at 8 associations twice and at 4 twice.
+- To tell a slow server from a slow client, DCMTK's `storescu` sent the same 100 CT images six times on one association: from 52 to 145 images per second, the same spread. DCST4 used at most 12 % of the processor during the runs.
+- Orthanc refused two images of about 28,000 with `0xA700` Out of Resources and no Error Comment, each time in the first second of a run. A refusal in the first second of a run with a new patient could not be triggered again on purpose in four tries, and the cause was not found from the client side.
+
+What this means for a reader: compare a system with itself only over several runs, and look at the per-second series before trusting a single summary, since a stall of a few seconds in a 10 s run changes its throughput by a factor of several.
+
 ## Dependencies
 
 | Package                  | Use                                                          | Licence    |
@@ -643,8 +739,36 @@ The limit, fault and TLS tests added in 1.8.0 were run by hand against an Orthan
 | Capability matrix of a run         | Next to its result files, as `<run>-capability.json` and `.csv` |
 | Chain summary of a run             | In the JSON file, and next to it as `<run>-chain.csv`          |
 | Objects sent and retrieved by a run | From the command line, `work-<time>` under `--out`. From the program, a temporary folder that is removed |
+| Series of a Performance test, written as it runs | Next to the result files, as `DCST4-run-<start>-<test id>.csv`, and for the soak also `-windows.csv` |
 
 ## Changelog
+
+### 1.9.0
+
+New:
+
+- Performance tests, in the `Performance` category and on a new Performance tab: `load-throughput`, `load-ramp` and `load-soak`. They are not part of `all`, and not listed on the Tests tab
+- `load-throughput` sends on N associations at once, each with its own worker, for a duration or a number of instances, optionally at a fixed rate, and with a new association after a set number of instances or one for the whole run
+- The images are generated and encoded before the run, and each send gets new UIDs under the profile's UID root while the pixel data is shared, so the PACS never sees a duplicate and nothing is transcoded while the clock runs
+- Metrics on the monotonic clock: C-STORE latency from the first byte of the request to the whole response, response wait, association setup, p50, p95, p99 and maximum, stored per second, MB/s, errors per status class and raw status, and a time series of one row per second
+- `load-ramp` runs 1, 2, 4, 8 ... associations a step at a time and finds the step where throughput stops rising, latency climbs or errors appear
+- `load-soak` runs steady load for hours, writes a snapshot window to disk as it goes so that a crash keeps the data, and flags a rising p95 latency, falling throughput or errors as degradation
+- Time-to-available: for 1 in 50 stored images, polls C-FIND at IMAGE level on an association of its own until each is found, with p50, p95, maximum and how many were never found
+- Data mixes: small CT, many small CR and US, few large Enhanced CT and Breast Tomosynthesis, uncompressed or in JPEG Lossless, and a choice of maximum PDU length. `list-mixes` on the command line
+- Before a run, the program and the command line say how many objects it will store at most and about how much data that is, and from what rate the ceiling would end a run before its duration. The program asks for a yes with the destination in the question
+- When the ceiling ends a run early, the result, its explanation and the table say so, since throughput and latency then come from a shorter window. The first problem of a run, with its raw status, Error Comment and second, is in the result's details
+- A live chart of throughput and latency on the Performance tab, updated at most once a second, and a summary table afterwards
+- `--load-*`, `--ramp-*`, `--soak-*` and `--tta-*` options on the command line, with a line of metrics every 5 seconds while a test runs
+
+Changed:
+
+- The result files have schema version 6, with a `performance` section, and doubles in the JSON file are written with at most 15 significant digits
+- `all` on the command line leaves out the Performance tests
+- `DCST4.Cli.exe.config` sets workstation GC with background collection explicitly. While a Performance test runs, the thread pool minimum is raised and the GC latency mode is SustainedLowLatency
+
+Fixed:
+
+- Drawing a random test personnummer filtered the whole list of 43,000 numbers every time. The filtered list is now kept per day and age range, and the same seed still gives the same patient
 
 ### 1.8.0
 

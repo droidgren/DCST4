@@ -55,6 +55,11 @@ namespace DCST4.Core.Testing
             tests.Add(new MaxAssociationsTest());
             tests.Add(new IdleTimeoutTest());
             tests.Add(new ArtimTest());
+
+            // Performance. Each stores hundreds or thousands of new objects, so "all" leaves them out.
+            tests.Add(new LoadThroughputTest());
+            tests.Add(new LoadRampTest());
+            tests.Add(new LoadSoakTest());
             return tests;
         }
 
@@ -90,13 +95,14 @@ namespace DCST4.Core.Testing
 
         private static List<ITestCase> Matching(string item, IReadOnlyList<ITestCase> catalog)
         {
-            if (string.Equals(item, SelectAll, StringComparison.OrdinalIgnoreCase)) return catalog.ToList();
+            // The performance tests store many new objects that may not be possible to delete, so they are asked for by name or category.
+            if (string.Equals(item, SelectAll, StringComparison.OrdinalIgnoreCase)) return catalog.Where(t => t.Category != TestCategory.Performance).ToList();
             return catalog.Where(t =>
                 string.Equals(t.Id, item, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(t.Category.ToString(), item, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
         private static string Available(IReadOnlyList<ITestCase> catalog) =>
-            $"Tests: {string.Join(", ", catalog.Select(t => t.Id))}. Categories: {string.Join(", ", Enum.GetNames(typeof(TestCategory)))}. Or: {SelectAll}.";
+            $"Tests: {string.Join(", ", catalog.Select(t => t.Id))}. Categories: {string.Join(", ", Enum.GetNames(typeof(TestCategory)))}. Or: {SelectAll}, which leaves out the Performance tests.";
     }
 }

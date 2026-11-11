@@ -65,6 +65,8 @@ namespace DCST4.Core.TestData
 
         private readonly Personnummer[] _all;
         private readonly HashSet<string> _values;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Personnummer[]> _candidates =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, Personnummer[]>(StringComparer.Ordinal);
 
         /// <summary>Numbers rejected at load time because of an invalid date or check digit.</summary>
         public int RejectedCount { get; }
@@ -97,7 +99,9 @@ namespace DCST4.Core.TestData
         /// </summary>
         public Personnummer Pick(Random random, DateTime today, int minAge, int maxAge)
         {
-            var candidates = _all.Where(p => IsWithinAge(p.BirthDate, today, minAge, maxAge)).ToArray();
+            // The filtered list is kept per day and age range, in the list's order, so the same draw gives the same person.
+            var key = today.Date.Ticks.ToString(CultureInfo.InvariantCulture) + "/" + minAge.ToString(CultureInfo.InvariantCulture) + "/" + maxAge.ToString(CultureInfo.InvariantCulture);
+            var candidates = _candidates.GetOrAdd(key, k => _all.Where(p => IsWithinAge(p.BirthDate, today, minAge, maxAge)).ToArray());
             if (candidates.Length == 0)
             {
                 throw new InvalidOperationException($"The test personnummer list has no person aged {minAge}-{maxAge}.");

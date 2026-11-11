@@ -33,6 +33,7 @@ namespace DCST4.Core.Testing
                 StartedUtc = DateTime.UtcNow,
                 Profile = ResultProfile.From(trimmed),
             };
+            session.RunStartedUtc = report.StartedUtc;
             var clock = Stopwatch.StartNew();
             Logger.Information("Test run of {count} tests against {host}:{port} started", tests.Count, trimmed.Endpoint.Host, trimmed.Endpoint.Port);
 
@@ -42,6 +43,7 @@ namespace DCST4.Core.Testing
                 Raise(new TestProgress { Stage = TestProgressStage.Started, Index = i, Total = tests.Count, Test = test });
                 var position = i;
                 context.Reporter = activity => Raise(new TestProgress { Stage = TestProgressStage.Activity, Index = position, Total = tests.Count, Test = test, Activity = activity });
+                context.MetricsReporter = second => Raise(new TestProgress { Stage = TestProgressStage.Metrics, Index = position, Total = tests.Count, Test = test, Metrics = second });
 
                 var startedUtc = DateTime.UtcNow;
                 var testClock = Stopwatch.StartNew();
@@ -59,6 +61,7 @@ namespace DCST4.Core.Testing
                 Redact(result, trimmed.Endpoint.TlsExpiredClientCertThumbprint);
 
                 context.Reporter = null;
+                context.MetricsReporter = null;
                 report.Results.Add(result);
                 Logger.Information("Test {id}: {result}: {explanation}", result.TestId, result.Result.ToString(), result.Explanation);
                 Raise(new TestProgress { Stage = TestProgressStage.Completed, Index = i, Total = tests.Count, Test = test, Result = result });

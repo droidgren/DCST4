@@ -61,6 +61,15 @@ namespace DCST4.Core.Testing
         /// </summary>
         public System.Security.Cryptography.X509Certificates.X509Certificate2 ExpiredClientCertificate { get; set; }
 
+        /// <summary>What the load, ramp and soak tests do. Null uses the defaults.</summary>
+        public DCST4.Core.Performance.LoadSettings Load { get; set; }
+
+        /// <summary>
+        /// Where the load tests write their series files while they run, so that a crash keeps what was measured. The
+        /// command line uses --out and the program its results folder. Null writes none.
+        /// </summary>
+        public string MetricsFolder { get; set; }
+
         /// <summary>Returns the first problem, or null if the options can be used.</summary>
         public string Validate()
         {
@@ -172,6 +181,9 @@ namespace DCST4.Core.Testing
 
         /// <summary>Whether a test generated data, so that a run which did not can still be compared with an identical run.</summary>
         internal bool SeedWasUsed { get; private set; }
+
+        /// <summary>When the run started, which names the files a test writes while it runs. Set by <see cref="TestRunner"/>.</summary>
+        public DateTime RunStartedUtc { get; internal set; } = DateTime.UtcNow;
 
         /// <summary>From a probe in this run, or else the one the front-end supplied.</summary>
         public CapabilityMatrix Matrix { get; set; }

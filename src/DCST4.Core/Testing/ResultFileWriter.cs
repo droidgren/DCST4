@@ -28,7 +28,27 @@ namespace DCST4.Core.Testing
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             };
             options.Converters.Add(new JsonStringEnumConverter());
+            options.Converters.Add(new ShortDoubleConverter());
             return options;
+        }
+    }
+
+    /// <summary>
+    /// Writes a double with at most 15 significant digits, so a latency of 21.504 ms reads 21.504 and not
+    /// 21.504000000000001, which is what .NET Framework's round-trip format gives.
+    /// </summary>
+    internal sealed class ShortDoubleConverter : JsonConverter<double>
+    {
+        public override double Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => reader.GetDouble();
+
+        public override void Write(Utf8JsonWriter writer, double value, JsonSerializerOptions options)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || Math.Abs(value) > 1e28)
+            {
+                writer.WriteNumberValue(value);
+                return;
+            }
+            writer.WriteNumberValue((decimal)value);
         }
     }
 

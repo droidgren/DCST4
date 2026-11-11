@@ -1,10 +1,13 @@
 <Window x:Class="DCST4.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:DCST4.Controls"
+        xmlns:infra="clr-namespace:DCST4.Infrastructure"
         Height="800" Width="1240" MinHeight="620" MinWidth="980"
         Icon="/DCST4.ico">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <infra:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
     </Window.Resources>
     <DockPanel>
         <Menu DockPanel.Dock="Top" Background="White">
@@ -516,6 +519,122 @@
                                         <DataGridTextColumn Header="SOP class" Binding="{Binding SopClass}" Width="300"/>
                                         <DataGridTextColumn Header="Transfer syntax" Binding="{Binding TransferSyntax}" Width="260"/>
                                         <DataGridTextColumn Header="What the SCP did" Binding="{Binding Actual}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </Grid>
+                    </DockPanel>
+                </TabItem>
+                <TabItem Header="Performance">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,2,2,4">
+                            <Button Content="Run" Width="80" Command="{Binding RunPerformanceCommand}" FontWeight="SemiBold"
+                                    ToolTip="Shows how many new objects the test will store on the destination above, and starts it when you say yes"/>
+                            <Button Content="Cancel" Width="60" Margin="6,0,0,0" Command="{Binding CancelCommand}"/>
+                            <TextBlock Text="Test:" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                            <ComboBox ItemsSource="{Binding Performance.Modes}" SelectedItem="{Binding Performance.SelectedMode, Mode=TwoWay}" Width="300" IsEnabled="{Binding IsIdle}"/>
+                            <TextBlock Text="Mix:" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                            <ComboBox ItemsSource="{Binding Performance.Mixes}" SelectedItem="{Binding Performance.SelectedMix, Mode=TwoWay}" Width="130" IsEnabled="{Binding IsIdle}"
+                                      ToolTip="{Binding Performance.SelectedMix.Description}" DisplayMemberPath="Id"/>
+                            <TextBlock Text="{Binding Performance.SelectedMix.Description}" Foreground="#FF505050" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                        <WrapPanel DockPanel.Dock="Top" Margin="2,0,2,4" IsEnabled="{Binding IsIdle}">
+                            <TextBlock Text="Associations:" VerticalAlignment="Center" Margin="0,0,4,0" Visibility="{Binding Performance.IsRamp, Converter={StaticResource InverseBoolToVisibility}}"/>
+                            <TextBox Text="{Binding Performance.Associations, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
+                                     Visibility="{Binding Performance.IsRamp, Converter={StaticResource InverseBoolToVisibility}}" ToolTip="Associations at once, each with one C-STORE outstanding"/>
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding Performance.IsLoad, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Duration:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Text="{Binding Performance.DurationSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center"/>
+                                <TextBlock Text="s, or count:" VerticalAlignment="Center" Margin="4,0,4,0"/>
+                                <TextBox Text="{Binding Performance.InstanceCount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="50" VerticalAlignment="Center"
+                                         ToolTip="Send exactly this many instead of running for a duration. 0 runs for the duration"/>
+                                <TextBlock Text="Rate:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Text="{Binding Performance.RatePerSecond, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center"
+                                         ToolTip="Instances per second over all associations. 0 sends as fast as the system answers"/>
+                                <TextBlock Text="/s" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding Performance.IsRamp, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Steps (associations):" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox Text="{Binding Performance.RampStepsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90" VerticalAlignment="Center"/>
+                                <TextBlock Text="Each step:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Text="{Binding Performance.RampStepSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center"/>
+                                <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding Performance.IsSoak, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Duration:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Text="{Binding Performance.SoakDurationText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="50" VerticalAlignment="Center" ToolTip="For example 90s, 30m or 8h"/>
+                                <TextBlock Text="Rate:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Text="{Binding Performance.SoakRatePerSecond, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center"/>
+                                <TextBlock Text="/s. Snapshot every" VerticalAlignment="Center" Margin="4,0,4,0"/>
+                                <TextBox Text="{Binding Performance.SnapshotSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center"
+                                         ToolTip="Each snapshot is written to the windows file at once, so a crash keeps what was measured"/>
+                                <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            </StackPanel>
+                            <TextBlock Text="Per association:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <TextBox Text="{Binding Performance.InstancesPerAssociation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
+                                     ToolTip="Release and open a new association after this many. 0 keeps one association for the whole run"/>
+                            <TextBlock Text="Max PDU:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <TextBox Text="{Binding Performance.MaxPdu, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center"
+                                     ToolTip="The maximum PDU length DCST4 announces and sends with, at most what the system announces. 0 is fo-dicom's default"/>
+                            <TextBlock Text="Warm-up:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <TextBox Text="{Binding Performance.WarmUpSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center"
+                                     ToolTip="Seconds at the start, and of each ramp step, that are in the chart but not in the summary"/>
+                            <TextBlock Text="s. At most" VerticalAlignment="Center" Margin="4,0,4,0"/>
+                            <TextBox Text="{Binding Performance.MaxInstances, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="55" VerticalAlignment="Center"
+                                     ToolTip="The most instances the run stores. 0 is the default: 1000, 2000 for the ramp, rate x duration for the soak"/>
+                            <TextBlock Text="instances." VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding Performance.IsRamp, Converter={StaticResource InverseBoolToVisibility}}">
+                                <TextBlock Text="Time-to-available: 1 in" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Text="{Binding Performance.SampleEvery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center"
+                                         ToolTip="Query with C-FIND for 1 in this many stored instances, on an association of its own. 0 turns it off"/>
+                                <TextBlock Text="every" VerticalAlignment="Center" Margin="4,0,4,0"/>
+                                <TextBox Text="{Binding Performance.PollIntervalSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center"/>
+                                <TextBlock Text="s for up to" VerticalAlignment="Center" Margin="4,0,4,0"/>
+                                <TextBox Text="{Binding Performance.PollTimeoutSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center"/>
+                                <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            </StackPanel>
+                        </WrapPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="{Binding Performance.PlanText}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="2,0,2,6"/>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="3*" MinHeight="160"/>
+                                <RowDefinition Height="4"/>
+                                <RowDefinition Height="2*"/>
+                            </Grid.RowDefinitions>
+                            <Border BorderBrush="#FFE1E0D9" BorderThickness="1">
+                                <controls:LoadChart Series="{Binding Performance.Series}" Version="{Binding Performance.SeriesVersion}"/>
+                            </Border>
+                            <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Center" Height="4" Background="Transparent"/>
+                            <DockPanel Grid.Row="2">
+                                <TextBox DockPanel.Dock="Top" Text="{Binding Performance.Verdict, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0" Background="Transparent" Margin="0,2,0,2"/>
+                                <TextBox DockPanel.Dock="Bottom" Text="{Binding Performance.Files, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Foreground="#FF505050" Margin="0,2,0,0"/>
+                                <TextBox DockPanel.Dock="Bottom" Text="{Binding Performance.Availability, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0" Background="Transparent" Margin="0,2,0,0"/>
+                                <DataGrid ItemsSource="{Binding Performance.Rows}" AutoGenerateColumns="False" IsReadOnly="True"
+                                          HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#FFE0E0E0"
+                                          ClipboardCopyMode="IncludeHeader" Background="White">
+                                    <DataGrid.RowStyle>
+                                        <Style TargetType="DataGridRow">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Marked}" Value="True">
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                    <Setter Property="Background" Value="#FFFFF4C2"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </DataGrid.RowStyle>
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Measured" Binding="{Binding Label}" Width="150"/>
+                                        <DataGridTextColumn Header="Associations" Binding="{Binding Associations}" Width="80"/>
+                                        <DataGridTextColumn Header="Stored" Binding="{Binding Stored}" Width="60"/>
+                                        <DataGridTextColumn Header="Stored/s" Binding="{Binding StoredPerSecond}" Width="65"/>
+                                        <DataGridTextColumn Header="MB/s" Binding="{Binding MegabytesPerSecond}" Width="55"/>
+                                        <DataGridTextColumn Header="p50 ms" Binding="{Binding LatencyP50}" Width="60"/>
+                                        <DataGridTextColumn Header="p95 ms" Binding="{Binding LatencyP95}" Width="60"/>
+                                        <DataGridTextColumn Header="p99 ms" Binding="{Binding LatencyP99}" Width="60"/>
+                                        <DataGridTextColumn Header="Max ms" Binding="{Binding LatencyMax}" Width="60"/>
+                                        <DataGridTextColumn Header="Setup p50 ms" Binding="{Binding Setup}" Width="85"/>
+                                        <DataGridTextColumn Header="Not stored" Binding="{Binding NotStored}" Width="70"/>
+                                        <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </DockPanel>

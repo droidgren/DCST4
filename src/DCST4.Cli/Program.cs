@@ -63,9 +63,18 @@ namespace DCST4.Cli
 
             if (args.Length >= 1 && args[0].Equals("list-codecs", StringComparison.OrdinalIgnoreCase)) return ListCodecs(args);
 
+            if (args.Length == 1 && args[0].Equals("list-mixes", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var mix in DCST4.Core.Performance.DataMixCatalog.All)
+                {
+                    Console.WriteLine(mix.Id.PadRight(18) + mix.Description);
+                }
+                return RunExitCodes.Clean;
+            }
+
             if (args.Length >= 1 && args[0].Equals("generate", StringComparison.OrdinalIgnoreCase)) return await GenerateAsync(args).ConfigureAwait(false);
 
-            if (args.Length == 0 || !args[0].Equals("run", StringComparison.OrdinalIgnoreCase)) return UsageError("Expected the command 'run', 'generate', 'list-datasets' or 'list-codecs'.");
+            if (args.Length == 0 || !args[0].Equals("run", StringComparison.OrdinalIgnoreCase)) return UsageError("Expected the command 'run', 'generate', 'list-datasets', 'list-codecs' or 'list-mixes'.");
 
             var arguments = CliArguments.Parse(args, out var argumentError);
             if (arguments == null) return UsageError(argumentError);
@@ -87,6 +96,15 @@ namespace DCST4.Cli
 
             var tests = TestCatalog.Select(arguments.Tests, out var selectionError);
             if (tests == null) return Refuse(selectionError);
+
+            // The performance tests leave many objects behind, so what they will send is checked and printed before anything is.
+            var target = $"{profile.Endpoint.CalledAe} at {profile.Endpoint.Host}:{profile.Endpoint.Port}";
+            foreach (var mode in tests.OfType<DCST4.Core.Testing.Cases.LoadTestBase>().Select(t => t.Mode))
+            {
+                var loadProblem = arguments.Load.Validate(mode);
+                if (loadProblem != null) return Refuse("The load settings cannot be used: " + loadProblem);
+                Console.WriteLine($"Plan for the {mode.ToString().ToLowerInvariant()} test: " + arguments.Load.DescribePlan(mode, target));
+            }
 
             // Before anything is sent, so that a test run never ends with nowhere to put its results.
             try
@@ -110,6 +128,8 @@ namespace DCST4.Cli
                 IdleWaitSeconds = arguments.IdleWaitSeconds,
                 ArtimWaitSeconds = arguments.ArtimWaitSeconds,
                 FaultSettleSeconds = arguments.FaultSettleSeconds,
+                Load = arguments.Load,
+                MetricsFolder = arguments.OutputFolder,
                 // Under --out and kept, so that what was sent and retrieved can be looked at afterwards.
                 WorkFolder = Path.Combine(arguments.OutputFolder, "work-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff", System.Globalization.CultureInfo.InvariantCulture)),
             };
@@ -200,7 +220,19 @@ namespace DCST4.Cli
             var runner = new TestRunner();
             runner.Progress += progress =>
             {
-                if (progress.Stage == TestProgressStage.Activity)
+                if (progress.Stage == TestProgressStage.Metrics)
+                {
+                    // One line every 5 s is enough to follow a run, and keeps the console from slowing the client down.
+                    var m = progress.Metrics;
+                    if (m.Second % 5 == 4)
+                    {
+                        Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                            "[{0}/{1}] {2} ... {3} s{4}: {5} stored/s, {6:0.0} MB/s, latency p50 {7:0.0} ms p95 {8:0.0} ms, {9} failed, {10} associations open",
+                            progress.Index + 1, progress.Total, progress.Test.Id, m.Second + 1, m.Step > 0 ? ", step " + m.Step : string.Empty,
+                            m.Stored, m.MegabytesPerSecond, m.LatencyP50Ms, m.LatencyP95Ms, m.Failed, m.OpenAssociations));
+                    }
+                }
+                else if (progress.Stage == TestProgressStage.Activity)
                 {
                     Console.WriteLine($"[{progress.Index + 1}/{progress.Total}] {progress.Test.Id} ... {progress.Activity}");
                 }

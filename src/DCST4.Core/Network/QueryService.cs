@@ -93,6 +93,71 @@ namespace DCST4.Core.Network
 
             return outcome;
         }
+
+        /// <summary>
+        /// Several C-FINDs on one association, for a poller that must keep its own load low. Each outcome records when the
+        /// response that held its first match arrived, as <see cref="Stopwatch.GetTimestamp"/>. The matches are not kept.
+        /// </summary>
+        public static async Task<MultiQueryOutcome> FindManyAsync(
+            DicomEndpoint endpoint,
+            NetworkOptions options,
+            QueryRoot root,
+            DicomQueryRetrieveLevel level,
+            IReadOnlyList<DicomDataset> identifiers,
+            CancellationToken token)
+        {
+            var sopClass = SopClass(root);
+            var result = new MultiQueryOutcome();
+            var requests = new List<DicomRequest>();
+            foreach (var identifier in identifiers)
+            {
+                var request = new DicomCFindRequest(sopClass, level);
+                foreach (var item in identifier) request.Dataset.AddOrUpdate(item);
+                var one = new PolledQuery();
+                result.Queries.Add(one);
+                requests.Add(request);
+            }
+
+            result.Exchange = await DimseRunner.RunAsync(endpoint, options, requests, sopClass, null, (client, watch, exchange) =>
+            {
+                for (var i = 0; i < requests.Count; i++)
+                {
+                    var one = result.Queries[i];
+                    ((DicomCFindRequest)requests[i]).OnResponseReceived = (req, response) =>
+                    {
+                        var arrived = System.Diagnostics.Stopwatch.GetTimestamp();
+                        if (!exchange.ContextAccepted) return;
+
+                        watch.Restart();
+                        var status = response.Command.GetSingleValueOrDefault(DicomTag.Status, response.Status.Code);
+                        if (status == StatusPending || status == StatusPendingWarning)
+                        {
+                            if (response.Dataset != null && one.FoundTicks == 0) one.FoundTicks = arrived;
+                            return;
+                        }
+                        one.FinalStatus = status;
+                    };
+                }
+            }, token).ConfigureAwait(false);
+
+            return result;
+        }
+    }
+
+    /// <summary>One C-FIND of <see cref="QueryService.FindManyAsync"/>.</summary>
+    public sealed class PolledQuery
+    {
+        /// <summary>When the first match arrived, or 0 if none did.</summary>
+        public long FoundTicks { get; internal set; }
+        /// <summary>Raw (0000,0900) of the final response, or null if none came.</summary>
+        public ushort? FinalStatus { get; internal set; }
+    }
+
+    public sealed class MultiQueryOutcome
+    {
+        public DimseExchange Exchange { get; internal set; }
+        /// <summary>In the order of the identifiers.</summary>
+        public List<PolledQuery> Queries { get; } = new List<PolledQuery>();
     }
 
     /// <summary>Words for the status codes of C-FIND, C-GET and C-MOVE, which differ from those of C-STORE in places.</summary>
