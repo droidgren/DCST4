@@ -42,6 +42,7 @@ namespace DCST4.Core.Testing.Cases
         public abstract string Description { get; }
         public string Group => TestGroups.Association;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
         public abstract Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token);
 
         /// <summary>An AE title the target should not know, and never the one the profile uses.</summary>

@@ -70,6 +70,11 @@ namespace DCST4.Core.Testing
         string Group { get; }
         /// <summary>True if the test may leave new objects on the destination, which may not be possible to delete.</summary>
         bool StoresObjects { get; }
+        /// <summary>
+        /// What a test that stores leaves on the destination. Null when it stores nothing, and for the load tests, whose
+        /// volume follows from their settings and is shown on the Performance tab.
+        /// </summary>
+        StorageEstimate Storage { get; }
         Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token);
     }
 

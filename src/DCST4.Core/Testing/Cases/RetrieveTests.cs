@@ -103,6 +103,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Retrieves each stored object type with C-GET, with the objects coming back on the same association. Needs a store test earlier in the same run.";
         public string Group => TestGroups.Retrieve;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
         public TestCategory Category => TestCategory.Integrity;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -154,6 +155,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Retrieves each stored object type with C-MOVE to the local SCP. The destination must know the local SCP AE title with this computer's address and port, and the firewall must let it in. Needs a store test earlier in the same run.";
         public string Group => TestGroups.Retrieve;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
         public TestCategory Category => TestCategory.Integrity;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -267,6 +269,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Moves one stored object to the local SCP and, if it does not arrive, explains why: unknown AE title, wrong address or port, or a firewall. Needs a store test earlier in the same run.";
         public string Group => TestGroups.Retrieve;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
         public TestCategory Category => TestCategory.Integrity;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)

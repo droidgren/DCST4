@@ -32,6 +32,7 @@ namespace DCST4.Core.Testing.Cases
             : $"Sends one small {_profile.DisplayName} object with private tags, long strings and nested sequences, and checks what the destination keeps of them when it is retrieved later in the run.";
         public string Group => TestGroups.Store;
         public bool StoresObjects => true;
+        public StorageEstimate Storage => StorageEstimate.Of(_profile, Fixtures.Matrix);
 
         private string DisplayName => _edgeCases == EdgeCases.None ? _profile.DisplayName : _profile.DisplayName + " with private tags and edge cases";
 

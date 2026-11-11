@@ -750,6 +750,38 @@ namespace DCST4.Tests
             }
         }
 
+        private static IEnumerable<DependencyObject> LogicalDescendants(DependencyObject parent)
+        {
+            foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
+            {
+                yield return child;
+                foreach (var below in LogicalDescendants(child)) yield return below;
+            }
+        }
+
+        /// <summary>
+        /// The inputs under <paramref name="root"/> that show nothing on hover: a text box that can be typed in, a combo box or a
+        /// check box, with no tooltip on itself or on a panel around it. Inputs made from data templates are not in the logical tree.
+        /// </summary>
+        private static List<string> WithoutToolTip(DependencyObject root)
+        {
+            var bare = new List<string>();
+            foreach (var element in LogicalDescendants(root).OfType<Control>())
+            {
+                if (!(element is ComboBox || element is CheckBox || (element is TextBox box && !box.IsReadOnly))) continue;
+                var explained = false;
+                for (DependencyObject at = element; at != null && !explained; at = LogicalTreeHelper.GetParent(at))
+                {
+                    explained = ToolTipService.GetToolTip(at) != null;
+                    if (at == root) break;
+                }
+                if (explained) continue;
+                var binding = System.Windows.Data.BindingOperations.GetBindingExpression(element, element is TextBox ? TextBox.TextProperty : element is ComboBox ? System.Windows.Controls.Primitives.Selector.SelectedItemProperty : System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty);
+                bare.Add(element.GetType().Name + " " + (element.Name.Length > 0 ? element.Name : binding?.ParentBinding.Path.Path ?? (element as ContentControl)?.Content?.ToString()));
+            }
+            return bare;
+        }
+
         private static IEnumerable<DependencyObject> VisualDescendants(DependencyObject parent)
         {
             for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
@@ -868,8 +900,8 @@ namespace DCST4.Tests
             var total = suite.Choices.Count;
             check("Check all: clear at the start", suite.AllSelected == false && suite.SelectionText == $"0 of {total} ticked", suite.SelectionText);
             check("Groups: every test in exactly one, the one it names", suite.Groups.Sum(g => g.Tests.Count) == total && suite.Choices.All(c => suite.Groups.Single(g => g.Tests.Contains(c)).Name == c.Group), null);
-            check("Groups: in the order of TestGroups, none empty, no Performance group",
-                suite.Groups.Select(g => g.Name).SequenceEqual(TestGroups.All.Where(n => suite.Groups.Any(g => g.Name == n))) && suite.Groups.All(g => g.Tests.Count > 0 && g.IsExpanded) && suite.Groups.All(g => g.Name != TestGroups.Performance),
+            check("Groups: in the order of TestGroups, none empty, all folded, no Performance group",
+                suite.Groups.Select(g => g.Name).SequenceEqual(TestGroups.All.Where(n => suite.Groups.Any(g => g.Name == n))) && suite.Groups.All(g => g.Tests.Count > 0 && !g.IsExpanded) && suite.Groups.All(g => g.Name != TestGroups.Performance),
                 string.Join(", ", suite.Groups.Select(g => g.Name)));
 
             var store = suite.Groups.Single(g => g.Name == TestGroups.Store);
@@ -895,9 +927,66 @@ namespace DCST4.Tests
             store.Tests[0].IsSelected = false;
             check("A tick tells the Check all box, the group and both counts", raised.Count(n => n == nameof(TestSuiteViewModel.AllSelected) || n == nameof(TestGroupChoice.IsSelected)) == 2 && raised.Contains(nameof(TestSuiteViewModel.SelectionText)) && raised.Contains(nameof(TestGroupChoice.CountText)), string.Join(",", raised));
 
-            check("Tooltips: what the test does, a note when it stores, and its id",
-                suite.Choices.All(c => c.ToolTipText.StartsWith(c.Test.Description) && c.ToolTipText.EndsWith("Id: " + c.Test.Id) && c.ToolTipText.Contains(TestChoice.StoresNote) == c.Test.StoresObjects),
+            check("Tooltips: what the test does, what it stores, and its id",
+                suite.Choices.All(c => c.ToolTipText.StartsWith(c.Test.Description) && c.ToolTipText.EndsWith("Id: " + c.Test.Id) && (c.StorageText != null) == c.Test.StoresObjects
+                    && (c.StorageText == null || c.ToolTipText.Contains(c.StorageText))),
                 null);
+            var ctTip = suite.Choices.Single(c => c.Test.Id == "store-ct").StorageText;
+            check("Tooltips: a store test says how much it stores", ctTip == "Stores 1 examination, 1 object, about 34 KB on the destination.", ctTip);
+        }
+
+        /// <summary>The Test settings dialog's copy: nothing changes until Apply, and Apply changes nothing when a value is wrong.</summary>
+        private static void TestSettingsCopy(MainViewModel vm, string temp, Action<string, bool, string> check)
+        {
+            var before = vm.BuildTestRunOptions();
+            var folder = vm.TestSuite.ResultsFolder;
+            var copy = new TestSettingsViewModel(vm);
+            check("Test settings: the dialog starts from the current values",
+                copy.UidRoot == vm.TestUidRoot && copy.CommitWaitSeconds == before.CommitWaitSeconds.ToString() && copy.MaxAssociations == before.MaxAssociations.ToString()
+                && copy.ResultsFolder == folder && copy.StoreSyntax == vm.TestSuite.SelectedStoreSyntax && copy.ExpiredClientCertThumbprint == vm.TlsExpiredClientCertThumbprint,
+                copy.UidRoot);
+
+            copy.CommitWaitSeconds = "45";
+            copy.UidRoot = "1.2.3";
+            check("Test settings: nothing changes before OK", vm.CommitWaitSeconds == before.CommitWaitSeconds && vm.TestUidRoot != "1.2.3", null);
+
+            copy.MaxAssociations = "ten";
+            var problem = copy.Apply();
+            check("Test settings: a word for a number is refused and named, and nothing is applied", problem != null && problem.Contains("Associations up to") && vm.CommitWaitSeconds == before.CommitWaitSeconds && vm.TestUidRoot != "1.2.3", problem);
+
+            copy.MaxAssociations = "4";
+            copy.CommitLingerSeconds = "50";
+            problem = copy.Apply();
+            check("Test settings: the rules of a run apply, such as the linger not longer than the wait", problem != null && problem.Contains("longer than the wait") && vm.CommitWaitSeconds == before.CommitWaitSeconds, problem);
+
+            copy.CommitLingerSeconds = "0";
+            copy.UidRoot = "1.02.3";
+            problem = copy.Apply();
+            check("Test settings: a bad UID root is refused", problem != null && problem.Contains("UID root"), problem);
+
+            copy.UidRoot = " 1.2.3 ";
+            copy.ResultsFolder = "  ";
+            problem = copy.Apply();
+            check("Test settings: an empty results folder is refused", problem != null && problem.Contains("folder"), problem);
+
+            var newFolder = Path.Combine(temp, "settings-dialog");
+            copy.ResultsFolder = newFolder;
+            copy.StoreSyntax = copy.StoreSyntaxChoices[1];
+            copy.ExpiredClientCertThumbprint = " ABC ";
+            problem = copy.Apply();
+            var after = vm.BuildTestRunOptions();
+            check("Test settings: OK applies every value", problem == null && vm.TestUidRoot == "1.2.3" && after.CommitWaitSeconds == 45 && after.CommitLingerSeconds == 0 && after.MaxAssociations == 4
+                && vm.TestSuite.ResultsFolder == newFolder && vm.TestSuite.SelectedStoreSyntax == copy.StoreSyntaxChoices[1] && vm.TlsExpiredClientCertThumbprint == "ABC", problem);
+
+            // Back as the rest of the section expects them.
+            vm.TestUidRoot = "2.25";
+            vm.CommitLingerSeconds = before.CommitLingerSeconds;
+            vm.CommitWaitSeconds = before.CommitWaitSeconds;
+            vm.CommitGraceSeconds = before.CommitGraceSeconds;
+            vm.LimitMaxAssociations = before.MaxAssociations;
+            vm.TestSuite.ResultsFolder = folder;
+            vm.TestSuite.SelectedStoreSyntax = vm.TestSuite.StoreSyntaxChoices[0];
+            vm.TlsExpiredClientCertThumbprint = string.Empty;
         }
 
         private static async Task RunTestSuite(int port, int closedPort, string temp, Action<string, bool, string> check)
@@ -915,6 +1004,7 @@ namespace DCST4.Tests
 
             check("The list holds the catalog without the Performance tests, none ticked", suite.Choices.Count == TestCatalog.All.Count(t => t.Category != TestCategory.Performance) && suite.Choices.All(c => !c.IsSelected), suite.Choices.Count.ToString());
             TestGroupsInTheList(suite, check);
+            TestSettingsCopy(vm, folder, check);
             foreach (var choice in suite.Choices) choice.IsSelected = choice.Test.Id == "c-echo";
 
             // ------------------------------------------------ the same content as the command line
@@ -968,7 +1058,8 @@ namespace DCST4.Tests
             await h.Execute(vm.RunTestsCommand);
             var storeCt = TestCatalog.All.Single(t => t.Id == "store-ct");
             check("Store warning: asked once, with the destination and the test that stores",
-                questions.Count == 1 && questions[0].Contains("MOCKSCP at 127.0.0.1:" + port) && questions[0].Contains("1 of the ticked tests stores") && questions[0].Contains("- " + storeCt.Name) && questions[0].Contains("not be possible to delete"),
+                questions.Count == 1 && questions[0].Contains("MOCKSCP at 127.0.0.1:" + port) && questions[0].Contains("1 of the ticked tests stores") && questions[0].Contains("- " + storeCt.Name + ": 1 examination, 1 object, about 34 KB")
+                    && questions[0].Contains("In all: 1 examination, 1 object, about 34 KB.") && !questions[0].Contains("delete"),
                 string.Join("; ", questions));
             check("Store warning: the tests that store nothing are not listed", !questions[0].Contains(TestCatalog.All.Single(t => t.Id == "query-index").Name), questions[0]);
             check("Chain: one row per object type", suite.Chain.Rows.Count == 1 && suite.Chain.Rows[0].ObjectType.Length > 0, suite.Chain.Rows.Count.ToString());
@@ -1252,6 +1343,38 @@ namespace DCST4.Tests
                     encoder.Frames.Add(BitmapFrame.Create(bitmap));
                     using (var stream = File.Create(picture)) encoder.Save(stream);
                 }
+
+                // ------------------------------------------------ every setting explains itself on hover
+                var bare = WithoutToolTip(content);
+                check("Main window: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
+                bare = WithoutToolTip((DependencyObject)new SettingsDialog().Content);
+                check("File > Settings: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
+                bare = WithoutToolTip((DependencyObject)new TlsOptionsDialog(false, string.Empty).Content);
+                check("TLS options: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
+
+                var testSettings = new TestSettingsDialog(new TestSettingsViewModel(vm));
+                var dialogContent = (FrameworkElement)testSettings.Content;
+                testSettings.Content = null;
+                dialogContent.DataContext = testSettings.DataContext;
+                dialogContent.Measure(new Size(640, 800));
+                dialogContent.Arrange(new Rect(0, 0, 640, dialogContent.DesiredSize.Height));
+                dialogContent.UpdateLayout();
+                bare = WithoutToolTip(dialogContent);
+                check("Test settings: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
+                var dialogProblems = listener.Errors.Where(e => e.Contains("TestSettingsViewModel")).ToList();
+                var boxes = LogicalDescendants(dialogContent).OfType<TextBox>().ToList();
+                if (!string.IsNullOrEmpty(picture))
+                {
+                    var size = dialogContent.DesiredSize;
+                    var dialogBitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height), 96, 96, PixelFormats.Pbgra32);
+                    dialogContent.Arrange(new Rect(size));
+                    dialogBitmap.Render(dialogContent);
+                    var dialogEncoder = new PngBitmapEncoder();
+                    dialogEncoder.Frames.Add(BitmapFrame.Create(dialogBitmap));
+                    using (var stream = File.Create(Path.ChangeExtension(picture, ".settings.png"))) dialogEncoder.Save(stream);
+                }
+                check("Test settings: every binding resolves and every box shows its value", dialogProblems.Count == 0 && boxes.Count == 10 && boxes.Where(b => b.Name != "ExpiredCertBox").All(b => b.Text.Length > 0),
+                    string.Join("\n", dialogProblems) + " " + boxes.Count);
 
                 // ------------------------------------------------ the Capabilities tab, with a real probe in it
                 Scp.Reset();

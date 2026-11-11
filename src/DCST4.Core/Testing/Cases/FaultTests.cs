@@ -30,6 +30,7 @@ namespace DCST4.Core.Testing.Cases
         public abstract string Description { get; }
         public string Group => TestGroups.Faults;
         public bool StoresObjects => true;
+        public StorageEstimate Storage => StorageEstimate.CtImages(1, 1, Matrix);
 
         /// <summary>abort-mid-dataset and so on, as written to the result file.</summary>
         protected abstract string Kind { get; }

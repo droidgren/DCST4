@@ -17,6 +17,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Sends C-ECHO and checks that the destination answers Success. Stores nothing.";
         public string Group => TestGroups.Association;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
         {

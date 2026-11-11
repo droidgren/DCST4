@@ -342,15 +342,24 @@
                     </Paragraph>
                     <Paragraph>
                         The tests are grouped: Association, Store, Query, Retrieve &amp; integrity, Storage Commitment,
-                        Duplicates, TLS, Limits and Faults. Click the arrow of a group to fold it away, and its box to tick
-                        or clear all its tests. <Bold>Check all</Bold> above the list does the same for every test, and the
+                        Duplicates, TLS, Limits and Faults. The groups start folded: click the arrow of a group to open it,
+                        and its box to tick or clear all its tests. <Bold>Check all</Bold> above the list does the same for every test, and the
                         count beside it says how many are ticked. Nothing is ticked when the program starts. Hover over a
-                        test to see what it does, what it needs, whether it stores objects and its id for the command line.
+                        test to see what it does, what it needs, what it stores and its id for the command line.
+                    </Paragraph>
+                    <Paragraph>
+                        Beside the buttons are the <Bold>Local SCP AET</Bold> and <Bold>Port</Bold> that C-MOVE and Storage
+                        Commitment reports go to. The other settings of the tests are in <Bold>Test settings...</Bold>: the UID
+                        root, the transfer syntax of the store tests, the Storage Commitment times, the settings of the limit,
+                        fault and TLS tests, and the results folder. They change only when you click <Bold>OK</Bold>, and a
+                        value that cannot be used is named and nothing is changed. Hover over a setting to see what it does.
+                        <Bold>Open results folder</Bold> opens the folder in Explorer.
                     </Paragraph>
                     <Paragraph>
                         <Bold>A run that stores objects asks first.</Bold> If any ticked test can leave new objects on the
-                        destination, DCST4 names those tests and the destination and starts only when you say yes. Assume
-                        that a PACS cannot delete what it receives.
+                        destination, DCST4 names the destination and lists those tests, each with how many examinations
+                        and objects it stores and about how much data, and then the total. The sizes are uncompressed, the
+                        most a test sends. The run starts only when you say yes.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Results</Paragraph>
                     <Table>
@@ -424,9 +433,9 @@
                         under <Bold>Server</Bold> is the one you mean. The query, retrieve and Storage Commitment tests work
                         on what the store tests of the same run stored, so tick a store test with them.
                     </Paragraph>
-                    <Paragraph Style="{StaticResource H2}">Settings on the Tests tab</Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Test settings</Paragraph>
                     <Paragraph>
-                        <Bold>UID root</Bold> is what the UIDs of the objects the tests send start with. <Bold>Store tests send
+                        In <Bold>Test settings...</Bold> on the Tests tab, <Bold>UID root</Bold> is what the UIDs of the objects the tests send start with. <Bold>Store tests send
                         in</Bold> chooses the transfer syntax. Its first choice takes it from the capability matrix for each
                         object type, from the negotiation probe in the same run or on the <Bold>Capabilities</Bold> tab, and
                         otherwise uses Explicit VR. A syntax you choose is used wherever the object type allows it.
@@ -494,9 +503,9 @@
                                 <TableCell><Paragraph>Adds a UID that no test stored. EXPECTED_FAILURE if the PACS refuses that one with a Failure Reason and commits the rest. FAIL, as a finding, if it says it committed it.</Paragraph></TableCell></TableRow>
                         </TableRowGroup>
                     </Table>
-                    <Paragraph Style="{StaticResource H2}">Settings on the Tests tab</Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Test settings</Paragraph>
                     <Paragraph>
-                        <Bold>Keep association open</Bold> is how many seconds the association of the N-ACTION stays open, so
+                        In <Bold>Test settings...</Bold> on the Tests tab, <Bold>Keep the association open</Bold> is how many seconds the association of the N-ACTION stays open, so
                         that the report can come on it. The association stays open for that long even if the report comes
                         sooner. 0 releases it at once, as many modalities do, and the report must then come on a new
                         association. <Bold>Wait for the report</Bold> is how long the report may take after the N-ACTION
@@ -557,7 +566,7 @@
                         The certificate from an unknown authority is made by DCST4 for the test and is never put in a
                         certificate store. An expired certificate must come from an authority the PACS trusts, so DCST4 cannot
                         make one. Install one in your personal certificate store and enter its thumbprint in
-                        <Bold>Expired client certificate</Bold>. Without it that test gives NOT_SUPPORTED. A PACS that does not
+                        <Bold>Expired client certificate</Bold> in <Bold>Test settings...</Bold>. Without it that test gives NOT_SUPPORTED. A PACS that does not
                         ask for a client certificate at all also gives NOT_SUPPORTED. The server certificate test reports what
                         this computer sees, so a certificate from an internal authority that is not installed here is reported
                         as not trusted.
@@ -600,7 +609,7 @@
                         <Bold>Setup</Bold> is from opening the connection until the association is accepted.
                         <Bold>Stored/s</Bold> and <Bold>MB/s</Bold> count what was stored with Success or Warning, after the
                         <Bold>Warm-up</Bold>. Errors are counted from the start, warm-up included. The images are generated and
-                        encoded before the run, and each send gets new UIDs under the UID root on the Tests tab, so generating
+                        encoded before the run, and each send gets new UIDs under the UID root in Test settings, so generating
                         them is not part of what is measured.
                     </Paragraph>
                     <Paragraph>
@@ -621,7 +630,7 @@
                     <Paragraph>
                         <Bold>Mix</Bold> chooses what is sent: small CT images, many small CR and US images, few large
                         multi-frame images, uncompressed or in JPEG Lossless. <Bold>Max PDU</Bold> is the PDU length DCST4
-                        announces and sends with. The results go to the results folder on the Tests tab, with a file of one
+                        announces and sends with. The results go to the results folder in Test settings, with a file of one
                         row per second next to them. <Bold>Cancel</Bold> stops the run within a few seconds and releases the
                         associations.
                     </Paragraph>

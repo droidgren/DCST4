@@ -99,6 +99,7 @@ namespace DCST4.Tests
             public string Description => "Records the patient naming it was given.";
             public string Group => TestGroups.Association;
             public bool StoresObjects => false;
+            public StorageEstimate Storage => null;
 
             public Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
             {

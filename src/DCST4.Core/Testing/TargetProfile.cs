@@ -57,13 +57,21 @@ namespace DCST4.Core.Testing
 
             if (LocalScpPort < 1 || LocalScpPort > 65535) return $"Local SCP port {LocalScpPort} is invalid. It must be between 1 and 65535.";
 
-            var root = UidRoot?.Trim();
+            problem = ValidateUidRoot(UidRoot);
+            if (problem != null) return problem;
+
+            if (Network.ConnectionTimeoutSeconds < 0 || Network.AssociationTimeoutSeconds < 0 || Network.ResponseTimeoutSeconds < 0) return "Timeouts cannot be negative.";
+            return null;
+        }
+
+        /// <summary>Returns what is wrong with a UID root, or null if it can be used.</summary>
+        public static string ValidateUidRoot(string uidRoot)
+        {
+            var root = uidRoot?.Trim();
             if (!ExamValidator.IsValidUid(root) || root.Length > MaxUidRootLength)
             {
                 return $"UID root '{root}' is invalid. It must be at most {MaxUidRootLength} characters, digits and dots, with no leading zeros in a component.";
             }
-
-            if (Network.ConnectionTimeoutSeconds < 0 || Network.AssociationTimeoutSeconds < 0 || Network.ResponseTimeoutSeconds < 0) return "Timeouts cannot be negative.";
             return null;
         }
 
