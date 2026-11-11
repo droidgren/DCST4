@@ -1352,6 +1352,42 @@ namespace DCST4.Tests
                 bare = WithoutToolTip((DependencyObject)new TlsOptionsDialog(false, string.Empty).Content);
                 check("TLS options: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
 
+                // Every setting names its default; the fields that describe one added tag are input, not settings.
+                var tagEditor = new[] { "TagBox", "CreatorBox", "ValueBox" };
+                var noDefault = new[] { (DependencyObject)new SettingsDialog().Content, new TestSettingsDialog(new TestSettingsViewModel(vm)).Content as DependencyObject, new TlsOptionsDialog(false, string.Empty).Content as DependencyObject }
+                    .SelectMany(LogicalDescendants).OfType<Control>()
+                    .Where(c => (c is TextBox t && !t.IsReadOnly) || c is ComboBox || c is CheckBox)
+                    .Where(c => !tagEditor.Contains(c.Name) && !(ToolTipService.GetToolTip(c) as string ?? string.Empty).Contains("\n\nDefault: "))
+                    .Select(c => c.Name).ToList();
+                check("Dialogs: every setting's tooltip ends with its default", noDefault.Count == 0, string.Join(", ", noDefault));
+                var mainNoDefault = LogicalDescendants(content).OfType<Control>()
+                    .Where(c => ((c is TextBox t && !t.IsReadOnly) || c is ComboBox || c is CheckBox) && ToolTipService.GetToolTip(c) is string)
+                    .Where(c => !((string)ToolTipService.GetToolTip(c)).Contains("\n\nDefault: ") && !(c is CheckBox box && (string)box.Content == "Check all"))
+                    .Select(c => c.Name.Length > 0 ? c.Name : System.Windows.Data.BindingOperations.GetBindingExpression(c, c is TextBox ? TextBox.TextProperty : c is ComboBox ? System.Windows.Controls.Primitives.Selector.SelectedItemProperty : System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty)?.ParentBinding.Path.Path ?? (c as ContentControl)?.Content?.ToString())
+                    .ToList();
+                check("Main window: every setting's tooltip ends with its default", mainNoDefault.Count == 0, string.Join(", ", mainNoDefault));
+
+                // ------------------------------------------------ the question before a run keeps every line whole
+                var longLine = "- C-STORE: Grayscale Softcopy Presentation State: 1 examination, 2 objects, about 36 KB. And a little more so that it is long";
+                var confirm = new ConfirmDialog("21 of the ticked tests store new test objects on MOCKSCP at 127.0.0.1:104:\n\n" + longLine + "\n\nStart the tests?");
+                var confirmContent = (FrameworkElement)confirm.Content;
+                confirm.Content = null;
+                confirmContent.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                confirmContent.Arrange(new Rect(confirmContent.DesiredSize));
+                var messageText = (TextBlock)confirm.FindName("MessageText");
+                var lineWidth = new FormattedText(longLine, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                    new Typeface(messageText.FontFamily, messageText.FontStyle, messageText.FontWeight, messageText.FontStretch), messageText.FontSize, Brushes.Black, 1.0).Width;
+                check("Question: lines are not wrapped, and the window is as wide as the longest", messageText.TextWrapping == TextWrapping.NoWrap && messageText.ActualWidth >= lineWidth - 1 && confirmContent.DesiredSize.Width > lineWidth,
+                    $"{messageText.ActualWidth:0} {lineWidth:0} {confirmContent.DesiredSize.Width:0}");
+                if (!string.IsNullOrEmpty(picture))
+                {
+                    var confirmBitmap = new RenderTargetBitmap((int)Math.Ceiling(confirmContent.DesiredSize.Width), (int)Math.Ceiling(confirmContent.DesiredSize.Height), 96, 96, PixelFormats.Pbgra32);
+                    confirmBitmap.Render(confirmContent);
+                    var confirmEncoder = new PngBitmapEncoder();
+                    confirmEncoder.Frames.Add(BitmapFrame.Create(confirmBitmap));
+                    using (var stream = File.Create(Path.ChangeExtension(picture, ".confirm.png"))) confirmEncoder.Save(stream);
+                }
+
                 var testSettings = new TestSettingsDialog(new TestSettingsViewModel(vm));
                 var dialogContent = (FrameworkElement)testSettings.Content;
                 testSettings.Content = null;
