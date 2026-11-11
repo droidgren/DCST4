@@ -296,6 +296,7 @@ namespace DCST4.ViewModels
             Verdict = null;
             Availability = null;
             Files = null;
+            LastResultFiles = null;
             SeriesVersion++;
         }
 
@@ -306,6 +307,10 @@ namespace DCST4.ViewModels
         public string Verdict { get => _verdict; private set { _verdict = value; OnPropertyChanged(); } }
         public string Availability { get => _availability; private set { _availability = value; OnPropertyChanged(); } }
         public string Files { get => _files; set { _files = value; OnPropertyChanged(); } }
+
+        /// <summary>The result files of the last run on this tab, or null if it wrote none.</summary>
+        public DCST4.Core.Testing.ResultFilePaths LastResultFiles { get => _lastResultFiles; set { _lastResultFiles = value; OnPropertyChanged(); } }
+        private DCST4.Core.Testing.ResultFilePaths _lastResultFiles;
 
         /// <summary>Fills the summary table from a finished test.</summary>
         public void Show(TestResult result)

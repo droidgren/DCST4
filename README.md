@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.9.1-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.10.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -19,6 +19,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
   * [Storage Commitment](#storage-commitment)
   * [Limits and faults](#limits-and-faults)
   * [Performance](#performance)
+  * [Reports and comparison](#reports-and-comparison)
 * [Test datasets](#test-datasets)
 * [Generated tags](#generated-tags)
 * [Test personnummer](#test-personnummer)
@@ -52,6 +53,8 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Storage Commitment:** asks the PACS to commit to what it stored, with N-ACTION, and takes its N-EVENT-REPORT either on the same association or on one the PACS opens to this computer. It records which way the PACS used, how long the report took and the Failure Reason of each instance that was not committed. See [Storage Commitment](#storage-commitment).
 - **Limits and faults:** finds how many associations the PACS holds at once, how long it keeps an idle association or a connection that never sends a request, and whether it keeps to the maximum PDU length it announces. Breaks a C-STORE off on purpose in three ways, and checks what the PACS kept and how it takes the retry. With TLS, checks that a client certificate from an unknown authority or an expired one is refused. See [Limits and faults](#limits-and-faults).
 - **Performance:** throughput and latency under load, on N parallel associations, from images encoded in advance with new UIDs for every send. A ramp of 1, 2, 4, 8 ... associations finds where the PACS saturates, a soak of hours writes snapshots as it goes and flags degradation, and time-to-available says how soon a stored image can be found. A live chart on the Performance tab, and the plan of how many objects will be stored before anything is sent. See [Performance](#performance).
+- **Reports:** every run is also written as one HTML file that is complete in itself, with the summary, the capability matrix, the chain, the integrity findings, the limits, Storage Commitment, charts of the Performance tests and the protocol timeline of each failed test. It loads nothing from the network and holds no script. See [Reports and comparison](#reports-and-comparison).
+- **Comparison of runs:** two or more saved runs against a baseline: what the PACS no longer supports, tests that now fail, and throughput and latency against a threshold, from the program or with `DCST4.Cli.exe compare`, whose exit code says whether anything regressed. A vendor fingerprint of each system, side by side, for comparing versions and vendors.
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
 - **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, Enhanced CT and MR, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
 
@@ -213,6 +216,8 @@ For TLS, add `"useTls": true` to `endpoint`, and optionally `"tlsIgnoreCertError
 DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results
 ```
 
+The same program makes reports and comparisons of saved runs, with `report` and `compare`, see [Reports and comparison](#reports-and-comparison).
+
 `--tests` takes test ids, categories (`Capability`, `Integrity`, `Limits`, `Performance`) or `all`, separated by commas. `all` leaves out the `Performance` tests, see [Performance](#performance). `--log-dir` chooses another folder for the log. Ctrl+C cancels the run and saves what was finished. A second Ctrl+C ends the program at once. Cancelling while a connection is being opened can take as long as the connection timeout.
 
 **`all` and the `Integrity` category include tests that store objects on the destination**, and those objects may not be possible to delete. Check the profile before running them. `--seed`, `--matrix`, `--transfer-syntax` and `--index-wait` apply to those tests, see [Store, query and retrieve](#store-query-and-retrieve), and `--commit-linger`, `--commit-wait` and `--commit-grace` to the Storage Commitment tests, see [Storage Commitment](#storage-commitment).
@@ -228,7 +233,7 @@ DCST4.Cli.exe run --profile target.json --tests c-echo --out C:\Temp\results
 
 ### Result files
 
-Each run writes `DCST4-run-<UTC time>.json` with full detail and a `.csv` with one row per result. Both are UTF-8 and independent of the computer's language settings, and they hold a schema version, the tool version, the destination and the start and end time. The client certificate thumbprint is never written to them.
+Each run writes `DCST4-run-<UTC time>.json` with full detail, a `.csv` with one row per result, and a `.html` report for reading, see [Reports and comparison](#reports-and-comparison). The JSON and CSV files are UTF-8 and independent of the computer's language settings, and they hold a schema version, the tool version, the destination and the start and end time. The client certificate thumbprint is never written to them.
 
 Two runs of the same tests with the same seed differ only in the times and durations, from the program or the command line alike. A run that generates data draws a new seed unless one is given, and writes it to the JSON file. Without generated data there is no seed, and two identical runs still differ only in the times.
 
@@ -506,6 +511,96 @@ DCST4.Cli.exe run --profile target.json --tests load-ramp --out C:\Temp\results 
 DCST4.Cli.exe run --profile target.json --tests load-soak --out C:\Temp\results --soak-duration 8h --soak-rate 5 --load-associations 2
 ```
 
+### Reports and comparison
+
+**The report.** Every run writes `DCST4-run-<UTC time>.html` beside its JSON file, from the program and from the command line alike. **Open report** on the Tests tab and on the Performance tab opens the report of the last run in the browser. `DCST4.Cli.exe report` makes it again from a saved JSON file, also one from an earlier version of DCST4:
+
+```powershell
+DCST4.Cli.exe report --run C:\Temp\results\DCST4-run-20261111-134244-300.json
+DCST4.Cli.exe report --run old-run.json --out C:\Temp\old-run.html
+```
+
+![The top of a report of a run against the mock SCP](screenshots/report.png)
+
+The report is one file that is complete in itself, so it can be mailed, archived or attached to a ticket as it is. It has its style sheet inside, **no script at all**, and loads no font, image or style sheet from anywhere. It holds:
+
+| Section | What it shows |
+| ------- | ------------- |
+| Target and run | The destination, the DCST4 version, the schema version, the times and the seed |
+| Summary | The number of results of each class, and every test with its raw statuses, its explanation and, folded, its details and UIDs |
+| Vendor fingerprint | See below |
+| Capability matrix | SOP classes against transfer syntaxes, with the associations of the probe and the role selection and extended negotiation replies folded |
+| Chain | Accepted, indexed, retrievable, intact and committed per object type, with the explanation of each step that did not pass |
+| Integrity | Each level per object type and retrieve, the pixel verdict with the largest and mean difference, what was transcoded, and the attribute differences, at most 200 per set. Attributes that the PACS only added are counted |
+| Limits, faults and TLS | The association limit and how the next one was refused, how idle associations and connections were ended, the PDU attempts, each fault with the state after it and the retry, and the TLS session |
+| Storage Commitment | The N-ACTION status, where the report came and after how long, the Event Type, each instance that was not committed with its Failure Reason, and the reports that DCST4 refused |
+| Performance | The settings, the plan, the tables, and charts as inline SVG: stored and failed per second and latency p50 and p95 for a load run, throughput and p95 latency per step for a ramp, and per window for a soak |
+| Timelines | Every protocol step of each test that ended in `FAIL`, `TIMEOUT` or `TOOL_ERROR`, at most 300 steps per test |
+
+The chart of a `load-throughput` run is drawn from its series file, `DCST4-run-<start>-load-throughput.csv`, so keep that file beside the JSON file. Without it the report says so and has the tables only. The charts of a ramp and a soak come from the JSON file itself.
+
+**Text from the PACS is shown as text.** Much of a result comes from the system under test: Error Comments, AE titles, version names, attribute values. Everything in the report is HTML-encoded on the way in, so markup in an Error Comment appears as the characters it is and is never run or fetched. The report also carries a Content-Security-Policy that allows nothing but its own style sheet, as a second line of defence.
+
+**Vendor fingerprint.** A table of who answered and how it behaves, as opposed to whether each test passed. It is meant for comparing versions and vendors, for example in a procurement. Each row names the test it came from, and says `not tested` when no test of the run could tell, so the fingerprint is as complete as the run.
+
+| Group | What it says |
+| ----- | ------------ |
+| Identity | Implementation Class UID, Implementation Version Name and the maximum PDU length the system announces. From `negotiation-probe`, or without it from the first association of any test |
+| Negotiation | How many SOP classes and combinations it accepts and in which transfer syntaxes, answers that break the negotiation rules, SCP/SCU role selection, extended negotiation, and whether an unknown calling or a wrong called AE title is refused |
+| Storage and retrieve | Whether objects come back in the transfer syntax they were sent in and where it transcodes, attributes changed with and without Original Attributes Sequence, attributes it adds, private attributes, Specific Character Set, pixel data, C-GET and C-MOVE, and what it does with a duplicate, changed content and two patients in one study |
+| Storage Commitment | Whether it is supported, on which association the report comes, how long it took, and what it says about an instance that was never stored |
+| Limits and faults | The number of simultaneous associations and how the next one is refused, how and when an idle association and a connection without a request are ended, whether it keeps to the maximum PDU length, what it keeps after each kind of broken transfer and how it takes the retry, and the TLS version and cipher |
+| Performance | Throughput and p95 latency of `load-throughput`, and where `load-ramp` found saturation |
+
+Measured times, such as the idle timeout or the throughput, are marked as measured.
+
+**Comparing runs.** **Compare runs...** on the Tests tab opens a list of saved runs. **Add...** chooses result files from the results folder, the run at the top is the baseline, and **Move up** and **Move down** change the order. **Compare** compares each of the other runs with the baseline, writes `DCST4-compare-<UTC time>.html` to the results folder and opens it. **Open report** in the same window opens the report of the selected run. On the command line:
+
+```powershell
+DCST4.Cli.exe compare --runs before.json after.json
+DCST4.Cli.exe compare --runs baseline.json monday.json tuesday.json --threshold 20 --out C:\Temp\week.html
+```
+
+![A comparison of two runs against the mock SCP, with one regression](screenshots/compare.png)
+
+`--threshold` is in percent, 10 by default, more than 0 and at most 1000. Without `--out` the page is written to the folder of the last run. Each line of the output is one difference, and the last line counts them:
+
+```
+Baseline: before: PACS at pacs.example.org:104, 2026-11-10 08:00:12 UTC, DCST4 1.10.0, 14 tests
+
+Compared: after: PACS at pacs.example.org:104, 2026-11-11 08:00:09 UTC, DCST4 1.10.0, 14 tests
+  REGRESSION      Capability: CT Image Storage: Accepted -> no longer accepted: JPEG LL (TransferSyntaxNotSupported) (1.2.840.10008.5.1.4.1.1.2)
+  REGRESSION      Performance: load-throughput, run: Latency p95: 31.2 ms -> 93.6 ms (+200.0 %)
+
+2 regressions with a threshold of 10 %.
+```
+
+| Exit code of `compare` | Meaning |
+| ---------------------- | ------- |
+| 0 | No regression |
+| 1 | At least one regression |
+| 2 | Bad arguments, fewer than two runs, or a file that cannot be read or written |
+
+`report` returns 0 when the report is written and 2 otherwise. It does not look at the results of the run.
+
+**What is compared.** Tests are matched by their id, object types by their name, cells of the capability matrix by SOP class and transfer syntax, and ramp steps by their number of associations. Each difference is one of four kinds:
+
+| Kind | What it is |
+| ---- | ---------- |
+| Regression | A test or a chain step that did worse: the result classes rank as `PASS` and `EXPECTED_FAILURE`, then `NOT_SUPPORTED`, then `FAIL` and `TIMEOUT`, and a move down is a regression |
+| | A combination of SOP class and transfer syntax that was `Accepted` and now has another answer |
+| | A load test whose stored per second fell, or whose p95 latency or p95 time-to-available rose, by more than the threshold. A latency must also have risen by at least 1 ms, since a percentage of less says more about the clock than about the PACS |
+| | A load test whose error rate rose by more than 1 percentage point |
+| Improvement | The same moves the other way |
+| Difference | Another result of the same rank, such as `FAIL` to `TIMEOUT`, the same result from other raw statuses, a context rejected for another reason, another role selection or extended negotiation reply, and a row of the fingerprint that differs |
+| Not comparable | A test that only one of the runs has, one that ended in `INDETERMINATE` or `TOOL_ERROR` in either run, a matrix cell that one of the runs got no answer about, and a load test whose settings differ. None of these is ever counted against the PACS |
+
+The other numbers of a load test, MB per second, latency p50, p99 and maximum and association setup, are shown with their change and marked when they pass the threshold, but are never regressions, since they are noisy in a short run. The fingerprints of all the runs are side by side at the end of the page.
+
+**What is never compared**: start and end times, durations, offsets in a timeline, the seed, every UID, file paths, the wording of an explanation, the destination and the DCST4 version. So a run compared with itself, and two runs of the same tests against the same system, show no differences. Two runs against different systems can be compared just the same, which is what the fingerprint is for.
+
+**Read the comparison with care for performance.** Throughput and latency vary from run to run against the same system, see the Orthanc notes under [Checking with another toolkit](#checking-with-another-toolkit). Compare several runs before trusting a difference, and raise the threshold for short runs.
+
 ## Test datasets
 
 The test suite works with datasets that can be generated again, unlike Generate & Send, where every run gets new UIDs and the current date. `DCST4.Cli.exe generate` writes a dataset as a DICOM File-set with a DICOMDIR and a `manifest.json`:
@@ -586,9 +681,10 @@ src\DCST4.Core\     No WPF reference
   Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
   Verification\     IntegrityOracle and IntegrityReport: what came back against what was sent
   Output\           DICOM File-set and DICOMDIR
+  Reporting\        RunFile (reads a result file back), RunReportWriter and ComparisonReportWriter (HTML), HtmlWriter (the one place where text is encoded), SvgChart, VendorFingerprint, RunComparer, ReportFiles
   Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestGroups, TestResult, ResultFileWriter
     Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category, PerformanceTests.cs the Performance category
-src\DCST4.App\      WPF app. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Test settings dialog is TestSettingsDialog.xaml with ViewModels\TestSettingsViewModel.cs, a copy applied at OK. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs
+src\DCST4.App\      WPF app. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Test settings dialog is TestSettingsDialog.xaml with ViewModels\TestSettingsViewModel.cs, a copy applied at OK. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs, the Compare runs dialog CompareRunsDialog.xaml with ViewModels\CompareRunsViewModel.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
 tools\              List refresh script
@@ -611,6 +707,8 @@ Storage Commitment is in `Network\StorageCommitment.cs`. `StorageCommitmentServi
 The Limits tests are built on `Network\RawAssociation.cs`, which opens a socket, writes the A-ASSOCIATE-RQ, P-DATA-TF, A-RELEASE-RQ and A-ABORT PDUs by hand and reads what comes back on a task of its own, so that an abort or a closed connection is seen with its time even while nothing is being awaited. It knows C-ECHO and C-STORE and nothing else. `RawSupport` in `LimitTests.cs` opens one with the profile's TLS settings and holds what the three case files share, and `CloseOn` makes a cancel send an A-ABORT and close the socket. TLS goes through an `ITlsInitiator` in both worlds: `RecordingTlsInitiator` wraps the one an ordinary send uses and reads the version from the `SslStream`, and `TestTlsInitiator` presents a chosen client certificate through a selection callback, because .NET otherwise leaves out a certificate whose issuer the server did not list. What these tests find goes in `TestResult.Limits` (`Testing\LimitsResult.cs`). In the test harness, `ObservingAcceptor` puts a stream between the socket and the mock SCP through fo-dicom's TLS acceptor hook, without TLS, and that stream is where the mock's ARTIM and idle timers, its enforced maximum PDU length and its record of partial stores live, since fo-dicom's server has no hook for them. The association ceiling is in `MockStorageScp` itself.
 
 The Performance tests are in `Testing\Cases\PerformanceTests.cs`, on an engine in `Performance\`. `LoadTestBase` builds an `InstancePool` from a `DataMix` with `TestDatasetGenerator`, splitting each object at Pixel Data: the attributes before it are a template, and Pixel Data with what follows is encoded once into bytes that every send shares. `LoadEngine` starts one worker per association on `RawAssociation`, which got `SendDatasetAsync` with a list of segments, copying each PDU into one buffer the association keeps, and a timestamp (`RawEvent.AtTicks`, `RawDimseReply.ArrivedTicks`) taken in the read loop when a PDU is complete. Each worker has a `UidStamper` that puts new UIDs in its own copy of the template and encodes that before the clock starts. A worker claims an instance from the run's budget before it opens an association, so it never opens one it has nothing to send on. `RateGate` hands out send times shared by all workers. Everything is recorded in a `MetricsCollector`, by the second in which the response arrived, and a ticker in the engine closes each second, passes it to the test through `TestContext.ReportMetrics`, which `TestRunner` raises as a `TestProgress` with the stage `Metrics`, and closes the soak windows. `SaturationDetector` and `DegradationDetector` are pure functions on the steps and windows, and the harness checks them on fixed input. `AvailabilityPoller` uses `QueryService.FindManyAsync`, several C-FINDs on one fo-dicom association, which `DimseRunner` now takes as a list. What the tests measure goes in `TestResult.Performance` (`Testing\PerformanceResult.cs`), and `TestRunOptions.Load` and `MetricsFolder` carry the settings and where the series files go. Result files have schema version 6, and their doubles are written with at most 15 significant digits (`ShortDoubleConverter`). In the test harness, the mock SCP receives C-STOREs into memory for these tests (`Scp.ReceiveInMemory`), since fo-dicom's temporary file per C-STORE, with a virus scanner, added about 40 ms to each one and hid the scripted delay. It can also limit how many stores it processes at once (`Scp.StoreConcurrency`), which is how the ramp test sees a PACS saturate.
+
+Reports and comparisons are in `Reporting\`, which reads only what a result file holds, so a saved run gives the same report as a new one and nothing in it needs the network. `RunFile.Load` reads the JSON back into the `TestRunReport` that `ResultFileWriter` wrote, for any schema version up to the current one, and refuses a newer one. `Testing\` knows nothing of `Reporting\`: the front-ends call `ReportFiles.WriteRun`, which writes the result files and then the report, so a report that cannot be written loses no results. Every character of a page goes through `HtmlWriter`: element and attribute names must be plain names and come from the code, and every value, also our own, is encoded by `HtmlWriter.Encode`, which also replaces control characters and lone surrogates. There is no method that writes a value unencoded, and the only raw text is the style sheet, a constant in `HtmlPage`. The pages have no script, so folding is `<details>` and the hover text of a chart is an SVG `<title>`. The harness reads each page with a small scanner that accepts only the tags and attributes the writers use, which is how a new element that could fetch or run something would be noticed. `SvgChart` draws line and column charts with one y axis each, in colours that the style sheet defines for light and dark. `VendorFingerprint.From` turns a run into rows with a stable `Key`, which `RunComparer` matches runs by, and a `Measured` flag for times, which are shown and never compared. Without a capability matrix it reads the implementation from the detail of the first received A-ASSOCIATE-AC in a timeline, `Max PDU n, implementation <uid> <version>`, which `AssociationTimeline` and `RawAssociation` both write, so that text is now something a result depends on. `RunComparer` compares only what it names, field by field, and never the whole JSON, which is why times and UIDs cannot become differences. A new field that should count must be added there. In the app, the Compare runs dialog only collects the choices, and `MainViewModel.CompareRunsAsync` and `OpenSavedReportAsync` do the work through `RunBusyAsync`. `MainViewModel.OpenDocument` is what starts the browser, and the harness replaces it, as it does `Confirm`.
 
 Generation knows nothing about sending. The two meet at `IImageSource`, which supplies images lazily so that a long stack does not sit in memory. That leaves room for:
 
@@ -669,6 +767,9 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe perf
 
 # Only the Storage Commitment tests
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe commit
+
+# Only the report and comparison tests
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe report
 ```
 
 JPEG Lossless streams are checked with a small decoder written from ITU T.81 (`LosslessJpegDecoder.cs`). fo-dicom's built-in decoder is not used as the reference, because it was seen returning 0 for the last pixel of a frame that this decoder and PureCodecs both decode correctly.
@@ -758,7 +859,7 @@ What this means for a reader: compare a system with itself only over several run
 | fo-dicom 5.2.6           | DICOM                                                        | MS-PL      |
 | FoDicom.PureCodecs 0.5.1 | JPEG, JPEG-LS, JPEG 2000, HTJ2K and RLE. Managed code, no native DLL. Pre-1.0. | MS-PL      |
 | Serilog                  | Logging                                                      | Apache-2.0 |
-| System.Text.Json         | Target profiles, result files and manifests. Comes with fo-dicom. | MIT        |
+| System.Text.Json         | Target profiles, result files and manifests, and reading result files back for reports. Comes with fo-dicom. | MIT        |
 
 ## Files
 
@@ -768,6 +869,8 @@ What this means for a reader: compare a system with itself only over several run
 | Log, kept for 7 days               | `%LocalAppData%\DCST4\Logs\`, `Cli-*.log` for the command line |
 | Test results from the program      | `%LocalAppData%\DCST4\TestRuns\`, or the folder in Test settings |
 | Test results from the command line | The folder given with `--out`                                  |
+| Report of a run                    | Next to its result files, as `DCST4-run-<start>.html`          |
+| Comparison of runs                 | From the program, `DCST4-compare-<time>.html` in the results folder. From the command line, in the folder of the last run or where `--out` says |
 | Capability matrix of a run         | Next to its result files, as `<run>-capability.json` and `.csv` |
 | Chain summary of a run             | In the JSON file, and next to it as `<run>-chain.csv`          |
 | Objects sent and retrieved by a run | From the command line, `work-<time>` under `--out`. From the program, a temporary folder that is removed |
@@ -775,10 +878,21 @@ What this means for a reader: compare a system with itself only over several run
 
 ## Changelog
 
-### Unreleased
+### 1.10.0
+
+New:
+
+- Every run writes a report beside its result files, `DCST4-run-<time>.html`: one file that is complete in itself, with no script and nothing loaded from the network. It holds the destination and tool version, the results by class, the capability matrix, the chain per object type, the integrity findings, the limits found, Storage Commitment, charts and tables of the Performance tests, and the protocol timeline of each test that failed
+- Everything in a report is HTML-encoded, so markup in an Error Comment or any other text from the PACS is shown as text and is never run or fetched
+- A vendor fingerprint in the report: Implementation Class UID and Version Name, and how the system behaves in negotiation, transcoding, coercion, duplicates, Storage Commitment, association limit, timeouts, broken transfers and TLS, each with the test it came from
+- Comparison of two or more saved runs against a baseline, as an HTML page: combinations of SOP class and transfer syntax that are no longer accepted, tests and chain steps that did worse, and throughput, latency and error rate against a threshold, with improvements, other differences and what cannot be compared listed apart, and the fingerprints side by side. Times, UIDs, the seed and the wording of explanations are never compared
+- `DCST4.Cli.exe report --run <file>` writes the report of a saved run, and `DCST4.Cli.exe compare --runs <a> <b> [...] [--threshold 10]` compares runs and exits with 1 when anything regressed
+- **Open report** on the Tests tab and the Performance tab opens the report of the last run in the browser
+- **Compare runs...** on the Tests tab chooses saved runs, their order and the threshold, compares them and opens the result. It also opens the report of any saved run
 
 Changed:
 
+- `DCST4.Cli.exe run` prints the path of the report after the JSON and CSV files
 - The plan before a Performance test, on the tab and on the command line, no longer ends with "They may not be possible to delete."
 
 ### 1.9.1

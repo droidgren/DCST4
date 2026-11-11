@@ -10,6 +10,8 @@ namespace DCST4.Cli
         public const string Usage =
             "Usage:\n" +
             "  DCST4.Cli.exe run --profile <file> --tests <ids|category|all> --out <folder> [options of run]\n" +
+            "  DCST4.Cli.exe report --run <file.json> [--out <file.html>]\n" +
+            "  DCST4.Cli.exe compare --runs <a.json> <b.json> [<c.json> ...] [--threshold <percent>] [--out <file.html>]\n" +
             "  DCST4.Cli.exe generate --dataset <id> --out <folder> [options below]\n" +
             "  DCST4.Cli.exe list-datasets\n" +
             "  DCST4.Cli.exe list-codecs [--log-dir <folder>]\n" +
@@ -62,7 +64,14 @@ namespace DCST4.Cli
             "  --charset default|empty|latin1|utf8\n" +
             "  --edge private,long,nested\n" +
             "\n" +
-            "Exit codes: 0 no FAIL or TOOL_ERROR, 1 at least one of those, 2 bad arguments, profile or output folder, 130 cancelled.";
+            "report writes a run as one HTML file that is complete in itself, beside the JSON file unless --out says otherwise.\n" +
+            "run writes the same file by itself. compare takes the first run as the baseline and writes DCST4-compare-<time>.html\n" +
+            "in the folder of the last run, unless --out says otherwise.\n" +
+            "  --threshold <percent>   How much lower a throughput or higher a p95 latency may be before it is a regression. Default 10\n" +
+            "\n" +
+            "Exit codes of run: 0 no FAIL or TOOL_ERROR, 1 at least one of those, 2 bad arguments, profile or output folder, 130 cancelled.\n" +
+            "Exit codes of compare: 0 no regression, 1 at least one regression, 2 bad arguments or a file that cannot be read.\n" +
+            "Exit codes of report: 0 written, 2 bad arguments or a file that cannot be read or written.";
 
         public string ProfilePath { get; private set; }
         public string Tests { get; private set; }

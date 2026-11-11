@@ -171,6 +171,10 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("")]
         public string TlsExpiredClientCertThumbprint { get => (string)this[nameof(TlsExpiredClientCertThumbprint)]; set => this[nameof(TlsExpiredClientCertThumbprint)] = value; }
 
+        /// <summary>How much worse a throughput or a p95 latency may be in a comparison of runs, in percent, before it is a regression.</summary>
+        [UserScopedSetting, DefaultSettingValue("10")]
+        public double CompareThresholdPercent { get => (double)this[nameof(CompareThresholdPercent)]; set => this[nameof(CompareThresholdPercent)] = value; }
+
         /// <summary>The settings of the Performance tab, as the JSON of a LoadSettings. Empty = the defaults.</summary>
         [UserScopedSetting, DefaultSettingValue("")]
         public string PerformanceSettings { get => (string)this[nameof(PerformanceSettings)]; set => this[nameof(PerformanceSettings)] = value; }

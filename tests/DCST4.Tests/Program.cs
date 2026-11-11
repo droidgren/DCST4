@@ -127,14 +127,15 @@ namespace DCST4.Tests
                 return _fail == 0 ? 0 : 1;
             }
 
-            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit"))
+            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit" || args[0] == "report"))
             {
                 try
                 {
                     using (DicomServerFactory.Create<MockStorageScp>(Port))
                     {
+                        if (args[0] == "report") ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve") RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
-                        CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                        if (args[0] != "report") CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     }
                 }
                 catch (Exception ex)
@@ -183,6 +184,7 @@ namespace DCST4.Tests
                     TestDataTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                     CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                    ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                     ViewModelTests.Run(Port, ClosedPort, temp, (name, ok, detail) => Check(name, ok, detail));
                 }
                 TestTls().GetAwaiter().GetResult();

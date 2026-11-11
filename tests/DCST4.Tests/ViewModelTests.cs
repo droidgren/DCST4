@@ -33,6 +33,8 @@ namespace DCST4.Tests
             public readonly List<string> Messages = new List<string>();
             public int Saves;
             public bool ConfirmAnswer = true;
+            /// <summary>What the view model wanted opened in the browser. Nothing is ever started by the tests.</summary>
+            public readonly List<string> Opened = new List<string>();
 
             public Harness(int port)
             {
@@ -42,6 +44,7 @@ namespace DCST4.Tests
                     SaveSettings = () => Saves++,
                 };
                 Vm.Confirm = _ => ConfirmAnswer;
+                Vm.OpenDocument = path => Opened.Add(path);
                 Vm.ServerHost = "127.0.0.1";
                 Vm.ServerPort = port;
                 Vm.ServerAET = "MOCKSCP";
@@ -94,6 +97,7 @@ namespace DCST4.Tests
                         await RunSizeEstimate(port, check);
                         RunHelpWindow(check);
                         await RunTestSuite(port, closedPort, temp, check);
+                        await RunReports(port, temp, check);
                         await RunPerformanceTab(port, temp, check);
                         await RunResetSettings(port, check);
                     }
@@ -132,6 +136,9 @@ namespace DCST4.Tests
                 vm.Performance.SelectedMode = vm.Performance.Modes[2];
                 vm.Performance.Associations = 13;
                 vm.TestSuite.ResultsFolder = @"C:\Temp\DCST4 reset";
+                settings["CompareThresholdPercent"] = 25.0;
+                vm.Comparison.ReloadFromSettings();
+                var thresholdBefore = vm.Comparison.ThresholdText;
                 vm.TestSuite.SelectedStoreSyntax = vm.TestSuite.StoreSyntaxChoices[1];
                 vm.TestSuite.Choices[0].IsSelected = true;
                 vm.BurnInText = true;
@@ -153,6 +160,7 @@ namespace DCST4.Tests
                     && vm.TestSuite.SelectedStoreSyntax == vm.TestSuite.StoreSyntaxChoices[0] && vm.TestSuite.Choices.All(c => !c.IsSelected), vm.TestSuite.ResultsFolder);
                 check("Confirmed: the Performance tab is the defaults", vm.Performance.SelectedMode == vm.Performance.Modes[0] && vm.Performance.Associations == Core.Performance.LoadSettings.DefaultAssociations, vm.Performance.Associations.ToString());
                 check("Confirmed: the exam and File > Settings are the defaults", vm.SelectedModality.Code == "CT" && vm.SeriesCount == 1 && !vm.BurnInText && (string)settings["TestPatientNaming"] == "MarkedTestName" && (int)settings["ResponseTimeoutSeconds"] == 60, (string)settings["TestPatientNaming"]);
+                check("Confirmed: the comparison threshold is the default", thresholdBefore == "25" && vm.Comparison.ThresholdText == "10" && (double)settings["CompareThresholdPercent"] == 10, vm.Comparison.ThresholdText);
                 check("Confirmed: the saved destination profiles are kept", (string)settings["ConnectionProfiles"] == "<kept on purpose/>", null);
                 check("Confirmed: saved once, and every binding told", h.Saves == savesBefore + 1 && raised.Contains(string.Empty) && vm.StatusText.Contains("reset"), vm.StatusText);
 
@@ -721,7 +729,7 @@ namespace DCST4.Tests
             help.UpdateLayout();
             try
             {
-                check("All the topics are listed", help.Topics.Count == 20 && help.Topics.Any(t => t.Title == "Limits and faults") && help.Topics.Any(t => t.Title == "Performance"), help.Topics.Count.ToString());
+                check("All the topics are listed", help.Topics.Count == 21 && help.Topics.Any(t => t.Title == "Limits and faults") && help.Topics.Any(t => t.Title == "Performance") && help.Topics.Any(t => t.Title == "Reports and comparison"), help.Topics.Count.ToString());
                 check("Topic titles are unique", help.Topics.Select(t => t.Title).Distinct().Count() == help.Topics.Count, null);
                 check("Estimated size is explained", new System.Windows.Documents.TextRange(help.Topics[2].Section.ContentStart, help.Topics[2].Section.ContentEnd).Text.Contains("Estimated size"), null);
 
@@ -801,6 +809,81 @@ namespace DCST4.Tests
                 if (found != null) return found;
             }
             return null;
+        }
+
+        /// <summary>Open report and Compare runs, without a browser: what would be opened is recorded.</summary>
+        private static async Task RunReports(int port, string temp, Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nReports and comparison in the program");
+            var h = new Harness(port);
+            var vm = h.Vm;
+            var suite = vm.TestSuite;
+            suite.ResultsFolder = Path.Combine(temp, "reports-app");
+            foreach (var choice in suite.Choices) choice.IsSelected = choice.Test.Id == "c-echo";
+
+            check("Before a run there is no report to open", !vm.OpenReportCommand.CanExecute(null) && !vm.OpenPerformanceReportCommand.CanExecute(null), null);
+
+            Scp.Reset();
+            await h.Execute(vm.RunTestsCommand);
+            var first = suite.LastResultFiles;
+            check("A run writes its report beside the result files", first?.Html != null && File.Exists(first.Html) && first.Html == Path.ChangeExtension(first.Json, ".html"), vm.StatusText);
+            check("Nothing is opened by the run itself", h.Opened.Count == 0, string.Join("; ", h.Opened));
+
+            await h.Execute(vm.OpenReportCommand);
+            check("Open report: opens the report of the last run, with no dialog", h.Opened.Count == 1 && h.Opened[0] == first.Html && h.Messages.Count == 0 && !vm.IsBusy, string.Join("; ", h.Opened.Concat(h.Messages)));
+            var html = File.ReadAllText(first.Html, Encoding.UTF8);
+            check("Open report: the page is the run, complete in itself", html.Contains("MOCKSCP") && html.Contains("c-echo") && ReportingTests.Scan(html, out _).Count == 0, null);
+
+            File.Delete(first.Html);
+            h.Opened.Clear();
+            await h.Execute(vm.OpenReportCommand);
+            check("Open report: a report that is gone is made again from the JSON file", h.Opened.Count == 1 && File.Exists(first.Html), vm.StatusText);
+
+            await h.Execute(vm.RunTestsCommand);
+            var second = suite.LastResultFiles;
+            h.Opened.Clear();
+
+            var choices = vm.Comparison;
+            check("Compare: the threshold starts at the default", choices.ThresholdText == "10" && !choices.CanCompare, choices.ThresholdText);
+            var skipped = choices.Add(new[] { first.Json, second.Json, first.Json, Path.ChangeExtension(first.Json, null) + "-capability.json", first.Csv });
+            check("Compare: runs are added once, and files that are not runs are left out", choices.Runs.Count == 2 && skipped == 2 && choices.CanCompare && choices.Hint.Contains("1 run(s)"), choices.Hint);
+            choices.SelectedRun = second.Json;
+            choices.MoveSelected(-1);
+            check("Compare: Move up makes the run the baseline", choices.Runs[0] == second.Json && choices.SelectedRun == second.Json, null);
+            choices.MoveSelected(-1);
+            choices.MoveSelected(1);
+            check("Compare: and Move down puts it back", choices.Runs[0] == first.Json && choices.Runs[1] == second.Json, null);
+
+            choices.ThresholdText = "ten";
+            check("Compare: a threshold that is no number is named", (choices.Validate(out _) ?? string.Empty).Contains("'ten'"), choices.Validate(out _));
+            choices.ThresholdText = "0";
+            check("Compare: a threshold of 0 is refused", choices.Validate(out _) != null, null);
+            choices.ThresholdText = " 12,5 % ";
+            var problem = choices.Validate(out var threshold);
+            check("Compare: a comma and a percent sign are understood", problem == null && threshold == 12.5, problem);
+
+            await h.Execute(new DCST4.Infrastructure.RelayCommand(async _ => await vm.CompareRunsAsync(choices.Runs.ToList(), threshold)));
+            var written = Directory.GetFiles(suite.ResultsFolder, "DCST4-compare-*.html");
+            check("Compare: writes the comparison to the results folder and opens it", written.Length == 1 && h.Opened.Count == 1 && h.Opened[0] == written[0] && h.Messages.Count == 0, vm.StatusText + " " + string.Join("; ", h.Messages));
+            var page = written.Length == 1 ? File.ReadAllText(written[0], Encoding.UTF8) : string.Empty;
+            check("Compare: two runs of the same test have no differences, and the status says so", page.Contains("No differences.") && vm.StatusText.StartsWith("No differences.") && vm.LastRunText == "No regressions"
+                && ReportingTests.Scan(page, out _).Count == 0, vm.StatusText);
+            check("Compare: went through the busy state and is idle again", !vm.IsBusy && vm.OpenReportCommand.CanExecute(null), null);
+
+            h.Opened.Clear();
+            await h.Execute(new DCST4.Infrastructure.RelayCommand(async _ => await vm.CompareRunsAsync(new[] { first.Json }, 10)));
+            check("Compare: one run is refused with a message, and nothing is opened", h.Messages.Count == 1 && h.Messages[0].Contains("at least two") && h.Opened.Count == 0, string.Join("; ", h.Messages));
+            h.Messages.Clear();
+            await h.Execute(new DCST4.Infrastructure.RelayCommand(async _ => await vm.CompareRunsAsync(new[] { first.Json, first.Csv }, 10)));
+            check("Compare: a file that is not a run is named in a message, not a crash", h.Messages.Count == 1 && h.Messages[0].Contains("is not a DCST4 result file") && h.Opened.Count == 0 && !vm.IsBusy, string.Join("; ", h.Messages));
+            h.Messages.Clear();
+            await h.Execute(new DCST4.Infrastructure.RelayCommand(async _ => await vm.OpenSavedReportAsync(Path.Combine(suite.ResultsFolder, "none.json"))));
+            check("Open report of a run that is gone: a message, not a crash", h.Messages.Count == 1 && h.Messages[0].Contains("Could not read") && h.Opened.Count == 0, string.Join("; ", h.Messages));
+
+            choices.SelectedRun = first.Json;
+            choices.RemoveSelected();
+            check("Compare: Remove takes the run out of the list and leaves the file", choices.Runs.Count == 1 && choices.SelectedRun == second.Json && File.Exists(first.Json) && !choices.CanCompare, null);
+            Scp.Reset();
         }
 
         private static async Task RunPerformanceTab(int port, string temp, Action<string, bool, string> check)
