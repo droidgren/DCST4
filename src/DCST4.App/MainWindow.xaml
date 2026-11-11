@@ -331,7 +331,7 @@
                             <Button DockPanel.Dock="Right" Content="Compare runs..." Width="100" Margin="6,0,0,0" Click="CompareRunsButton_Click" IsEnabled="{Binding IsIdle}"
                                     ToolTip="Compare saved runs with each other: what the system no longer supports, tests that now fail, and throughput and latency against a threshold. Also opens the report of any saved run"/>
                             <Button DockPanel.Dock="Right" Content="Open report" Width="85" Command="{Binding OpenReportCommand}"
-                                    ToolTip="Open the report of the last run in the browser: one HTML file with the summary, the capability matrix, the chain, the findings and the timelines of failed tests. It is saved beside the result files" ToolTipService.ShowOnDisabled="True"/>
+                                    ToolTip="Open the report of the last run in the browser: one HTML file with the summary, the capability matrix, the chain, the findings and the timelines of failed tests. It is saved beside the result files. If the button is greyed out after a run, both the JSON file and the HTML report are turned off in Test settings" ToolTipService.ShowOnDisabled="True"/>
                             <TextBlock/>
                         </DockPanel>
                         <Grid>

@@ -28,6 +28,10 @@ namespace DCST4.ViewModels
             ArtimWaitSeconds = Text(main.LimitArtimWaitSeconds);
             FaultSettleSeconds = Text(main.FaultSettleSeconds);
             ExpiredClientCertThumbprint = main.TlsExpiredClientCertThumbprint;
+            WriteJson = main.WriteResultJson;
+            WriteCsv = main.WriteResultCsv;
+            WriteHtml = main.WriteResultHtml;
+            KeepDays = Text(main.ResultsKeepDays);
         }
 
         public string UidRoot { get; set; }
@@ -42,6 +46,11 @@ namespace DCST4.ViewModels
         public string ArtimWaitSeconds { get; set; }
         public string FaultSettleSeconds { get; set; }
         public string ExpiredClientCertThumbprint { get; set; }
+        public bool WriteJson { get; set; }
+        public bool WriteCsv { get; set; }
+        public bool WriteHtml { get; set; }
+        /// <summary>Result files older than this many days are deleted after a run. 0 keeps everything.</summary>
+        public string KeepDays { get; set; }
 
         /// <summary>Checks every value and, if all can be used, applies them. Returns the first problem, or null when applied.</summary>
         public string Apply()
@@ -59,6 +68,12 @@ namespace DCST4.ViewModels
                 || !TryRead(FaultSettleSeconds, "After a fault, look for", out var settle, ref problem))
             {
                 return problem;
+            }
+
+            if (!TryRead(KeepDays, "Delete results older than", out var keepDays, ref problem)) return problem;
+            if (keepDays > DCST4.Core.Reporting.ResultCleaner.LargestKeepDays)
+            {
+                return $"Delete results older than must be at most {DCST4.Core.Reporting.ResultCleaner.LargestKeepDays.ToString(CultureInfo.InvariantCulture)} days. 0 keeps everything.";
             }
 
             problem = new TestRunOptions
@@ -84,6 +99,10 @@ namespace DCST4.ViewModels
             _main.LimitArtimWaitSeconds = artim;
             _main.FaultSettleSeconds = settle;
             _main.TlsExpiredClientCertThumbprint = (ExpiredClientCertThumbprint ?? string.Empty).Trim();
+            _main.WriteResultJson = WriteJson;
+            _main.WriteResultCsv = WriteCsv;
+            _main.WriteResultHtml = WriteHtml;
+            _main.ResultsKeepDays = keepDays;
             return null;
         }
 

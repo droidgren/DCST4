@@ -15,13 +15,18 @@ namespace DCST4.Core.Reporting
         /// written loses nothing: <see cref="ResultFilePaths.Html"/> is then null and <paramref name="reportProblem"/> says why.
         /// Throws what <see cref="ResultFileWriter.Write"/> throws.
         /// </summary>
-        public static ResultFilePaths WriteRun(TestRunReport report, string directory, out string reportProblem)
+        public static ResultFilePaths WriteRun(TestRunReport report, string directory, out string reportProblem, ResultFileOptions options = null)
         {
-            var paths = ResultFileWriter.Write(report, directory);
+            options = options ?? new ResultFileOptions();
+            var paths = ResultFileWriter.Write(report, directory, options);
             reportProblem = null;
+            if (!options.Html) return paths;
             try
             {
-                paths.Html = WriteReportFor(report, paths.Json);
+                // From the run in memory, so the report does not need the JSON file to have been written.
+                var html = paths.Stem + ".html";
+                RunReportWriter.Write(report, html, new RunReportOptions { RunFolder = Path.GetFullPath(directory), RunName = Path.GetFileName(paths.Json ?? paths.Stem) });
+                paths.Html = Path.GetFullPath(html);
             }
             catch (Exception ex) when (RunFile.IsFileProblem(ex))
             {

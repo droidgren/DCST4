@@ -52,9 +52,26 @@ namespace DCST4.Core.Testing
         }
     }
 
+    /// <summary>Which files of a run are written. All of them unless a front-end says otherwise.</summary>
+    public sealed class ResultFileOptions
+    {
+        /// <summary>The JSON file with full detail, and the capability matrix as JSON.</summary>
+        public bool Json { get; set; } = true;
+        /// <summary>The CSV file with one row per result, and the capability matrix and the chain as CSV.</summary>
+        public bool Csv { get; set; } = true;
+        /// <summary>The HTML report.</summary>
+        public bool Html { get; set; } = true;
+
+        public bool Any => Json || Csv || Html;
+    }
+
     public sealed class ResultFilePaths
     {
+        /// <summary>The name that the files of this run share, without an extension. Set also when no file was written.</summary>
+        public string Stem { get; set; }
+        /// <summary>Null when the JSON file was not asked for.</summary>
         public string Json { get; set; }
+        /// <summary>Null when the CSV file was not asked for.</summary>
         public string Csv { get; set; }
         /// <summary>Null when the run has no capability matrix.</summary>
         public string CapabilityJson { get; set; }
@@ -84,28 +101,44 @@ namespace DCST4.Core.Testing
         };
 
         /// <summary>Throws IOException, UnauthorizedAccessException or the like if the folder cannot be written.</summary>
-        public static ResultFilePaths Write(TestRunReport report, string directory)
+        public static ResultFilePaths Write(TestRunReport report, string directory, ResultFileOptions options = null)
         {
-            Directory.CreateDirectory(directory);
-
+            options = options ?? new ResultFileOptions();
             var stem = Path.Combine(directory, "DCST4-run-" + report.StartedUtc.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture));
             var unique = stem;
-            for (var n = 2; File.Exists(unique + ".json") || File.Exists(unique + ".csv"); n++) unique = stem + "-" + n.ToString(CultureInfo.InvariantCulture);
+            var paths = new ResultFilePaths { Stem = unique };
+            // Nothing asked for: the folder is not even created.
+            if (!options.Any) return paths;
 
-            var paths = new ResultFilePaths { Json = unique + ".json", Csv = unique + ".csv" };
-            File.WriteAllText(paths.Json, ToJson(report), Utf8NoBom);
-            File.WriteAllText(paths.Csv, ToCsv(report), Utf8NoBom);
+            Directory.CreateDirectory(directory);
+            // The report counts too, so that a run without JSON and CSV does not write over the report of another.
+            for (var n = 2; File.Exists(unique + ".json") || File.Exists(unique + ".csv") || File.Exists(unique + ".html"); n++) unique = stem + "-" + n.ToString(CultureInfo.InvariantCulture);
+            paths.Stem = unique;
+
+            if (options.Json)
+            {
+                paths.Json = unique + ".json";
+                File.WriteAllText(paths.Json, ToJson(report), Utf8NoBom);
+            }
+            if (options.Csv)
+            {
+                paths.Csv = unique + ".csv";
+                File.WriteAllText(paths.Csv, ToCsv(report), Utf8NoBom);
+            }
 
             var matrix = report.Results.Select(r => r.CapabilityMatrix).FirstOrDefault(m => m != null);
-            if (matrix != null)
+            if (matrix != null && options.Json)
             {
                 paths.CapabilityJson = unique + "-capability.json";
-                paths.CapabilityCsv = unique + "-capability.csv";
                 File.WriteAllText(paths.CapabilityJson, matrix.ToJson(), Utf8NoBom);
+            }
+            if (matrix != null && options.Csv)
+            {
+                paths.CapabilityCsv = unique + "-capability.csv";
                 File.WriteAllText(paths.CapabilityCsv, matrix.ToCsv(), Utf8NoBom);
             }
 
-            if (report.Chain != null)
+            if (report.Chain != null && options.Csv)
             {
                 paths.ChainCsv = unique + "-chain.csv";
                 File.WriteAllText(paths.ChainCsv, ChainToCsv(report), Utf8NoBom);

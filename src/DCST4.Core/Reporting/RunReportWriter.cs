@@ -49,7 +49,7 @@ namespace DCST4.Core.Reporting
             var results = (report.Results ?? new List<TestResult>()).Where(r => r != null).ToList();
 
             var html = HtmlPage.Begin($"DCST4 report: {profile.CalledAe} at {profile.Host}:{profile.Port}");
-            html.Element("h1", "DCST4 test report").Line();
+            html.Element("h1", ProductInfo.FullName + ": test report").Line();
             html.Element("p", $"{profile.CalledAe} at {profile.Host}:{profile.Port.ToString(CultureInfo.InvariantCulture)}, {ReportFormat.Time(report.StartedUtc)}", "class", "sub").Line();
 
             var matrix = results.Select(r => r.CapabilityMatrix).FirstOrDefault(m => m != null);

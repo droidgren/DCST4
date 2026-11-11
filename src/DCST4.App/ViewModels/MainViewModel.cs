@@ -96,6 +96,15 @@ namespace DCST4.ViewModels
         private int _faultSettleSeconds;
         public int FaultSettleSeconds { get => _faultSettleSeconds; set { _faultSettleSeconds = value; OnPropertyChanged(); Settings.Default.FaultSettleSeconds = value; } }
 
+        /// <summary>Which files a run on the Tests or Performance tab writes. All three unless changed in Test settings.</summary>
+        public bool WriteResultJson { get => _writeResultJson; set { _writeResultJson = value; OnPropertyChanged(); Settings.Default.WriteResultJson = value; } }
+        public bool WriteResultCsv { get => _writeResultCsv; set { _writeResultCsv = value; OnPropertyChanged(); Settings.Default.WriteResultCsv = value; } }
+        public bool WriteResultHtml { get => _writeResultHtml; set { _writeResultHtml = value; OnPropertyChanged(); Settings.Default.WriteResultHtml = value; } }
+        /// <summary>After a run, result files in the results folder older than this many days are deleted. 0 keeps everything.</summary>
+        public int ResultsKeepDays { get => _resultsKeepDays; set { _resultsKeepDays = value; OnPropertyChanged(); Settings.Default.ResultsKeepDays = value; } }
+        private bool _writeResultJson = true, _writeResultCsv = true, _writeResultHtml = true;
+        private int _resultsKeepDays;
+
         private string _tlsExpiredClientCertThumbprint;
         /// <summary>Thumbprint of an expired client certificate in CurrentUser\My for tls-client-cert-expired, or empty for none.</summary>
         public string TlsExpiredClientCertThumbprint
@@ -417,8 +426,8 @@ namespace DCST4.ViewModels
             RunCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunAsync), _ => !IsBusy);
             RunTestsCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunTestsAsync), _ => !IsBusy);
             RunPerformanceCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunPerformanceAsync), _ => !IsBusy);
-            OpenReportCommand = new RelayCommand(async _ => await OpenReportAsync(TestSuite.LastResultFiles), _ => !IsBusy && TestSuite.LastResultFiles != null);
-            OpenPerformanceReportCommand = new RelayCommand(async _ => await OpenReportAsync(Performance.LastResultFiles), _ => !IsBusy && Performance.LastResultFiles != null);
+            OpenReportCommand = new RelayCommand(async _ => await OpenReportAsync(TestSuite.LastResultFiles), _ => !IsBusy && HasReport(TestSuite.LastResultFiles));
+            OpenPerformanceReportCommand = new RelayCommand(async _ => await OpenReportAsync(Performance.LastResultFiles), _ => !IsBusy && HasReport(Performance.LastResultFiles));
             CancelCommand = new RelayCommand(_ => CancelOperation(), _ => _cts != null && !_cts.IsCancellationRequested);
             NewValuesCommand = new RelayCommand(_ => GenerateNewValues(), _ => !IsBusy);
             SaveProfileCommand = new RelayCommand(_ => SaveProfile(), _ => !IsBusy);
@@ -505,6 +514,10 @@ namespace DCST4.ViewModels
             _limitIdleWaitSeconds = s.LimitIdleWaitSeconds;
             _limitArtimWaitSeconds = s.LimitArtimWaitSeconds;
             _faultSettleSeconds = s.FaultSettleSeconds;
+            _writeResultJson = s.WriteResultJson;
+            _writeResultCsv = s.WriteResultCsv;
+            _writeResultHtml = s.WriteResultHtml;
+            _resultsKeepDays = s.ResultsKeepDays;
             _tlsExpiredClientCertThumbprint = s.TlsExpiredClientCertThumbprint ?? string.Empty;
             _useTLS = s.UseTLS;
             _tlsIgnoreCertErrors = s.TlsIgnoreCertErrors;
@@ -1102,8 +1115,9 @@ namespace DCST4.ViewModels
             var ending = report.Cancelled ? "Tests cancelled." : "Tests finished.";
             try
             {
-                TestSuite.LastResultFiles = await Task.Run(() => WriteRunFiles(report, folder));
-                StatusText = $"{ending} Results saved in {folder}";
+                string saved = null;
+                TestSuite.LastResultFiles = await Task.Run(() => WriteRunFiles(report, folder, null, out saved));
+                StatusText = $"{ending} {saved}";
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException)
             {
@@ -1202,10 +1216,12 @@ namespace DCST4.ViewModels
             var ending = report.Cancelled ? "Performance test cancelled." : "Performance test finished.";
             try
             {
-                var files = await Task.Run(() => WriteRunFiles(report, folder));
+                string saved = null;
+                var series = new[] { result.Performance?.SeriesFile, result.Performance?.WindowsFile };
+                var files = await Task.Run(() => WriteRunFiles(report, folder, series, out saved));
                 Performance.LastResultFiles = files;
-                Performance.Files = string.Join("   ", new[] { files.Json, result.Performance?.SeriesFile, result.Performance?.WindowsFile }.Where(f => f != null));
-                StatusText = $"{ending} Results saved in {folder}";
+                Performance.Files = string.Join("   ", new[] { files.Json ?? files.Html ?? files.Csv }.Concat(series).Where(f => f != null));
+                StatusText = $"{ending} {saved}";
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException)
             {
@@ -1215,19 +1231,60 @@ namespace DCST4.ViewModels
         }
 
         /// <summary>The result files with the HTML report beside them. A report that cannot be written is logged: the results are what matter.</summary>
-        private ResultFilePaths WriteRunFiles(TestRunReport report, string folder)
+        /// <remarks>
+        /// Writes the files that Test settings asks for, and then deletes result files older than the days set there. That only
+        /// happens here, after a run has been saved, never at start or when the setting changes, and never to the files of this run.
+        /// <paramref name="saved"/> is what the status bar says about it.
+        /// </remarks>
+        private ResultFilePaths WriteRunFiles(TestRunReport report, string folder, IEnumerable<string> alsoKeep, out string saved)
         {
-            var files = ReportFiles.WriteRun(report, folder, out var reportProblem);
-            if (reportProblem != null) _logger.Warning("Could not write the HTML report of {json}: {problem}", files.Json, reportProblem);
+            var options = new ResultFileOptions { Json = WriteResultJson, Csv = WriteResultCsv, Html = WriteResultHtml };
+            var files = ReportFiles.WriteRun(report, folder, out var reportProblem, options);
+            if (reportProblem != null) _logger.Warning("Could not write the HTML report of {run}: {problem}", files.Stem, reportProblem);
+
+            saved = options.Any ? $"Results saved in {folder}" : NoResultFilesText;
+            if (ResultsKeepDays <= 0) return files;
+
+            var keep = new[] { files.Json, files.Csv, files.Html, files.CapabilityJson, files.CapabilityCsv, files.ChainCsv }.Concat(alsoKeep ?? Enumerable.Empty<string>());
+            var cleaned = ResultCleaner.Clean(folder, ResultsKeepDays, DateTime.UtcNow, keep);
+            if (cleaned.Deleted + cleaned.Skipped > 0)
+            {
+                _logger.Information("Deleted {deleted} result files older than {days} days in {folder}, {skipped} could not be deleted", cleaned.Deleted, ResultsKeepDays, folder, cleaned.Skipped);
+            }
+            if (cleaned.Deleted > 0) saved += cleaned.Deleted == 1 ? ", 1 older result file deleted" : $", {cleaned.Deleted} older result files deleted";
             return files;
         }
+
+        public const string NoResultFilesText = "No result files are written, see Test settings.";
 
         #region Reports and comparison
         /// <summary>What the Compare runs dialog shows. Kept, so that the list is still there the next time.</summary>
         public CompareRunsViewModel Comparison { get; } = new CompareRunsViewModel();
 
         /// <summary>Opens the report of a finished run in the browser. The report is made again from the JSON file if it is not there.</summary>
-        public Task OpenReportAsync(ResultFilePaths files) => files?.Json == null ? Task.CompletedTask : OpenSavedReportAsync(files.Json);
+        public Task OpenReportAsync(ResultFilePaths files)
+        {
+            if (!HasReport(files)) return Task.CompletedTask;
+            // With the JSON file the report can be made again if it is gone. Without it, the report that was written is all there is.
+            if (files.Json != null) return OpenSavedReportAsync(files.Json);
+            return RunBusyAsync(token =>
+            {
+                try
+                {
+                    OpenDocument(files.Html);
+                    StatusText = $"Report: {files.Html}";
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException || ex is System.ComponentModel.Win32Exception)
+                {
+                    _logger.Error(ex, "Could not open the report {html}", files.Html);
+                    ShowMessage("The report could not be opened: " + ex.Message, MessageBoxImage.Warning, null);
+                }
+                return Task.CompletedTask;
+            });
+        }
+
+        /// <summary>A run has a report to open when it wrote one, or wrote the JSON file that one can be made from.</summary>
+        private static bool HasReport(ResultFilePaths files) => files != null && (files.Html != null || files.Json != null);
 
         /// <summary>Opens the report of a saved run, from its JSON file.</summary>
         public Task OpenSavedReportAsync(string jsonPath) => RunBusyAsync(async token =>
