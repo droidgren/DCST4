@@ -352,7 +352,7 @@
                         Commitment reports go to. The other settings of the tests are in <Bold>Test settings...</Bold>: the UID
                         root, the transfer syntax of the store tests, the Storage Commitment times, the settings of the limit,
                         fault and TLS tests, and the results folder. They change only when you click <Bold>OK</Bold>, and a
-                        value that cannot be used is named and nothing is changed. Hover over a setting to see what it does.
+                        value that cannot be used is named and nothing is changed. Hover over a setting to see what it does and its default.
                         <Bold>Open results folder</Bold> opens the folder in Explorer.
                     </Paragraph>
                     <Paragraph>

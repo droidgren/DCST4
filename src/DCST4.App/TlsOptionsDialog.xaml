@@ -11,7 +11,7 @@
         <GroupBox Header="Server certificate" Margin="0,0,0,10">
             <StackPanel Margin="5">
                 <CheckBox x:Name="IgnoreCertErrorsBox"
-                          Content="Accept self-signed or invalid server certificates" ToolTip="Connect even when the destination's certificate is not trusted, has expired or does not match the host name. For testing only"/>
+                          Content="Accept self-signed or invalid server certificates" ToolTip="Connect even when the destination's certificate is not trusted, has expired or does not match the host name. For testing only.&#x0a;&#x0a;Default: off."/>
                 <TextBlock Margin="20,4,0,0" TextWrapping="Wrap" Foreground="Gray"
                            Text="Use only for testing. The server's identity is not verified."/>
             </StackPanel>

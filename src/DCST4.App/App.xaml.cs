@@ -24,6 +24,8 @@ namespace DCST4
             var serilogLogger = ConfigureLogging();
             RegisterGlobalExceptionHandlers();
             SetAppUserModelId();
+            // Tooltips explain settings in a few sentences and their default, which takes longer to read than WPF's 5 s.
+            System.Windows.Controls.ToolTipService.ShowDurationProperty.OverrideMetadata(typeof(FrameworkElement), new FrameworkPropertyMetadata(60000));
 
             DicomSetup.Initialize(services => services.AddLogging(logging =>
             {

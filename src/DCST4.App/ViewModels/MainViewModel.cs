@@ -345,8 +345,7 @@ namespace DCST4.ViewModels
             MessageBox.Show(message, title ?? DefaultTitle(icon), MessageBoxButton.OK, icon);
 
         /// <summary>Asks the user a yes/no question.</summary>
-        public Func<string, bool> Confirm { get; set; } = message =>
-            MessageBox.Show(message, "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        public Func<string, bool> Confirm { get; set; } = message => ConfirmDialog.Ask(message);
 
         /// <summary>Writes the settings to disk.</summary>
         public Action SaveSettings { get; set; } = () => Settings.Default.Save();
