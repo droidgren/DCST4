@@ -9,6 +9,27 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 ![Main window after a run](screenshots/main.png)
 
 
+## Table of Contents
+* [Features](#features)
+* [Install](#install)
+* [Usage](#usage)
+* [Testing a PACS](#testing-a-pacs)
+  * [What the PACS supports](#what-the-pacs-supports)
+  * [Store, query and retrieve](#store-query-and-retrieve)
+  * [Storage Commitment](#storage-commitment)
+  * [Limits and faults](#limits-and-faults)
+  * [Performance](#performance)
+* [Test datasets](#test-datasets)
+* [Generated tags](#generated-tags)
+* [Test personnummer](#test-personnummer)
+* [Architecture](#architecture)
+* [Reporting Bugs & Feature Requests](#reporting-bugs--feature-requests)
+* [Tests](#tests)
+* [Dependencies](#dependencies)
+* [Files](#files)
+* [Changelog](#changelog)
+* [License](#license)
+
 ## Features
 
 - **Zero Dependencies:** Built on .NET 4.8 (included natively in Windows 10 and 11). No external runtime installation is required.
