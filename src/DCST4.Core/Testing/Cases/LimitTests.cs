@@ -202,6 +202,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Opens associations one at a time and holds them, until one is refused or the ceiling on this tab is reached. All are released afterwards. Stores nothing.";
         public string Group => TestGroups.Limits;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -390,6 +391,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Opens an association, sends nothing, and measures how long the destination keeps it open, up to the idle wait on this tab. Stores nothing.";
         public string Group => TestGroups.Limits;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -486,6 +488,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Opens a TCP connection without an association request and measures how long the destination keeps it, up to the ARTIM wait on this tab. Stores nothing.";
         public string Group => TestGroups.Limits;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -562,6 +565,14 @@ namespace DCST4.Core.Testing.Cases
         /// <summary>256 x 256 at 16 bits is about 130 KB, so PDU lengths up to 128 K are filled to the limit.</summary>
         public const int Matrix = 256;
 
+        /// <summary>The smallest matrix from <see cref="Matrix"/> up, doubling, whose pixel data fills more than one PDU of <paramref name="pduLength"/>.</summary>
+        public static int MatrixFor(long pduLength)
+        {
+            var matrix = Matrix;
+            while ((long)matrix * matrix * 2 < pduLength * 2L && matrix < Generation.ExamRequest.MaxMatrix) matrix *= 2;
+            return matrix;
+        }
+
         public static DicomFile Generate(TestContext context, string purpose, int matrix, CancellationToken token)
         {
             var request = Fixtures.Request(context, "ct", purpose, DicomTransferSyntax.ExplicitVRLittleEndian);
@@ -593,6 +604,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Announces several maximum PDU lengths, records what the destination announces back, and stores one small object per association with PDUs of exactly that length.";
         public string Group => TestGroups.Limits;
         public bool StoresObjects => true;
+        public StorageEstimate Storage => StorageEstimate.CtImages(OurSizes.Length, OurSizes.Length, PduSupport.Matrix);
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -754,11 +766,16 @@ namespace DCST4.Core.Testing.Cases
         /// <summary>The largest announced limit this test will go above: the object has to be larger than the PDU.</summary>
         private const uint LargestProbedLimit = 8 * 1024 * 1024;
 
+        private static readonly StorageEstimate StoredEstimate = StorageEstimate.CtImages(1, 1, PduSupport.Matrix,
+            "Larger when the destination announces a maximum PDU length above 64 KB, up to about "
+            + Pipeline.ExamSizeEstimator.Format(StorageEstimate.ImageBytes(PduSupport.MatrixFor(LargestProbedLimit + Excess), PduSupport.MatrixFor(LargestProbedLimit + Excess))) + ".");
+
         public string Id => "limit-oversized-pdu";
         public string Name => "Limit: PDU longer than the announced maximum";
         public string Description => "Sends an object in PDUs longer than the destination said it takes. It should refuse them, but it may store the object.";
         public string Group => TestGroups.Limits;
         public bool StoresObjects => true;
+        public StorageEstimate Storage => StoredEstimate;
         public TestCategory Category => TestCategory.Limits;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -811,8 +828,7 @@ namespace DCST4.Core.Testing.Cases
 
                 var pduLength = limit + Excess;
                 context.Report($"Sending one image in data PDUs of {pduLength} bytes, longer than the {limit} the system announced, and waiting for its answer");
-                var matrix = PduSupport.Matrix;
-                while ((long)matrix * matrix * 2 < pduLength * 2L && matrix < Generation.ExamRequest.MaxMatrix) matrix *= 2;
+                var matrix = PduSupport.MatrixFor(pduLength);
                 var file = PduSupport.Generate(context, Id, matrix, token);
                 attempt.SopInstanceUid = file.Dataset.GetSingleValue<string>(DicomTag.SOPInstanceUID);
                 attempt.PduLengthSent = pduLength;

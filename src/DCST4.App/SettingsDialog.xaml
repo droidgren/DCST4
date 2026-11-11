@@ -29,7 +29,7 @@
                     </Grid.RowDefinitions>
 
                     <Label Grid.Row="0" Content="Connection timeout:"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="ConnectionTimeoutBox" VerticalAlignment="Center" Margin="0,2"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="ConnectionTimeoutBox" VerticalAlignment="Center" Margin="0,2" ToolTip="Seconds to wait for the TCP connection to the destination before giving up"/>
                     <Label Grid.Row="0" Grid.Column="2" Content="seconds (1-3600)"/>
 
                     <Label Grid.Row="1" Content="Association timeout:"/>
@@ -46,12 +46,12 @@
 
             <TabItem Header="Identifiers">
                 <StackPanel Margin="5">
-                    <CheckBox x:Name="NewValuesAfterRun" Content="Draw new Auto values after each run"/>
+                    <CheckBox x:Name="NewValuesAfterRun" Content="Draw new Auto values after each run" ToolTip="Draw a new patient, accession number and UIDs after every Generate &amp; Send. Off keeps them, so the next run adds a series to the same study"/>
                     <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
                                Text="When off, Auto values stay until you click New values or restart the program, so the exam is easy to find in PACS. Another run with the same values adds a new series to the same study."/>
 
                     <Label Margin="0,14,0,0" Padding="0,0,0,4" Content="Patient name in test-suite datasets:"/>
-                    <ComboBox x:Name="TestPatientNaming" SelectedValuePath="Tag" HorizontalAlignment="Left" MinWidth="280">
+                    <ComboBox x:Name="TestPatientNaming" SelectedValuePath="Tag" HorizontalAlignment="Left" MinWidth="280" ToolTip="How the objects the tests send name the patient. The Patient ID comes from the test personnummer list either way">
                         <ComboBoxItem Tag="MarkedTestName" Content="Marked test name (DCST4^TEST^number), the default"/>
                         <ComboBoxItem Tag="RegistrySwedishName" Content="Swedish name"/>
                     </ComboBox>
@@ -62,7 +62,7 @@
 
             <TabItem Header="Burned-in text">
                 <StackPanel Margin="5">
-                    <CheckBox x:Name="BurnInText" Content="Burn text into the images"/>
+                    <CheckBox x:Name="BurnInText" Content="Burn text into the images" ToolTip="Draw a black box with the ticked tags in the upper left corner of every image, to compare with the tags in the viewer"/>
                     <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
                                Text="Draws the ticked tags in a black box in the upper left corner of each image, so they can be compared with the tags in the viewer. Burned In Annotation (0028,0301) is YES when text is drawn, otherwise NO. The diagonal TEST IMAGE watermark is always there."/>
                     <TextBlock Margin="0,10,0,4" FontWeight="SemiBold" Text="Tags to burn in"/>
@@ -118,18 +118,18 @@
                         </Grid.RowDefinitions>
 
                         <Label Grid.Row="0" Grid.Column="0" Content="Tag:" Target="{Binding ElementName=TagBox}"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="TagBox" VerticalAlignment="Center" Margin="0,2" TextChanged="TagBox_TextChanged"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="TagBox" VerticalAlignment="Center" Margin="0,2" TextChanged="TagBox_TextChanged" ToolTip="The tag number, as (gggg,eeee) or ggggeeee, or a keyword such as OperatorsName"/>
                         <TextBlock Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="2" x:Name="TagNameText" VerticalAlignment="Center" Margin="8,0,0,0"
                                    Foreground="#FF505050" TextTrimming="CharacterEllipsis"/>
 
                         <Label Grid.Row="1" Grid.Column="0" Content="VR:" Target="{Binding ElementName=VrBox}"/>
-                        <ComboBox Grid.Row="1" Grid.Column="1" x:Name="VrBox" VerticalAlignment="Center" Margin="0,2"/>
+                        <ComboBox Grid.Row="1" Grid.Column="1" x:Name="VrBox" VerticalAlignment="Center" Margin="0,2" ToolTip="The value representation. It is chosen for you when the dictionary gives the tag only one. A private tag needs one chosen here"/>
                         <Label Grid.Row="1" Grid.Column="2" Content="Private creator:" Margin="8,0,0,0" Target="{Binding ElementName=CreatorBox}"/>
                         <TextBox Grid.Row="1" Grid.Column="3" x:Name="CreatorBox" VerticalAlignment="Center" Margin="0,2" IsEnabled="False"
                                  ToolTip="Required for a private tag, one with an odd group number"/>
 
                         <Label Grid.Row="2" Grid.Column="0" Content="Default:" Target="{Binding ElementName=ValueBox}"/>
-                        <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ValueBox" VerticalAlignment="Center" Margin="0,2"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ValueBox" VerticalAlignment="Center" Margin="0,2" ToolTip="The default value of the tag, which Auto on the Identifiers tab uses. An empty default sends the tag empty. Separate several values with a backslash where the tag allows it"/>
 
                         <StackPanel Grid.Row="3" Grid.ColumnSpan="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
                             <Button Content="Add or update" Width="100" Height="23" Margin="0,0,6,0" Click="AddTagButton_Click"/>
@@ -153,8 +153,8 @@
 
             <TabItem Header="Logging">
                 <StackPanel Margin="5">
-                    <CheckBox x:Name="LogDimseDatasets" Content="Log DIMSE Datasets" Margin="0,0,0,5"/>
-                    <CheckBox x:Name="LogDataPDUs" Content="Log Data PDUs"/>
+                    <CheckBox x:Name="LogDimseDatasets" Content="Log DIMSE Datasets" Margin="0,0,0,5" ToolTip="Write every dataset sent and received to the log. The log gets large quickly"/>
+                    <CheckBox x:Name="LogDataPDUs" Content="Log Data PDUs" ToolTip="Write every data PDU to the log, byte for byte. For tracing a protocol problem only"/>
                     <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
                                Text="These write fo-dicom's detail to the log file. With images this gets large quickly, so use them for a small run."/>
                 </StackPanel>
@@ -162,7 +162,7 @@
 
             <TabItem Header="Updates">
                 <StackPanel Margin="5">
-                    <CheckBox x:Name="ShowUpdateWindowAtStartup" Content="Show a window at startup when a new version is available"/>
+                    <CheckBox x:Name="ShowUpdateWindowAtStartup" Content="Show a window at startup when a new version is available" ToolTip="Ask GitHub at startup whether there is a newer DCST4, and show a window if there is. Off sends nothing at startup"/>
                     <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
                                Text="The program asks GitHub for the latest release when it starts. When this is off, it does not ask at startup. Help &gt; About still checks when you open it."/>
                 </StackPanel>

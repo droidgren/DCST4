@@ -86,6 +86,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Stores one small object and then sends exactly the same object again, and records how the destination answers the second time.";
         public string Group => TestGroups.Duplicates;
         public bool StoresObjects => true;
+        public StorageEstimate Storage => StorageEstimate.CtImages(1, 1, Fixtures.Matrix, "The same object is sent twice.");
         public TestCategory Category => TestCategory.Integrity;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -152,6 +153,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Stores one small object, then sends it again with other content under the same SOP Instance UID, and retrieves it to see which version was kept.";
         public string Group => TestGroups.Duplicates;
         public bool StoresObjects => true;
+        public StorageEstimate Storage => StorageEstimate.CtImages(1, 1, Fixtures.Matrix, "The object is sent twice, the second time with other content.");
         public TestCategory Category => TestCategory.Integrity;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -254,6 +256,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Stores two small objects with the same Study Instance UID but different patients, and retrieves the study to see what the destination did with the second.";
         public string Group => TestGroups.Duplicates;
         public bool StoresObjects => true;
+        public StorageEstimate Storage => StorageEstimate.CtImages(1, 2, Fixtures.Matrix, "The two objects share a Study Instance UID but not the patient, so the destination may show them as two examinations.");
         public TestCategory Category => TestCategory.Integrity;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)

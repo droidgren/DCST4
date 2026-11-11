@@ -55,7 +55,7 @@ namespace DCST4.Core.Testing.Cases
     internal static class Fixtures
     {
         /// <summary>Assume that a PACS cannot delete what it receives.</summary>
-        private const int Matrix = 128;
+        internal const int Matrix = 128;
 
         public const string StorePurpose = "store";
 

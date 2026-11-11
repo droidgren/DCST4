@@ -14,8 +14,6 @@ namespace DCST4.ViewModels
     /// <summary>One test in the list on the Tests tab. Nothing is ticked at the start: many tests store objects that may not be possible to delete.</summary>
     public sealed class TestChoice : INotifyPropertyChanged
     {
-        public const string StoresNote = "Stores new objects on the destination, which may not be possible to delete.";
-
         private bool _isSelected;
 
         public TestChoice(ITestCase test)
@@ -33,8 +31,18 @@ namespace DCST4.ViewModels
         public string Group => Test.Group;
         public string Description => Test.Description;
 
-        /// <summary>What the test does, whether it stores objects, and its id for DCST4.Cli.exe.</summary>
-        public string ToolTipText => Test.Description + (Test.StoresObjects ? "\n\n" + StoresNote : string.Empty) + "\n\nId: " + Test.Id;
+        /// <summary>What the test does, what it leaves on the destination, and its id for DCST4.Cli.exe.</summary>
+        public string ToolTipText => Test.Description + (StorageText == null ? string.Empty : "\n\n" + StorageText) + "\n\nId: " + Test.Id;
+
+        /// <summary>"Stores 1 examination, 1 object, about 34 KB on the destination." Null for a test that stores nothing.</summary>
+        public string StorageText
+        {
+            get
+            {
+                if (Test.Storage != null) return $"Stores {Test.Storage.Describe()} on the destination." + (Test.Storage.Note == null ? string.Empty : " " + Test.Storage.Note);
+                return Test.StoresObjects ? "Stores new objects on the destination." : null;
+            }
+        }
 
         public bool IsSelected
         {
@@ -52,7 +60,8 @@ namespace DCST4.ViewModels
     /// <summary>A group of tests in the list on the Tests tab, with a box that ticks or clears all of them.</summary>
     public sealed class TestGroupChoice : INotifyPropertyChanged
     {
-        private bool _isExpanded = true;
+        /// <summary>Folded at the start, so that the list shows the groups and is short.</summary>
+        private bool _isExpanded;
 
         public TestGroupChoice(string name, IEnumerable<TestChoice> tests)
         {

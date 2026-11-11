@@ -44,6 +44,7 @@ namespace DCST4.Tests
             public string Description => "A stub.";
             public string Group => TestGroups.Association;
             public bool StoresObjects => false;
+            public StorageEstimate Storage => null;
             public Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token) => _run(token);
         }
 
@@ -326,6 +327,37 @@ namespace DCST4.Tests
             check("The tests that store objects are the ones marked so", wrongStores.Count == 0, string.Join(", ", wrongStores));
             var claimsNothing = TestCatalog.All.Where(t => t.StoresObjects && t.Description.Contains("Stores nothing")).Select(t => t.Id).ToList();
             check("A test that stores objects never says it stores nothing", claimsNothing.Count == 0, string.Join(", ", claimsNothing));
+            var wrongEstimate = TestCatalog.All.Where(t => (t.Storage != null) != (t.StoresObjects && t.Category != TestCategory.Performance)
+                || (t.Storage != null && (t.Storage.Studies < 1 || t.Storage.Objects < t.Storage.Studies || t.Storage.Bytes < 1000))).Select(t => t.Id).ToList();
+            check("Every test that stores, apart from the load tests, says how much", wrongEstimate.Count == 0, string.Join(", ", wrongEstimate));
+            Func<string, StorageEstimate> estimate = id => TestCatalog.All.Single(t => t.Id == id).Storage;
+            check("Estimate: store-ct is one 128 x 128 CT image of about 34 KB", estimate("store-ct").Describe() == "1 examination, 1 object, about 34 KB", estimate("store-ct").Describe());
+            check("Estimate: an object that refers to an image brings it along", estimate("store-key-object-selection").Objects == 2 && estimate("store-key-object-selection").Studies == 1, null);
+            check("Estimate: a fault test sends a 2 MB image", estimate("fault-abort-mid-dataset").Describe() == "1 examination, 1 object, about 2.0 MB", estimate("fault-abort-mid-dataset").Describe());
+            check("Estimate: the maximum PDU test stores four images in four examinations", estimate("limit-max-pdu").Studies == 4 && estimate("limit-max-pdu").Objects == 4, null);
+            check("Estimate: the oversized PDU test says how large it can get", estimate("limit-oversized-pdu").Note != null && estimate("limit-oversized-pdu").Note.Contains("32.0 MB"), estimate("limit-oversized-pdu").Note);
+            check("Estimate: a sum adds up and skips the tests without one", StorageEstimate.Sum(new[] { estimate("store-ct"), null, estimate("limit-max-pdu") }).Objects == 5, null);
+
+            // The estimates against what the generator really writes for each store test, at the size the store tests use.
+            var offBy = new List<string>();
+            foreach (var dataset in DCST4.Core.Generation.Datasets.DatasetProfileCatalog.Default)
+            {
+                var request = new DCST4.Core.Generation.Datasets.TestDatasetRequest { ProfileId = dataset.Id, Seed = 7, Rows = 128, Columns = 128, TransferSyntax = DicomTransferSyntax.ExplicitVRLittleEndian };
+                long bytes = 0;
+                var objects = 0;
+                foreach (var image in new DCST4.Core.Generation.Datasets.TestDatasetGenerator(request).GetImages(CancellationToken.None))
+                {
+                    using (var stream = new MemoryStream())
+                    {
+                        image.File.Save(stream);
+                        bytes += stream.Length;
+                    }
+                    objects++;
+                }
+                var guess = StorageEstimate.Of(dataset, 128);
+                if (guess.Objects != objects || Math.Abs(guess.Bytes - bytes) > Math.Max(bytes / 5, 1024)) offBy.Add($"{dataset.Id}: {guess.Objects}/{guess.Bytes} against {objects}/{bytes}");
+            }
+            check("Estimate: within 20 % or 1 KB of the files the store tests send, with the same number of objects", offBy.Count == 0, string.Join("; ", offBy));
 
             var thrower = new StubTest("throws", async _ => { await Task.Yield(); throw new InvalidOperationException("Broken on purpose"); });
             var syncThrower = new StubTest("throws-at-once", _ => throw new ArgumentException("Thrown before any await"));

@@ -63,7 +63,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Label Content="Calling AET:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="1" Text="{Binding CallingAET, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="1" Text="{Binding CallingAET, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" ToolTip="The AE title DCST4 calls from. The destination may only accept AE titles it knows, so it often has to be set up there"/>
                     </Grid>
                 </GroupBox>
 
@@ -97,16 +97,16 @@
                                 ToolTip="Delete the selected profile"/>
 
                         <Label Content="AET:" Grid.Row="1" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding ServerAET, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,0,2"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding ServerAET, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,0,2" ToolTip="The AE title of the destination, the called AE title. Up to 16 characters"/>
 
                         <Label Content="IP/Hostname:" Grid.Row="2" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding ServerHost, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,0,2"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding ServerHost, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,0,2" ToolTip="The host name or IP address of the destination"/>
 
                         <Label Content="Port:" Grid.Row="3" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding ServerPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,0,2"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding ServerPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,0,2" ToolTip="The port the destination listens on for DICOM, often 104 or 11112, or 2762 with TLS"/>
 
                         <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,4,0,2">
-                            <CheckBox Content="Use TLS" IsChecked="{Binding UseTLS, Mode=TwoWay}" VerticalAlignment="Center"/>
+                            <CheckBox Content="Use TLS" IsChecked="{Binding UseTLS, Mode=TwoWay}" VerticalAlignment="Center" ToolTip="Connect to the destination over TLS. TLS options sets how its certificate is checked and which client certificate is shown"/>
                             <Button Content="TLS options..." Margin="12,0,0,0" Padding="8,0" Click="TlsOptionsButton_Click"
                                     IsEnabled="{Binding UseTLS}"
                                     ToolTip="Server certificate validation and client certificate"/>
@@ -132,9 +132,9 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <CheckBox Content="Send to server" IsChecked="{Binding SendImages, Mode=TwoWay}" VerticalAlignment="Center" IsEnabled="{Binding IsIdle}"/>
-                        <CheckBox Grid.Column="1" Content="Save to disk:" IsChecked="{Binding SaveImages, Mode=TwoWay}" VerticalAlignment="Center" Margin="12,0,6,0" IsEnabled="{Binding IsIdle}"/>
-                        <TextBox Grid.Column="2" Text="{Binding SaveFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsEnabled="{Binding SaveImages}"/>
+                        <CheckBox Content="Send to server" IsChecked="{Binding SendImages, Mode=TwoWay}" VerticalAlignment="Center" IsEnabled="{Binding IsIdle}" ToolTip="Send the generated exam to the destination with C-STORE"/>
+                        <CheckBox Grid.Column="1" Content="Save to disk:" IsChecked="{Binding SaveImages, Mode=TwoWay}" VerticalAlignment="Center" Margin="12,0,6,0" IsEnabled="{Binding IsIdle}" ToolTip="Also write the generated exam to the folder beside it, as a DICOM File-set with a DICOMDIR"/>
+                        <TextBox Grid.Column="2" Text="{Binding SaveFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsEnabled="{Binding SaveImages}" ToolTip="The folder Save to disk writes the File-set to"/>
                         <Button Grid.Column="3" Content="..." Width="26" Margin="4,0,0,0" Click="BrowseFolderButton_Click" IsEnabled="{Binding SaveImages}" ToolTip="Select the folder"/>
                         <Button Grid.Column="4" Width="120" Height="28" Margin="12,0,8,0" Command="{Binding RunCommand}" FontWeight="SemiBold">
                             <TextBlock Text="{Binding RunButtonText}"/>
@@ -163,13 +163,13 @@
                             </Grid.RowDefinitions>
 
                             <Label Content="Modality:"/>
-                            <ComboBox Grid.Column="1" ItemsSource="{Binding Modalities}" SelectedItem="{Binding SelectedModality, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"/>
+                            <ComboBox Grid.Column="1" ItemsSource="{Binding Modalities}" SelectedItem="{Binding SelectedModality, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2" ToolTip="The kind of images to generate. Changing it sets the matrix, bits stored and exam type to that modality's defaults"/>
                             <Label Grid.Column="3" Content="Exam type:"/>
                             <ComboBox Grid.Column="4" ItemsSource="{Binding Presets}" SelectedItem="{Binding SelectedPreset, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="Sets the descriptions, body part and modality-specific tags"/>
 
                             <Label Grid.Row="1" Content="Series:"/>
-                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SeriesCount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SeriesCount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2" ToolTip="How many series the exam has, each with the number of images below"/>
                             <Label Grid.Row="1" Grid.Column="3" Content="Images per series:"/>
                             <DockPanel Grid.Row="1" Grid.Column="4">
                                 <TextBlock DockPanel.Dock="Right" Text="{Binding TotalImagesText}" Foreground="#FF505050" VerticalAlignment="Center" Margin="8,0,0,0"/>
@@ -196,7 +196,7 @@
                             <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding CharacterSets}" SelectedItem="{Binding CharacterSet, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="Specific Character Set (0008,0005): ISO_IR 100 is Latin-1, ISO_IR 192 is UTF-8. Empty value sends the tag with zero length, which means Basic ASCII, so Auto names lose their å, ä and ö"/>
                             <Label Grid.Row="3" Grid.Column="3" Content="Transfer syntax:"/>
-                            <ComboBox Grid.Row="3" Grid.Column="4" ItemsSource="{Binding TransferSyntaxes}" SelectedItem="{Binding SelectedTransferSyntax, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"/>
+                            <ComboBox Grid.Row="3" Grid.Column="4" ItemsSource="{Binding TransferSyntaxes}" SelectedItem="{Binding SelectedTransferSyntax, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2" ToolTip="The transfer syntax the images are sent and saved in"/>
 
                             <Label Grid.Row="4" Content="Estimated size:"/>
                             <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding EstimatedSizeText}" Foreground="#FF505050" VerticalAlignment="Center"
@@ -215,9 +215,9 @@
                                         ToolTip="Draw a new patient and new identifiers for the Auto fields"/>
                                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="Random patient age:" VerticalAlignment="Center"/>
-                                    <TextBox Text="{Binding MinAge, Mode=TwoWay}" Width="36" Margin="6,0,4,0" VerticalAlignment="Center"/>
+                                    <TextBox Text="{Binding MinAge, Mode=TwoWay}" Width="36" Margin="6,0,4,0" VerticalAlignment="Center" ToolTip="The youngest age, in years, of a random patient from the test personnummer list"/>
                                     <TextBlock Text="to" VerticalAlignment="Center"/>
-                                    <TextBox Text="{Binding MaxAge, Mode=TwoWay}" Width="36" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBox Text="{Binding MaxAge, Mode=TwoWay}" Width="36" Margin="4,0,0,0" VerticalAlignment="Center" ToolTip="The oldest age, in years, of a random patient from the test personnummer list"/>
                                 </StackPanel>
                                 <TextBlock Text="{Binding IdentityMessage}" Foreground="#FFB03000" TextWrapping="Wrap" VerticalAlignment="Center" Margin="12,0,12,0"/>
                             </DockPanel>
@@ -310,61 +310,26 @@
                         <DockPanel DockPanel.Dock="Top" Margin="2,2,2,4">
                             <Button DockPanel.Dock="Left" Content="Run tests" Width="80" Command="{Binding RunTestsCommand}" FontWeight="SemiBold"
                                     ToolTip="Run the ticked tests against the destination above"/>
-                            <Button DockPanel.Dock="Left" Content="Cancel" Width="60" Margin="6,0,0,0" Command="{Binding CancelCommand}"/>
+                            <Button DockPanel.Dock="Left" Content="Cancel" Width="60" Margin="6,0,0,0" Command="{Binding CancelCommand}"
+                                    ToolTip="Stop the run. What was finished is still saved"/>
+                            <Button DockPanel.Dock="Left" Content="Test settings..." Width="100" Margin="6,0,0,0" Click="TestSettingsButton_Click" IsEnabled="{Binding IsIdle}"
+                                    ToolTip="The UID root, the transfer syntax of the store tests, the Storage Commitment times, the settings of the limit, fault and TLS tests, and the results folder"/>
                             <Button DockPanel.Dock="Left" Content="Save profile as JSON..." Width="140" Margin="6,0,0,0" Click="SaveTargetProfileButton_Click" IsEnabled="{Binding IsIdle}"
-                                    ToolTip="Save the destination above as a file for DCST4.Cli.exe"/>
-                            <TextBlock DockPanel.Dock="Left" Text="Results folder:" VerticalAlignment="Center" Margin="12,0,6,0"/>
-                            <Button DockPanel.Dock="Right" Content="Open" Width="50" Margin="4,0,0,0" Click="OpenTestResultsFolderButton_Click"/>
-                            <Button DockPanel.Dock="Right" Content="..." Width="26" Margin="4,0,0,0" Click="BrowseTestResultsFolderButton_Click" IsEnabled="{Binding IsIdle}" ToolTip="Select the folder"/>
-                            <TextBox Text="{Binding TestSuite.ResultsFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" IsEnabled="{Binding IsIdle}"/>
+                                    ToolTip="Save the destination above, with the local SCP and the UID root, as a file for DCST4.Cli.exe"/>
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="16,0,0,0" IsEnabled="{Binding IsIdle}">
+                                <TextBlock Text="Local SCP AET:" VerticalAlignment="Center" Margin="0,0,4,0"
+                                           ToolTip="{Binding ToolTip, ElementName=LocalScpAeBox}"/>
+                                <TextBox x:Name="LocalScpAeBox" Text="{Binding LocalScpAe, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="100" VerticalAlignment="Center"
+                                         ToolTip="The AE title of this computer, which the PACS sends C-MOVE objects and Storage Commitment reports to. The PACS must have it, with this computer's address and the port"/>
+                                <TextBlock Text="Port:" VerticalAlignment="Center" Margin="10,0,4,0"
+                                           ToolTip="{Binding ToolTip, ElementName=LocalScpPortBox}"/>
+                                <TextBox x:Name="LocalScpPortBox" Text="{Binding LocalScpPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center"
+                                         ToolTip="Where this computer listens during a C-MOVE or Storage Commitment test. Windows Defender Firewall must allow it"/>
+                            </StackPanel>
+                            <Button DockPanel.Dock="Right" Content="Open results folder" Width="130" Click="OpenTestResultsFolderButton_Click"
+                                    ToolTip="{Binding TestSuite.ResultsFolder}" ToolTipService.ShowOnDisabled="True"/>
+                            <TextBlock/>
                         </DockPanel>
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,2,4" IsEnabled="{Binding IsIdle}">
-                            <TextBlock Text="Local SCP AET:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <TextBox Text="{Binding LocalScpAe, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="100" VerticalAlignment="Center"
-                                     ToolTip="The AE title the PACS sends C-MOVE objects to. The PACS must have it, with this computer's address and the port"/>
-                            <TextBlock Text="Port:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                            <TextBox Text="{Binding LocalScpPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center"
-                                     ToolTip="Where this computer listens during a C-MOVE test. Windows Defender Firewall must allow it"/>
-                            <TextBlock Text="UID root:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                            <TextBox Text="{Binding TestUidRoot, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" VerticalAlignment="Center"
-                                     ToolTip="UIDs of the objects the store tests send start with this"/>
-                            <TextBlock Text="Store tests send in:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                            <ComboBox ItemsSource="{Binding TestSuite.StoreSyntaxChoices}" SelectedItem="{Binding TestSuite.SelectedStoreSyntax, Mode=TwoWay}" Width="260" VerticalAlignment="Center"/>
-                        </StackPanel>
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,2,4" IsEnabled="{Binding IsIdle}">
-                            <TextBlock Text="Storage Commitment: keep association open" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <TextBox Text="{Binding CommitLingerSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
-                                     ToolTip="Seconds the association of the N-ACTION stays open, so the report can come on it. 0 releases at once, and the report must then come on a new association to the local SCP AET and port above"/>
-                            <TextBlock Text="s (0 releases at once)" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                            <TextBlock Text="Wait for the report:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                            <TextBox Text="{Binding CommitWaitSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
-                                     ToolTip="Seconds after the N-ACTION-RSP before the test gives TIMEOUT. A report on a new association needs the PACS to know the local SCP AET with this computer's address and port"/>
-                            <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                            <TextBlock Text="Then keep listening:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                            <TextBox Text="{Binding CommitGraceSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
-                                     ToolTip="Seconds to go on listening after a TIMEOUT, to tell a late report from none at all"/>
-                            <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                        </StackPanel>
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,2,4" IsEnabled="{Binding IsIdle}">
-                            <TextBlock Text="Limits: associations up to" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <TextBox Text="{Binding LimitMaxAssociations, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
-                                     ToolTip="Where the test of simultaneous associations stops if none is refused before. They are held open on the PACS while the test runs, so keep it small"/>
-                            <TextBlock Text="Idle wait:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                            <TextBox Text="{Binding LimitIdleWaitSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
-                                     ToolTip="Seconds to wait for the PACS to end an association on which nothing is sent"/>
-                            <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                            <TextBlock Text="ARTIM wait:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                            <TextBox Text="{Binding LimitArtimWaitSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
-                                     ToolTip="Seconds to wait for the PACS to close a connection on which no association request is sent"/>
-                            <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                            <TextBlock Text="After a fault, look for" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                            <TextBox Text="{Binding FaultSettleSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40" VerticalAlignment="Center"
-                                     ToolTip="Seconds a fault test goes on asking for the instance after a broken transfer, before it counts as not there"/>
-                            <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                            <TextBlock Text="Expired client certificate:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                            <TextBox Text="{Binding TlsExpiredClientCertThumbprint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" VerticalAlignment="Center"
-                                     ToolTip="Thumbprint of an expired client certificate that you have installed in your personal certificate store, for the TLS test that expects the PACS to refuse it. Empty skips that test"/>
-                        </StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="230"/>
@@ -563,7 +528,7 @@
                                     ToolTip="Shows how many new objects the test will store on the destination above, and starts it when you say yes"/>
                             <Button Content="Cancel" Width="60" Margin="6,0,0,0" Command="{Binding CancelCommand}"/>
                             <TextBlock Text="Test:" VerticalAlignment="Center" Margin="12,0,4,0"/>
-                            <ComboBox ItemsSource="{Binding Performance.Modes}" SelectedItem="{Binding Performance.SelectedMode, Mode=TwoWay}" Width="300" IsEnabled="{Binding IsIdle}"/>
+                            <ComboBox ItemsSource="{Binding Performance.Modes}" SelectedItem="{Binding Performance.SelectedMode, Mode=TwoWay}" Width="300" IsEnabled="{Binding IsIdle}" ToolTip="Which performance test to run: steady load, a ramp of more and more associations, or a long soak"/>
                             <TextBlock Text="Mix:" VerticalAlignment="Center" Margin="12,0,4,0"/>
                             <ComboBox ItemsSource="{Binding Performance.Mixes}" SelectedItem="{Binding Performance.SelectedMix, Mode=TwoWay}" Width="130" IsEnabled="{Binding IsIdle}"
                                       ToolTip="{Binding Performance.SelectedMix.Description}" DisplayMemberPath="Id"/>
@@ -575,7 +540,7 @@
                                      Visibility="{Binding Performance.IsRamp, Converter={StaticResource InverseBoolToVisibility}}" ToolTip="Associations at once, each with one C-STORE outstanding"/>
                             <StackPanel Orientation="Horizontal" Visibility="{Binding Performance.IsLoad, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Duration:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                                <TextBox Text="{Binding Performance.DurationSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding Performance.DurationSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center" ToolTip="Seconds the load test runs, when the count is 0"/>
                                 <TextBlock Text="s, or count:" VerticalAlignment="Center" Margin="4,0,4,0"/>
                                 <TextBox Text="{Binding Performance.InstanceCount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="50" VerticalAlignment="Center"
                                          ToolTip="Send exactly this many instead of running for a duration. 0 runs for the duration"/>
@@ -586,16 +551,16 @@
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Visibility="{Binding Performance.IsRamp, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Steps (associations):" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                <TextBox Text="{Binding Performance.RampStepsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding Performance.RampStepsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90" VerticalAlignment="Center" ToolTip="Associations at once in each step of the ramp, rising, separated by commas, for example 1,2,4,8"/>
                                 <TextBlock Text="Each step:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                                <TextBox Text="{Binding Performance.RampStepSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding Performance.RampStepSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center" ToolTip="Seconds each step of the ramp runs"/>
                                 <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Visibility="{Binding Performance.IsSoak, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="Duration:" VerticalAlignment="Center" Margin="10,0,4,0"/>
                                 <TextBox Text="{Binding Performance.SoakDurationText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="50" VerticalAlignment="Center" ToolTip="For example 90s, 30m or 8h"/>
                                 <TextBlock Text="Rate:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-                                <TextBox Text="{Binding Performance.SoakRatePerSecond, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding Performance.SoakRatePerSecond, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center" ToolTip="Instances per second over all associations during the soak. A steady rate shows whether the destination gets slower over time"/>
                                 <TextBlock Text="/s. Snapshot every" VerticalAlignment="Center" Margin="4,0,4,0"/>
                                 <TextBox Text="{Binding Performance.SnapshotSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="45" VerticalAlignment="Center"
                                          ToolTip="Each snapshot is written to the windows file at once, so a crash keeps what was measured"/>
@@ -620,9 +585,9 @@
                                 <TextBox Text="{Binding Performance.SampleEvery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center"
                                          ToolTip="Query with C-FIND for 1 in this many stored instances, on an association of its own. 0 turns it off"/>
                                 <TextBlock Text="every" VerticalAlignment="Center" Margin="4,0,4,0"/>
-                                <TextBox Text="{Binding Performance.PollIntervalSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding Performance.PollIntervalSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center" ToolTip="Seconds between the C-FINDs that look for a sampled image"/>
                                 <TextBlock Text="s for up to" VerticalAlignment="Center" Margin="4,0,4,0"/>
-                                <TextBox Text="{Binding Performance.PollTimeoutSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding Performance.PollTimeoutSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="35" VerticalAlignment="Center" ToolTip="Seconds to look for a sampled image before it counts as never found"/>
                                 <TextBlock Text="s" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             </StackPanel>
                         </WrapPanel>

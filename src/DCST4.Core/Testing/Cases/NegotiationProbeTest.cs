@@ -24,6 +24,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Proposes the SOP classes and transfer syntaxes DCST4 knows and records which the destination accepts. Fills the Capabilities tab, and the store tests use it to choose what to send in. Stores nothing.";
         public string Group => TestGroups.Association;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
         {

@@ -57,6 +57,7 @@ namespace DCST4.Core.Testing.Cases
         public abstract string Description { get; }
         public string Group => TestGroups.Tls;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
         {

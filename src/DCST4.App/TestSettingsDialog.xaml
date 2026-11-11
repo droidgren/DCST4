@@ -1,0 +1,133 @@
+<Window x:Class="DCST4.TestSettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Test settings"
+        Width="640"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="Unit">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+            <Setter Property="Foreground" Value="#FF505050"/>
+        </Style>
+        <Style TargetType="Label">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="0,4,10,4"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+    </Window.Resources>
+    <StackPanel Margin="15">
+        <GroupBox Header="Objects the tests send" Padding="6,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="UID root:" ToolTip="{Binding ToolTip, ElementName=UidRootBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="UidRootBox" Text="{Binding UidRoot, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="220" HorizontalAlignment="Left"
+                         ToolTip="Every UID of the objects the tests send starts with this root, so they can be told from real ones on the PACS. 2.25 is the default and needs no registration. Use your organisation's own root if it has one"/>
+
+                <Label Grid.Row="1" Content="Store tests send in:" ToolTip="{Binding ToolTip, ElementName=StoreSyntaxBox}"/>
+                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="StoreSyntaxBox" ItemsSource="{Binding StoreSyntaxChoices}" SelectedItem="{Binding StoreSyntax, Mode=TwoWay}" Margin="0,2"
+                          ToolTip="The transfer syntax of the objects the store tests send. Per object type takes, for each type, a syntax the capability matrix says the destination accepts, from the negotiation probe in the same run or an earlier one. Another choice sends every type that allows it in that syntax"/>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Header="Storage Commitment" Padding="6,4" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Keep the association open:" ToolTip="{Binding ToolTip, ElementName=CommitLingerBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="CommitLingerBox" Text="{Binding CommitLingerSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds the association of the N-ACTION stays open, so the report can come on it. 0 releases at once, and the report must then come on a new association to the local SCP AET and port on the Tests tab. At most the wait for the report"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="s (0 releases at once)"/>
+
+                <Label Grid.Row="1" Content="Wait for the report:" ToolTip="{Binding ToolTip, ElementName=CommitWaitBox}"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="CommitWaitBox" Text="{Binding CommitWaitSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds after the N-ACTION-RSP before the test gives TIMEOUT. A report on a new association needs the PACS to know the local SCP AET with this computer's address and port"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+
+                <Label Grid.Row="2" Content="Then keep listening:" ToolTip="{Binding ToolTip, ElementName=CommitGraceBox}"/>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="CommitGraceBox" Text="{Binding CommitGraceSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds to go on listening after a TIMEOUT, to tell a report that comes late from one that never comes"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Header="Limits, faults and TLS" Padding="6,4" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Associations up to:" ToolTip="{Binding ToolTip, ElementName=MaxAssociationsBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="MaxAssociationsBox" Text="{Binding MaxAssociations, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Where the test of simultaneous associations stops if none is refused before. They are held open on the PACS while the test runs, so keep it small. 1 to 500"/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="associations at once"/>
+
+                <Label Grid.Row="1" Content="Idle wait:" ToolTip="{Binding ToolTip, ElementName=IdleWaitBox}"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="IdleWaitBox" Text="{Binding IdleWaitSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds to wait for the PACS to end an association on which nothing is sent. A PACS that keeps it longer gets the result that it did not end it within this time"/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+
+                <Label Grid.Row="2" Content="ARTIM wait:" ToolTip="{Binding ToolTip, ElementName=ArtimWaitBox}"/>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="ArtimWaitBox" Text="{Binding ArtimWaitSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds to wait for the PACS to close a connection on which no association request is sent"/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+
+                <Label Grid.Row="3" Content="After a fault, look for:" ToolTip="{Binding ToolTip, ElementName=FaultSettleBox}"/>
+                <TextBox Grid.Row="3" Grid.Column="1" x:Name="FaultSettleBox" Text="{Binding FaultSettleSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds a fault test goes on asking for the instance after a broken transfer, before it counts as not there"/>
+                <TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+
+                <Label Grid.Row="4" Content="Expired client certificate:" ToolTip="{Binding ToolTip, ElementName=ExpiredCertBox}"/>
+                <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" x:Name="ExpiredCertBox" Text="{Binding ExpiredClientCertThumbprint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Thumbprint of an expired client certificate that you have installed in your personal certificate store, for the TLS test that expects the PACS to refuse it. Empty skips that test"/>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Header="Results" Padding="6,4" Margin="0,8,0,0">
+            <DockPanel>
+                <Label DockPanel.Dock="Left" Content="Results folder:" Width="200" ToolTip="{Binding ToolTip, ElementName=ResultsFolderBox}"/>
+                <Button DockPanel.Dock="Right" Content="..." Width="26" Margin="4,2,0,2" Click="BrowseButton_Click" ToolTip="Select the folder"/>
+                <TextBox x:Name="ResultsFolderBox" Text="{Binding ResultsFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Where each run writes its JSON and CSV result files, and the Performance tests their series files. It is made if it is not there"/>
+            </DockPanel>
+        </GroupBox>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="OK" Click="OkButton_Click" Width="80" Height="25" Margin="0,0,10,0" IsDefault="True"/>
+            <Button Content="Cancel" Width="80" Height="25" IsCancel="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

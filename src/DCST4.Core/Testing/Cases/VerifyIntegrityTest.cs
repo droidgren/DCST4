@@ -16,6 +16,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Compares every object the C-GET and C-MOVE tests brought back with what was sent. Needs the store and retrieve tests in the same run.";
         public string Group => TestGroups.Retrieve;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
 
         public Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
         {

@@ -187,19 +187,9 @@ namespace DCST4
             }
         }
 
-        private void BrowseTestResultsFolderButton_Click(object sender, RoutedEventArgs e)
+        private void TestSettingsButton_Click(object sender, RoutedEventArgs e)
         {
-            using (var dialog = new System.Windows.Forms.FolderBrowserDialog
-            {
-                Description = "Select the folder for test results",
-                SelectedPath = _viewModel.TestSuite.ResultsFolder,
-            })
-            {
-                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                {
-                    _viewModel.TestSuite.ResultsFolder = dialog.SelectedPath;
-                }
-            }
+            new TestSettingsDialog(new TestSettingsViewModel(_viewModel)) { Owner = this }.ShowDialog();
         }
 
         private void OpenTestResultsFolderButton_Click(object sender, RoutedEventArgs e)

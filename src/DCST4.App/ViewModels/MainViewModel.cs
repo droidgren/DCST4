@@ -1104,12 +1104,18 @@ namespace DCST4.ViewModels
         }
 
         /// <summary>The question asked before a run with tests that store objects.</summary>
+        /// <remarks>Each test with what it stores, and the total. Sizes are uncompressed, the most a test sends.</remarks>
         private static string DescribeStoring(IReadOnlyList<ITestCase> storing, TargetProfile profile)
         {
             var target = $"{profile.Endpoint.CalledAe} at {profile.Endpoint.Host}:{profile.Endpoint.Port}";
             var count = storing.Count == 1 ? "1 of the ticked tests stores" : $"{storing.Count} of the ticked tests store";
-            return $"{count} new objects on {target}. They may not be possible to delete.\n\n"
-                + string.Join("\n", storing.Select(t => "- " + t.Name))
+            var lines = storing.Select(t => t.Storage == null
+                ? $"- {t.Name}"
+                : $"- {t.Name}: {t.Storage.Describe()}" + (t.Storage.Note == null ? string.Empty : ". " + t.Storage.Note));
+            var total = StorageEstimate.Sum(storing.Select(t => t.Storage));
+            return $"{count} new test objects on {target}:\n\n"
+                + string.Join("\n", lines)
+                + $"\n\nIn all: {total.Describe()}. Sizes are uncompressed. A compressed transfer syntax sends less."
                 + "\n\nStart the tests?";
         }
 

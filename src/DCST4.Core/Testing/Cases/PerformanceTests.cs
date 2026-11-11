@@ -26,6 +26,7 @@ namespace DCST4.Core.Testing.Cases
         public abstract string Description { get; }
         public string Group => TestGroups.Performance;
         public bool StoresObjects => true;
+        public StorageEstimate Storage => null;
         public abstract LoadMode Mode { get; }
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)

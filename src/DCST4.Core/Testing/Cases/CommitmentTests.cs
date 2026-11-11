@@ -338,6 +338,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Asks for Storage Commitment of every instance the store tests stored, and waits for the report, on the same association or a new one to the local SCP. Needs a store test earlier in the same run.";
         public string Group => TestGroups.Commitment;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
         public TestCategory Category => TestCategory.Integrity;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
@@ -412,6 +413,7 @@ namespace DCST4.Core.Testing.Cases
         public string Description => "Asks for Storage Commitment of a stored instance together with one that was never sent. The destination must refuse that one and commit the other. Needs a store test earlier in the same run.";
         public string Group => TestGroups.Commitment;
         public bool StoresObjects => false;
+        public StorageEstimate Storage => null;
         public TestCategory Category => TestCategory.Integrity;
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
