@@ -74,7 +74,11 @@ namespace DCST4.Cli
 
             if (args.Length >= 1 && args[0].Equals("generate", StringComparison.OrdinalIgnoreCase)) return await GenerateAsync(args).ConfigureAwait(false);
 
-            if (args.Length == 0 || !args[0].Equals("run", StringComparison.OrdinalIgnoreCase)) return UsageError("Expected the command 'run', 'generate', 'list-datasets', 'list-codecs' or 'list-mixes'.");
+            // Both only read result files and write one HTML file. Nothing is sent, so no profile and no log are needed.
+            if (args.Length >= 1 && args[0].Equals("report", StringComparison.OrdinalIgnoreCase)) return ReportCommand.Report(args, UsageError, Refuse);
+            if (args.Length >= 1 && args[0].Equals("compare", StringComparison.OrdinalIgnoreCase)) return ReportCommand.Compare(args, UsageError, Refuse);
+
+            if (args.Length == 0 || !args[0].Equals("run", StringComparison.OrdinalIgnoreCase)) return UsageError("Expected the command 'run', 'report', 'compare', 'generate', 'list-datasets', 'list-codecs' or 'list-mixes'.");
 
             var arguments = CliArguments.Parse(args, out var argumentError);
             if (arguments == null) return UsageError(argumentError);
@@ -247,9 +251,12 @@ namespace DCST4.Cli
 
             try
             {
-                var files = ResultFileWriter.Write(report, outputFolder);
+                var files = DCST4.Core.Reporting.ReportFiles.WriteRun(report, outputFolder, out var reportProblem);
                 Console.WriteLine("JSON: " + files.Json);
                 Console.WriteLine("CSV:  " + files.Csv);
+                if (files.Html != null) Console.WriteLine("HTML: " + files.Html);
+                // The results are saved, so a report that could not be written does not change the exit code. "report" can make it later.
+                else Console.Error.WriteLine("Warning: the HTML report could not be written: " + reportProblem);
                 if (files.CapabilityJson != null)
                 {
                     Console.WriteLine("Capability matrix: " + files.CapabilityJson);

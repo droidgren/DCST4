@@ -326,8 +326,12 @@
                                 <TextBox x:Name="LocalScpPortBox" Text="{Binding LocalScpPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center"
                                          ToolTip="Where this computer listens during a C-MOVE or Storage Commitment test. Windows Defender Firewall must allow it.&#x0a;&#x0a;Default: 11113."/>
                             </StackPanel>
-                            <Button DockPanel.Dock="Right" Content="Open results folder" Width="130" Click="OpenTestResultsFolderButton_Click"
+                            <Button DockPanel.Dock="Right" Content="Open results folder" Width="120" Margin="6,0,0,0" Click="OpenTestResultsFolderButton_Click"
                                     ToolTip="{Binding TestSuite.ResultsFolder}" ToolTipService.ShowOnDisabled="True"/>
+                            <Button DockPanel.Dock="Right" Content="Compare runs..." Width="100" Margin="6,0,0,0" Click="CompareRunsButton_Click" IsEnabled="{Binding IsIdle}"
+                                    ToolTip="Compare saved runs with each other: what the system no longer supports, tests that now fail, and throughput and latency against a threshold. Also opens the report of any saved run"/>
+                            <Button DockPanel.Dock="Right" Content="Open report" Width="85" Command="{Binding OpenReportCommand}"
+                                    ToolTip="Open the report of the last run in the browser: one HTML file with the summary, the capability matrix, the chain, the findings and the timelines of failed tests. It is saved beside the result files" ToolTipService.ShowOnDisabled="True"/>
                             <TextBlock/>
                         </DockPanel>
                         <Grid>
@@ -522,6 +526,8 @@
                             <Button Content="Run" Width="80" Command="{Binding RunPerformanceCommand}" FontWeight="SemiBold"
                                     ToolTip="Shows how many new objects the test will store on the destination above, and starts it when you say yes"/>
                             <Button Content="Cancel" Width="60" Margin="6,0,0,0" Command="{Binding CancelCommand}"/>
+                            <Button Content="Open report" Width="85" Margin="6,0,0,0" Command="{Binding OpenPerformanceReportCommand}"
+                                    ToolTip="Open the report of the last run on this tab in the browser: one HTML file with the settings, the charts and the tables. It is saved beside the result files. To compare runs, use Compare runs... on the Tests tab" ToolTipService.ShowOnDisabled="True"/>
                             <TextBlock Text="Test:" VerticalAlignment="Center" Margin="12,0,4,0"/>
                             <ComboBox ItemsSource="{Binding Performance.Modes}" SelectedItem="{Binding Performance.SelectedMode, Mode=TwoWay}" Width="300" IsEnabled="{Binding IsIdle}" ToolTip="Which performance test to run: steady load, a ramp of more and more associations, or a long soak.&#x0a;&#x0a;Default: Load: throughput and latency."/>
                             <TextBlock Text="Mix:" VerticalAlignment="Center" Margin="12,0,4,0"/>

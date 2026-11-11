@@ -192,6 +192,19 @@ namespace DCST4
             new TestSettingsDialog(new TestSettingsViewModel(_viewModel)) { Owner = this }.ShowDialog();
         }
 
+        private async void CompareRunsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var choices = _viewModel.Comparison;
+            // The run that just finished is what a comparison is most often about.
+            var last = _viewModel.TestSuite.LastResultFiles?.Json;
+            if (last != null && choices.Runs.Count == 0) choices.Add(new[] { last });
+
+            var dialog = new CompareRunsDialog(choices, _viewModel.TestSuite.ResultsFolder.Trim()) { Owner = this };
+            if (dialog.ShowDialog() != true) return;
+            if (dialog.RunToOpen != null) await _viewModel.OpenSavedReportAsync(dialog.RunToOpen);
+            else if (dialog.RunsToCompare != null) await _viewModel.CompareRunsAsync(dialog.RunsToCompare, dialog.ThresholdPercent);
+        }
+
         private void OpenTestResultsFolderButton_Click(object sender, RoutedEventArgs e)
         {
             try

@@ -1,0 +1,35 @@
+<Window x:Class="DCST4.CompareRunsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Compare runs"
+        Width="760" Height="420" MinWidth="560" MinHeight="300"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <DockPanel Margin="15">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,8"
+                   Text="Choose the result files (DCST4-run-&lt;time&gt;.json) of two or more saved runs. The run at the top is the baseline, and each of the others is compared with it. The comparison is written to the results folder as one HTML file and opened in the browser."/>
+
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <Button DockPanel.Dock="Right" Content="Close" Width="80" IsCancel="True" Margin="6,0,0,0"/>
+            <Button DockPanel.Dock="Right" Content="Compare" Width="90" IsDefault="True" FontWeight="SemiBold" Click="CompareButton_Click" IsEnabled="{Binding CanCompare}"
+                    ToolTip="Compare the runs in the list with the one at the top, and open the result in the browser" ToolTipService.ShowOnDisabled="True"/>
+            <Button DockPanel.Dock="Right" Content="Open report" Width="90" Margin="0,0,6,0" Click="OpenReportButton_Click" IsEnabled="{Binding HasSelection}"
+                    ToolTip="Open the HTML report of the selected run in the browser. It is made from the result file if it is not there" ToolTipService.ShowOnDisabled="True"/>
+            <TextBlock Text="Threshold:" VerticalAlignment="Center" Margin="0,0,6,0" ToolTip="{Binding ToolTip, ElementName=ThresholdBox}"/>
+            <TextBox x:Name="ThresholdBox" Text="{Binding ThresholdText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="50" VerticalAlignment="Center"
+                     ToolTip="How much lower a throughput, or higher a p95 latency or time-to-available, may be than in the baseline before it is a regression, in percent. A latency must also have risen by at least 1 ms. A test, a chain step or a combination of SOP class and transfer syntax that did worse is a regression whatever the threshold is.&#x0a;&#x0a;Default: 10."/>
+            <TextBlock Text="%" VerticalAlignment="Center" Margin="4,0,0,0" Foreground="#FF505050"/>
+            <TextBlock Text="{Binding Hint}" VerticalAlignment="Center" Margin="16,0,8,0" Foreground="#FF505050" TextTrimming="CharacterEllipsis"/>
+        </DockPanel>
+
+        <StackPanel DockPanel.Dock="Right" Margin="8,0,0,0" Width="90">
+            <Button Content="Add..." Click="AddButton_Click" ToolTip="Add result files of saved runs. Several can be chosen at once"/>
+            <Button Content="Remove" Margin="0,6,0,0" Click="RemoveButton_Click" IsEnabled="{Binding HasSelection}" ToolTip="Take the selected run out of the list. The file is not deleted"/>
+            <Button Content="Move up" Margin="0,16,0,0" Click="MoveUpButton_Click" IsEnabled="{Binding HasSelection}" ToolTip="Move the selected run up. The run at the top is the baseline"/>
+            <Button Content="Move down" Margin="0,6,0,0" Click="MoveDownButton_Click" IsEnabled="{Binding HasSelection}" ToolTip="Move the selected run down"/>
+        </StackPanel>
+
+        <ListBox ItemsSource="{Binding Runs}" SelectedItem="{Binding SelectedRun, Mode=TwoWay}" ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 ToolTip="The runs to compare. The one at the top is the baseline"/>
+    </DockPanel>
+</Window>

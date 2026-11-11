@@ -387,8 +387,10 @@
                     <Paragraph Style="{StaticResource H2}">Result files</Paragraph>
                     <Paragraph>
                         Each run is saved as a JSON file with full detail and a CSV file with one row per result, in the
-                        folder on the tab. A run with store tests also writes the chain as a CSV file. The client certificate
-                        thumbprint is never written to them.
+                        results folder. A run with store tests also writes the chain as a CSV file. The client certificate
+                        thumbprint is never written to them. Every run also writes a report as one HTML file, which
+                        <Bold>Open report</Bold> opens, and <Bold>Compare runs...</Bold> compares saved runs. See the topic
+                        Reports and comparison.
                     </Paragraph>
                 </Section>
 
@@ -633,6 +635,73 @@
                         announces and sends with. The results go to the results folder in Test settings, with a file of one
                         row per second next to them. <Bold>Cancel</Bold> stops the run within a few seconds and releases the
                         associations.
+                    </Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
+                <Section Tag="Reports and comparison">
+                    <Paragraph Style="{StaticResource H1}">Reports and comparison</Paragraph>
+                    <Paragraph>
+                        Every run on the Tests and Performance tabs writes a report beside its result files, with the same
+                        name and the ending <Italic>.html</Italic>. <Bold>Open report</Bold> on each tab opens the report of
+                        the last run in your browser. The report is one file that is complete in itself: it loads nothing
+                        from the network and holds no script, so it can be mailed or archived as it is.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">What the report holds</Paragraph>
+                    <List>
+                        <ListItem><Paragraph>The destination, the DCST4 version and the number of results of each class, and every test with its raw status and explanation.</Paragraph></ListItem>
+                        <ListItem><Paragraph>The <Bold>vendor fingerprint</Bold>: the Implementation Class UID and Version Name of the system, and how it behaves. See below.</Paragraph></ListItem>
+                        <ListItem><Paragraph>The capability matrix, the chain per object type, and what the integrity check found.</Paragraph></ListItem>
+                        <ListItem><Paragraph>The limits that were found, and how Storage Commitment went.</Paragraph></ListItem>
+                        <ListItem><Paragraph>For a Performance test, charts of throughput and latency and the tables of the run, the ramp steps or the soak windows. The chart of a Load run is drawn from its series file, so keep that file beside the result file.</Paragraph></ListItem>
+                        <ListItem><Paragraph>The protocol timeline of every test that ended in FAIL, TIMEOUT or TOOL_ERROR.</Paragraph></ListItem>
+                    </List>
+                    <Paragraph Style="{StaticResource Note}">
+                        Text that came from the system under test, such as an Error Comment or a version name, is always shown
+                        as text. Markup in it is never run or fetched.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Vendor fingerprint</Paragraph>
+                    <Paragraph>
+                        The fingerprint describes the system as a product, which is useful when two vendors or two versions
+                        are compared: what it accepts, whether an unknown AE title is refused, whether it returns objects in
+                        the transfer syntax they were sent in, which attributes it changes or adds, how it takes a duplicate,
+                        where its Storage Commitment report comes, how many associations it holds and how it refuses the next
+                        one, and what it does after a broken transfer. Each row names the test it came from. A row says
+                        <Italic>not tested</Italic> when no test of the run could tell, so run the tests you want it to cover.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Compare runs</Paragraph>
+                    <Paragraph>
+                        <Bold>Compare runs...</Bold> on the Tests tab opens a list of saved runs. <Bold>Add...</Bold> chooses
+                        their result files, <Italic>DCST4-run-&lt;time&gt;.json</Italic>, from the results folder. The run at the
+                        top is the baseline, and <Bold>Move up</Bold> and <Bold>Move down</Bold> change the order.
+                        <Bold>Compare</Bold> compares each of the others with the baseline, writes
+                        <Italic>DCST4-compare-&lt;time&gt;.html</Italic> to the results folder and opens it.
+                        <Bold>Open report</Bold> in the same window opens the report of the selected run, also one from an
+                        earlier version of DCST4.
+                    </Paragraph>
+                    <Paragraph>A <Bold>regression</Bold> is one of these:</Paragraph>
+                    <List>
+                        <ListItem><Paragraph>A test, or a step of the chain, that did worse: from PASS or EXPECTED_FAILURE to NOT_SUPPORTED, or from any of those to FAIL or TIMEOUT.</Paragraph></ListItem>
+                        <ListItem><Paragraph>A combination of SOP class and transfer syntax that was accepted and no longer is.</Paragraph></ListItem>
+                        <ListItem><Paragraph>In a Performance test: throughput lower, or p95 latency or time-to-available higher, by more than the <Bold>Threshold</Bold>, 10 % by default. A latency must also have risen by at least 1 ms. Or an error rate that rose by more than 1 percentage point.</Paragraph></ListItem>
+                    </List>
+                    <Paragraph>
+                        Improvements and other differences are listed apart, and so is what cannot be compared: a test that
+                        only one of the runs has, one that was cancelled or ended in TOOL_ERROR, and a Performance test that
+                        was run with other settings. Those are never counted against the system. Times, UIDs, the seed and the
+                        wording of explanations are never compared, so two runs of the same tests against the same system
+                        show no differences. The fingerprints of all the runs are shown side by side at the end.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource Note}">
+                        Throughput and latency vary from run to run, also against the same system. Compare several runs before
+                        you trust a difference, and look at the charts of each run.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">On the command line</Paragraph>
+                    <Paragraph>
+                        <Italic>DCST4.Cli.exe report --run &lt;file&gt;</Italic> writes the report of a saved run, and
+                        <Italic>DCST4.Cli.exe compare --runs &lt;a&gt; &lt;b&gt; --threshold 10</Italic> compares runs. The exit
+                        code of <Italic>compare</Italic> is 0 with no regression, 1 with at least one and 2 when a file cannot
+                        be read, so it can stop a script.
                     </Paragraph>
                 </Section>
 

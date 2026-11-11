@@ -61,6 +61,8 @@ namespace DCST4.Core.Testing
         public string CapabilityCsv { get; set; }
         /// <summary>Null when no store test ran.</summary>
         public string ChainCsv { get; set; }
+        /// <summary>The HTML report, which <see cref="DCST4.Core.Reporting.ReportFiles.WriteRun"/> writes. Null when it was not written.</summary>
+        public string Html { get; set; }
     }
 
     /// <summary>

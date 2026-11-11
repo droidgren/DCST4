@@ -3,6 +3,7 @@ using DCST4.Core.Generation;
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Network;
 using DCST4.Core.Pipeline;
+using DCST4.Core.Reporting;
 using DCST4.Core.Testing;
 using DCST4.Infrastructure;
 using DCST4.Models;
@@ -350,6 +351,10 @@ namespace DCST4.ViewModels
         /// <summary>Writes the settings to disk.</summary>
         public Action SaveSettings { get; set; } = () => Settings.Default.Save();
 
+        /// <summary>Opens a file with the program that Windows has for it: a report in the browser.</summary>
+        public Action<string> OpenDocument { get; set; } = path =>
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+
         private static string DefaultTitle(MessageBoxImage icon)
         {
             switch (icon)
@@ -366,6 +371,8 @@ namespace DCST4.ViewModels
         public ICommand RunCommand { get; }
         public ICommand RunTestsCommand { get; }
         public ICommand RunPerformanceCommand { get; }
+        public ICommand OpenReportCommand { get; }
+        public ICommand OpenPerformanceReportCommand { get; }
         public ICommand CancelCommand { get; }
 
         /// <summary>The Performance tab.</summary>
@@ -410,6 +417,8 @@ namespace DCST4.ViewModels
             RunCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunAsync), _ => !IsBusy);
             RunTestsCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunTestsAsync), _ => !IsBusy);
             RunPerformanceCommand = new RelayCommand(async _ => await RunBusyAsync(DoRunPerformanceAsync), _ => !IsBusy);
+            OpenReportCommand = new RelayCommand(async _ => await OpenReportAsync(TestSuite.LastResultFiles), _ => !IsBusy && TestSuite.LastResultFiles != null);
+            OpenPerformanceReportCommand = new RelayCommand(async _ => await OpenReportAsync(Performance.LastResultFiles), _ => !IsBusy && Performance.LastResultFiles != null);
             CancelCommand = new RelayCommand(_ => CancelOperation(), _ => _cts != null && !_cts.IsCancellationRequested);
             NewValuesCommand = new RelayCommand(_ => GenerateNewValues(), _ => !IsBusy);
             SaveProfileCommand = new RelayCommand(_ => SaveProfile(), _ => !IsBusy);
@@ -464,6 +473,7 @@ namespace DCST4.ViewModels
                 _profileName = string.Empty;
                 Performance.ResetToDefaults();
                 TestSuite.ReloadFromSettings();
+                Comparison.ReloadFromSettings();
                 ReloadAdditionalTags();
             }
             finally
@@ -1092,7 +1102,7 @@ namespace DCST4.ViewModels
             var ending = report.Cancelled ? "Tests cancelled." : "Tests finished.";
             try
             {
-                TestSuite.LastResultFiles = await Task.Run(() => ResultFileWriter.Write(report, folder));
+                TestSuite.LastResultFiles = await Task.Run(() => WriteRunFiles(report, folder));
                 StatusText = $"{ending} Results saved in {folder}";
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException)
@@ -1192,7 +1202,8 @@ namespace DCST4.ViewModels
             var ending = report.Cancelled ? "Performance test cancelled." : "Performance test finished.";
             try
             {
-                var files = await Task.Run(() => ResultFileWriter.Write(report, folder));
+                var files = await Task.Run(() => WriteRunFiles(report, folder));
+                Performance.LastResultFiles = files;
                 Performance.Files = string.Join("   ", new[] { files.Json, result.Performance?.SeriesFile, result.Performance?.WindowsFile }.Where(f => f != null));
                 StatusText = $"{ending} Results saved in {folder}";
             }
@@ -1202,6 +1213,95 @@ namespace DCST4.ViewModels
                 StatusText = $"{ending} The results could not be saved: {ex.Message}";
             }
         }
+
+        /// <summary>The result files with the HTML report beside them. A report that cannot be written is logged: the results are what matter.</summary>
+        private ResultFilePaths WriteRunFiles(TestRunReport report, string folder)
+        {
+            var files = ReportFiles.WriteRun(report, folder, out var reportProblem);
+            if (reportProblem != null) _logger.Warning("Could not write the HTML report of {json}: {problem}", files.Json, reportProblem);
+            return files;
+        }
+
+        #region Reports and comparison
+        /// <summary>What the Compare runs dialog shows. Kept, so that the list is still there the next time.</summary>
+        public CompareRunsViewModel Comparison { get; } = new CompareRunsViewModel();
+
+        /// <summary>Opens the report of a finished run in the browser. The report is made again from the JSON file if it is not there.</summary>
+        public Task OpenReportAsync(ResultFilePaths files) => files?.Json == null ? Task.CompletedTask : OpenSavedReportAsync(files.Json);
+
+        /// <summary>Opens the report of a saved run, from its JSON file.</summary>
+        public Task OpenSavedReportAsync(string jsonPath) => RunBusyAsync(async token =>
+        {
+            try
+            {
+                var html = ReportFiles.ReportPathFor(jsonPath);
+                if (!File.Exists(html))
+                {
+                    StatusText = "Writing the report...";
+                    html = await Task.Run(() => ReportFiles.WriteReportFor(RunFile.Load(jsonPath), jsonPath), token);
+                }
+                OpenDocument(html);
+                StatusText = $"Report: {html}";
+            }
+            catch (RunFileException ex)
+            {
+                ShowMessage(ex.Message, MessageBoxImage.Warning, null);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException || ex is System.ComponentModel.Win32Exception)
+            {
+                _logger.Error(ex, "Could not open the report of {json}", jsonPath);
+                ShowMessage("The report could not be opened: " + ex.Message, MessageBoxImage.Warning, null);
+            }
+        });
+
+        /// <summary>
+        /// Compares saved runs, the first being the baseline, writes the comparison to the results folder and opens it. The
+        /// files are read and compared off the UI thread, and Cancel stops between two files.
+        /// </summary>
+        public Task CompareRunsAsync(IReadOnlyList<string> jsonPaths, double thresholdPercent) => RunBusyAsync(async token =>
+        {
+            var options = new ComparisonOptions { ThresholdPercent = thresholdPercent };
+            var problem = jsonPaths == null || jsonPaths.Count < 2 ? "Choose at least two runs to compare. The first is the baseline." : options.Validate();
+            if (problem == null && string.IsNullOrWhiteSpace(TestSuite.ResultsFolder)) problem = "Enter a folder for the results in Test settings.";
+            if (problem != null)
+            {
+                ShowMessage(problem, MessageBoxImage.Warning, null);
+                return;
+            }
+
+            var folder = TestSuite.ResultsFolder.Trim();
+            StatusText = $"Comparing {jsonPaths.Count} runs...";
+            try
+            {
+                var written = await Task.Run(() =>
+                {
+                    var comparison = RunComparer.Compare(ReportFiles.LoadRuns(jsonPaths, token), options);
+                    token.ThrowIfCancellationRequested();
+                    return Tuple.Create(comparison, ReportFiles.WriteComparison(comparison, ReportFiles.NewComparisonPath(folder)));
+                }, token);
+
+                Settings.Default.CompareThresholdPercent = thresholdPercent;
+                LastRunText = written.Item1.Regressions == 0 ? "No regressions" : written.Item1.Regressions == 1 ? "1 regression" : $"{written.Item1.Regressions} regressions";
+                StatusText = $"{written.Item1.Summary} Comparison saved as {written.Item2}";
+                OpenDocument(written.Item2);
+            }
+            catch (OperationCanceledException)
+            {
+                StatusText = "Comparison cancelled.";
+            }
+            catch (RunFileException ex)
+            {
+                StatusText = "Comparison not made.";
+                ShowMessage(ex.Message, MessageBoxImage.Warning, null);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException || ex is System.ComponentModel.Win32Exception)
+            {
+                _logger.Error(ex, "Could not write or open the comparison in {folder}", folder);
+                StatusText = "Comparison not made.";
+                ShowMessage("The comparison could not be written or opened: " + ex.Message, MessageBoxImage.Warning, null);
+            }
+        });
+        #endregion
 
         /// <summary>The progress bar of a Performance run counts in thousandths.</summary>
         public const int PerformanceProgressSteps = 1000;

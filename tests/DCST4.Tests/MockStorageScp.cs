@@ -169,6 +169,8 @@ namespace DCST4.Tests
         /// <summary>Status for the n-th image, counted from 0. Null means Success.</summary>
         public static Func<int, DicomStatus> StatusFor;
         public static Tag OffendingElement;
+        /// <summary>The Error Comment (0000,0902) of the C-STORE response for image number n (0-based), on a status that is not Success. Null for none.</summary>
+        public static Func<int, string> ErrorCommentFor;
         public static int ResponseDelayMs;
         /// <summary>The delay for the n-th image, counted from 0, in place of <see cref="ResponseDelayMs"/>. Null uses that.</summary>
         public static Func<int, int> ResponseDelayFor;
@@ -291,6 +293,7 @@ namespace DCST4.Tests
             RejectAssociation = false;
             StatusFor = null;
             OffendingElement = null;
+            ErrorCommentFor = null;
             ResponseDelayMs = 0;
             ResponseDelayFor = null;
             RecordReceived = true;
@@ -584,6 +587,8 @@ namespace DCST4.Tests
             var status = Scp.StatusFor?.Invoke(index) ?? (Scp.KeepStored ? Archive(request.Dataset) : DicomStatus.Success);
             var response = new DicomCStoreResponse(request, status);
             if (Scp.OffendingElement != null && status != DicomStatus.Success) response.Command.AddOrUpdate(DicomTag.OffendingElement, Scp.OffendingElement.Value);
+            var comment = status != DicomStatus.Success ? Scp.ErrorCommentFor?.Invoke(index) : null;
+            if (comment != null) response.Command.AddOrUpdate(DicomTag.ErrorComment, comment);
             return response;
         }
 
