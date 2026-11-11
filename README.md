@@ -161,9 +161,13 @@ The list is grouped: Association, Store, Query, Retrieve & integrity, Storage Co
 
 **A run that stores objects asks first.** If any ticked test can leave new objects on the destination, a question names the destination and lists those tests, each with how many examinations and objects it stores and about how much data, and then the total. The sizes are uncompressed, the most a test sends; a compressed transfer syntax sends less. The question is as wide as its longest line. The run starts only on a yes. The tests that store are the store tests, `query-matching`, the duplicate and conflict tests, the two PDU limit tests and the fault tests. The command line does not ask.
 
+![The question before a run with the store, query and duplicate tests ticked](screenshots/confirm.png)
+
 While a run is going, the status bar shows which test is running, what it is doing or waiting for, and for how many seconds, for example `Test 51 of 51: Limit: connection without an association request (ARTIM). Connected without sending an A-ASSOCIATE-RQ. Waiting up to 60 s for the system to close the connection (23 s)`. The command line prints the same as a line of its own.
 
 Beside the buttons are the local AE title and port that C-MOVE and Storage Commitment reports go to. The other settings are in **Test settings...**: the UID root of the objects the tests send, the transfer syntax of the store tests, the Storage Commitment times, see [Storage Commitment](#storage-commitment), the settings of the Limits tests, see [Limits and faults](#limits-and-faults), and the results folder. They change only when you click OK, and a value that cannot be used is named and nothing is changed. **Open results folder** opens the folder in Explorer.
+
+![The Test settings dialog](screenshots/test-settings.png)
 
 ![The Tests tab after a run against the mock SCP](screenshots/tests.png)
 
@@ -472,6 +476,8 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 
 **On the Performance tab** the chart shows stored and failed per second above and latency p50 and p95 below. It is drawn by DCST4 itself, as two line charts, and updated at most once a second. The warm-up is shaded and labelled, ramp steps are marked and their lines are not joined, a last second shorter than a second is left out of the lines and of the scale, and hovering shows the values of one second. A soak longer than 600 seconds is drawn in buckets, with the mean of the counts and the highest p95 of each bucket, so a peak is not lost. When the run is over, the table below the chart has one row for the run, one per ramp step with the saturated step marked, or one per soak window.
 
+![The Performance tab after a load test against the mock SCP, with the chart and the summary](screenshots/performance.png)
+
 **This computer.** The worker of each association waits on the network without holding a thread, but a TLS handshake does hold one. So while a test runs, DCST4 raises the thread pool's minimum to twice the number of associations plus eight. Otherwise the setup times at a step of 16 or 32 associations would include the wait for new threads. It also asks the garbage collector for `SustainedLowLatency`, which keeps blocking full collections out of the measurement, and puts both settings back afterwards. `DCST4.Cli.exe` runs with workstation GC and background collection, set in `DCST4.Cli.exe.config`, because the tests allocate little while they measure: the pool is encoded in advance and each association reuses one buffer for its PDUs. Server GC would add a heap and a GC thread per processor for no gain. The result records the processor use per second, the garbage collections per generation, the GC mode and the thread pool minimum, so that a busy client can be told from a slow PACS.
 
 ```powershell
@@ -765,6 +771,7 @@ Changed:
 - Nothing is ticked on the Tests tab when the program starts. Before, every test but the Limits tests was
 - Every test has a description, a group and an estimate of what it stores in DCST4.Core (`ITestCase.Description`, `Group`, `StoresObjects` and `Storage`), for any front-end
 - The Tests tab has one row of buttons and the local SCP, and **Open results folder** in place of the folder field
+- The README screenshots are retaken, with new ones of the question before a run, the Test settings dialog and the Performance tab
 
 ### 1.9.0
 
