@@ -30,8 +30,10 @@ namespace DCST4.Core.Pipeline
         public static readonly TransferSyntaxOption ImplicitVrLe = new TransferSyntaxOption("Implicit VR Little Endian", DicomTransferSyntax.ImplicitVRLittleEndian);
         public static readonly TransferSyntaxOption ExplicitVrLe = new TransferSyntaxOption("Explicit VR Little Endian", DicomTransferSyntax.ExplicitVRLittleEndian);
         public static readonly TransferSyntaxOption JpegLossless = new TransferSyntaxOption("JPEG Lossless (Process 14 SV1)", DicomTransferSyntax.JPEGProcess14SV1);
+        /// <summary>Lossy, and for 8 bits stored only. What ultrasound systems send their cine loops in.</summary>
+        public static readonly TransferSyntaxOption JpegBaseline = new TransferSyntaxOption("JPEG Baseline (Process 1, lossy)", DicomTransferSyntax.JPEGProcess1);
 
-        public static IReadOnlyList<TransferSyntaxOption> All { get; } = new[] { ImplicitVrLe, ExplicitVrLe, JpegLossless };
+        public static IReadOnlyList<TransferSyntaxOption> All { get; } = new[] { ImplicitVrLe, ExplicitVrLe, JpegLossless, JpegBaseline };
     }
 
     public sealed class StoreRunOptions
@@ -131,6 +133,12 @@ namespace DCST4.Core.Pipeline
         /// <summary>Raised on a background thread for each image as soon as its outcome is known.</summary>
         public event Action<StoreResult> ImageCompleted;
 
+        /// <summary>
+        /// Raised on a background thread while an image with many frames is encoded, before it is sent: the image's number
+        /// in the run from 1, the frames done and the frames in all.
+        /// </summary>
+        public event Action<int, int, int> FrameEncoded;
+
         public Task<RunSummary> ExecuteAsync(CancellationToken token)
         {
             return Task.Run(async () =>
@@ -140,7 +148,7 @@ namespace DCST4.Core.Pipeline
                 var writer = _options.Save ? new FileSetWriter(_options.SaveFolder) : null;
                 try
                 {
-                    var prepared = Prepare(_source.GetImages(token), writer);
+                    var prepared = Prepare(_source.GetImages(token), writer, token);
                     if (_options.Send)
                     {
                         var endpoint = _options.Endpoint.Trimmed();
@@ -213,11 +221,13 @@ namespace DCST4.Core.Pipeline
         }
 
         /// <summary>Transcodes and saves images one at a time as they are requested. Saving happens first, so the file exists even if sending then fails.</summary>
-        private IEnumerable<SourceImage> Prepare(IEnumerable<SourceImage> images, FileSetWriter writer)
+        private IEnumerable<SourceImage> Prepare(IEnumerable<SourceImage> images, FileSetWriter writer, CancellationToken token)
         {
+            var number = 0;
             foreach (var image in images)
             {
-                image.File = TransferSyntaxConverter.Convert(image.File, _options.TransferSyntax);
+                var current = ++number;
+                image.File = TransferSyntaxConverter.Convert(image.File, _options.TransferSyntax, token, (done, total) => FrameEncoded?.Invoke(current, done, total));
                 image.PixelBytes = PixelDataSize(image.File.Dataset);
 
                 if (_options.Save)

@@ -111,7 +111,35 @@ namespace DCST4.ViewModels
             new LoadModeChoice(LoadMode.Soak, "Soak: steady load for a long time"),
         };
 
-        public IReadOnlyList<DataMix> Mixes => DataMixCatalog.All;
+        /// <summary>The catalog, and last the custom mix: the object described on the Exam tab.</summary>
+        public IReadOnlyList<DataMix> Mixes { get; } = DataMixCatalog.All.Concat(new[] { CustomEntry }).ToList();
+
+        /// <summary>Stands for the custom mix in the list. What is sent comes from <see cref="SetCustomMix"/> each time it is needed.</summary>
+        private static readonly DataMix CustomEntry = new DataMix(DataMix.CustomId, "The object described on the Exam tab", FellowOakDicom.DicomTransferSyntax.ExplicitVRLittleEndian);
+
+        private Func<DataMix> _customMix;
+
+        /// <summary>Where the custom mix comes from. Set by the main view model, which owns the Exam tab.</summary>
+        public void SetCustomMix(Func<DataMix> customMix)
+        {
+            _customMix = customMix;
+            RefreshPlan();
+        }
+
+        private bool IsCustomMix => string.Equals(_settings.Mix, DataMix.CustomId, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The Exam tab may have changed since the last time, so the custom mix is read again before it is used.</summary>
+        private void ReadCustomMix() => _settings.MixOverride = IsCustomMix ? _customMix?.Invoke() : null;
+
+        /// <summary>What the selected mix sends, beside the list.</summary>
+        public string MixDescription
+        {
+            get
+            {
+                ReadCustomMix();
+                return IsCustomMix ? "From the Exam tab: " + (_settings.MixOverride?.Description ?? "nothing to send yet") : SelectedMix.Description;
+            }
+        }
 
         public LoadModeChoice SelectedMode
         {
@@ -135,8 +163,8 @@ namespace DCST4.ViewModels
 
         public DataMix SelectedMix
         {
-            get => DataMixCatalog.Find(_settings.Mix) ?? DataMixCatalog.All[0];
-            set { _settings.Mix = value?.Id ?? LoadSettings.DefaultMix; Changed(); }
+            get => IsCustomMix ? CustomEntry : DataMixCatalog.Find(_settings.Mix) ?? DataMixCatalog.All[0];
+            set { _settings.Mix = value?.Id ?? LoadSettings.DefaultMix; Changed(); OnPropertyChanged(nameof(MixDescription)); }
         }
 
         public int Associations { get => _settings.Associations; set { _settings.Associations = value; Changed(); } }
@@ -197,14 +225,32 @@ namespace DCST4.ViewModels
             OnPropertyChanged(nameof(PlanText));
         }
 
-        public void RefreshPlan() => OnPropertyChanged(nameof(PlanText));
+        public void RefreshPlan()
+        {
+            OnPropertyChanged(nameof(PlanText));
+            OnPropertyChanged(nameof(MixDescription));
+        }
 
-        public string Problem => _settings.Validate(_mode.Mode);
+        public string Problem
+        {
+            get
+            {
+                ReadCustomMix();
+                return _settings.Validate(_mode.Mode);
+            }
+        }
 
         /// <summary>The planned total, or what is wrong with the settings.</summary>
         public string PlanText => Problem ?? _settings.DescribePlan(_mode.Mode, _target());
 
-        public LoadSettings Settings => _settings.Clone();
+        public LoadSettings Settings
+        {
+            get
+            {
+                ReadCustomMix();
+                return _settings.Clone();
+            }
+        }
 
         /// <summary>Takes the settings from the Performance settings dialog, which has checked them. The test and the mix stay as chosen on the tab.</summary>
         public void ApplySettings(LoadSettings settings)

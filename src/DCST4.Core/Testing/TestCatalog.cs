@@ -27,6 +27,8 @@ namespace DCST4.Core.Testing
 
             tests.AddRange(DatasetProfileCatalog.Default.Select(p => (ITestCase)new StoreObjectTest(p)));
             tests.Add(new StoreObjectTest(DatasetProfileCatalog.Find("ct"), "ct-edge", EdgeCases.PrivateTags | EdgeCases.LongStrings | EdgeCases.NestedSequences));
+            // The dataset is 700 MB by default and has to be asked for by name. Here it is as small as the other objects.
+            tests.Add(new StoreObjectTest(DatasetProfileCatalog.Find("tomosynthesis-large"), "breast-tomosynthesis", frames: Generation.Modalities.FunctionalGroupProfile.EnhancedFrames));
 
             tests.Add(new QueryIndexTest());
             tests.Add(new QueryLevelsTest());

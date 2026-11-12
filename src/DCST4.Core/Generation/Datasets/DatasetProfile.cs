@@ -46,8 +46,9 @@ namespace DCST4.Core.Generation.Datasets
 
     public static class DatasetProfileCatalog
     {
-        private const int DefaultCineFrames = 8;
-        private const int DefaultSegmentationFrames = 4;
+        /// <summary>The datasets are small: a cine loop has as few frames as an enhanced object.</summary>
+        private const int DefaultCineFrames = FunctionalGroupProfile.EnhancedFrames;
+        private const int DefaultSegmentationFrames = SegmentationProfile.SegmentationFrames;
 
         public static IReadOnlyList<DatasetProfile> All { get; } = Create();
 
@@ -64,7 +65,7 @@ namespace DCST4.Core.Generation.Datasets
             profiles.Add(DatasetProfile.ForImage("secondary-capture", new SecondaryCaptureProfile()));
             profiles.Add(DatasetProfile.ForImage("enhanced-ct", new EnhancedCtProfile(), DefaultCineFrames));
             profiles.Add(DatasetProfile.ForImage("enhanced-mr", new EnhancedMrProfile(), DefaultCineFrames));
-            profiles.Add(DatasetProfile.ForImage("tomosynthesis-large", new BreastTomosynthesisProfile(), BreastTomosynthesisProfile.DefaultFrames, includedByDefault: false));
+            profiles.Add(DatasetProfile.ForImage("tomosynthesis-large", new BreastTomosynthesisProfile(), BreastTomosynthesisProfile.LargeFrames, includedByDefault: false));
             profiles.Add(DatasetProfile.ForObject("basic-text-sr", new BasicTextSrProfile()));
             profiles.Add(DatasetProfile.ForObject("key-object-selection", new KeyObjectProfile()));
             profiles.Add(DatasetProfile.ForObject("grayscale-presentation-state", new PresentationStateProfile()));

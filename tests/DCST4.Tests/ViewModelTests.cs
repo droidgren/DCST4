@@ -101,6 +101,7 @@ namespace DCST4.Tests
                     {
                         await RunAll(port, check);
                         await RunSizeEstimate(port, check);
+                        await RunMultiFrame(port, check);
                         RunHelpWindow(check);
                         await RunTestSuite(port, closedPort, temp, check);
                         await RunReports(port, temp, check);
@@ -688,6 +689,161 @@ namespace DCST4.Tests
             vm.DeleteProfileCommand.Execute(null);
             check("Confirmed delete removes it", vm.Profiles.Count == 1 && vm.Profiles[0].Name == "Another", vm.Profiles.Count.ToString());
             check("Delete saved to disk at once", h.Saves == 3, h.Saves.ToString());
+        }
+
+        /// <summary>1.10.1: the multi-frame modalities, Frames per image, JPEG Baseline, the private payload and the custom mix.</summary>
+        private static async Task RunMultiFrame(int port, Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nExam tab: multi-frame images, private payload and the custom mix");
+            var h = new Harness(port);
+            var vm = h.Vm;
+            var p = vm.Performance;
+            Func<string, Core.Generation.Modalities.ModalityProfile> named = Core.Generation.Modalities.ModalityCatalog.FindForGenerateAndSend;
+            Func<Task> measured = async () =>
+            {
+                var sw = Stopwatch.StartNew();
+                while (vm.EstimatedSizeText == "calculating..." && sw.Elapsed < TimeSpan.FromSeconds(30)) await Task.Delay(20);
+            };
+
+            check("The Modality list: the ten, then the four multi-frame images", string.Join(",", vm.Modalities.Select(m => m.ToString())) == "CT,MR,CR,DX,US,XA,RF,MG,PT,NM,US Multi-frame,Enhanced CT,Enhanced MR,Breast Tomosynthesis", string.Join(",", vm.Modalities.Select(m => m.ToString())));
+            check("The Transfer syntax list ends with JPEG Baseline", vm.TransferSyntaxes.Last() == TransferSyntaxOption.JpegBaseline && vm.TransferSyntaxes.Count == 4, null);
+            check("CT: one frame, and the Frames field is off", !vm.IsMultiFrame && vm.FramesPerImage == 1, vm.FramesPerImage.ToString());
+            check("The private payload is off, at 100 MB", !vm.AddPrivatePayload && vm.PrivatePayloadMb == 100, vm.PrivatePayloadMb.ToString());
+
+            var notified = new List<string>();
+            vm.PropertyChanged += (s, e) => notified.Add(e.PropertyName);
+            vm.SelectedModality = named("US Multi-frame");
+            check("US Multi-frame: 30 frames of 600 x 800 at 8 bits, and the Frames field is on", vm.IsMultiFrame && vm.FramesPerImage == 30 && vm.Rows == 600 && vm.Columns == 800 && vm.BitsStored == 8
+                && notified.Contains(nameof(vm.IsMultiFrame)) && notified.Contains(nameof(vm.FramesPerImage)), vm.FramesPerImage + " " + vm.Rows + "x" + vm.Columns);
+            check("A multi-frame modality starts with one image per series, whatever the exam type says for single images", vm.ImagesPerSeries == 1 && vm.SelectedPreset.DefaultImages == 8, vm.ImagesPerSeries.ToString());
+            check("Estimated size counts the frames and the three samples", vm.EstimatedSizeText == "about " + ExamSizeEstimator.Format(ExamSizeEstimator.HeaderBytes + 600L * 800 * 3 * 30), vm.EstimatedSizeText);
+            vm.SelectedModality = named("Breast Tomosynthesis");
+            check("Breast Tomosynthesis: 8 frames at its own matrix, 88 MB", vm.FramesPerImage == 8 && vm.Rows == 2816 && vm.Columns == 2048 && vm.EstimatedSizeText == "about 88.0 MB", vm.FramesPerImage + " " + vm.EstimatedSizeText);
+
+            // A cine loop in JPEG Baseline with a payload, sent from the Exam tab.
+            vm.SelectedModality = named("US Multi-frame");
+            vm.Rows = 64;
+            vm.Columns = 64;
+            vm.FramesPerImage = 6;
+            vm.SelectedTransferSyntax = TransferSyntaxOption.JpegBaseline;
+            await measured();
+            var withoutPayload = vm.EstimatedSizeText;
+            vm.PrivatePayloadMb = 1;
+            check("A size that is not ticked changes nothing", vm.EstimatedSizeText == withoutPayload, vm.EstimatedSizeText);
+            vm.AddPrivatePayload = true;
+            await measured();
+            check("Estimated size counts the payload", withoutPayload.EndsWith(" KB", StringComparison.Ordinal) && vm.EstimatedSizeText == "about 1.0 MB", withoutPayload + " and " + vm.EstimatedSizeText);
+
+            Scp.Reset();
+            Scp.AcceptedSyntaxes = Scp.AcceptedSyntaxes.Concat(new[] { DicomTransferSyntax.JPEGProcess1 }).ToArray();
+            h.Messages.Clear();
+            await h.Execute(vm.RunCommand);
+            var received = Scp.Received.ToList();
+            check("Generate & Send: one cine loop of 6 frames arrives in JPEG Baseline with a 1 MB payload", h.Messages.Count == 0 && received.Count == 1 && received[0].Syntax == DicomTransferSyntax.JPEGProcess1
+                && received[0].Dataset.GetSingleValue<int>(DicomTag.NumberOfFrames) == 6 && received[0].Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID) == DicomUID.UltrasoundMultiFrameImageStorage
+                && PrivatePayload.BytesIn(received[0].Dataset) == PrivatePayload.BytesPerMegabyte, string.Join("; ", h.Messages) + " " + vm.StatusText);
+            check("... and it is marked as a test image like every other", received.Count == 1 && received[0].Dataset.GetString(DicomTag.Manufacturer) == "DCST4"
+                && Core.TestData.TestPersonnummerRegistry.Default.Contains(received[0].Dataset.GetString(DicomTag.PatientID)), null);
+
+            var restarted = new MainViewModel();
+            check("At the next start: the modality, the frames and the size are back, and the payload is off", restarted.SelectedModality == named("US Multi-frame") && restarted.FramesPerImage == 6
+                && restarted.PrivatePayloadMb == 1 && !restarted.AddPrivatePayload && restarted.SelectedTransferSyntax == TransferSyntaxOption.JpegBaseline, restarted.SelectedModality + " " + restarted.FramesPerImage + " " + restarted.AddPrivatePayload);
+
+            // What is refused, before anything is sent.
+            Func<Task<string>> refused = async () =>
+            {
+                Scp.Reset();
+                h.Messages.Clear();
+                await h.Execute(vm.RunCommand);
+                return Scp.AssociationCount == 0 ? string.Join("; ", h.Messages) : "sent";
+            };
+            vm.PrivatePayloadMb = 0;
+            var noSize = await refused();
+            check("A payload of 0 MB is refused", noSize.Contains("at least 1 MB"), noSize);
+            vm.PrivatePayloadMb = 2001;
+            var tooLarge = await refused();
+            check("A payload over 2000 MB is refused", tooLarge.Contains("at most 2000 MB"), tooLarge);
+            vm.PrivatePayloadMb = 1;
+            vm.AddPrivatePayload = false;
+
+            vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
+            vm.Rows = 960;
+            vm.Columns = 1280;
+            vm.FramesPerImage = 1667;
+            var tooLong = await refused();
+            check("1667 frames of 960 x 1280 uncompressed: refused, with the way out", tooLong.Contains("less than 4 GB") && tooLong.Contains("compressed transfer syntax"), tooLong);
+            vm.FramesPerImage = 10001;
+            var tooMany = await refused();
+            check("10001 frames are refused", tooMany.Contains("at most 10000"), tooMany);
+
+            vm.SelectedModality = named("CT");
+            check("Back to CT: one frame again", !vm.IsMultiFrame && vm.FramesPerImage == 1, vm.FramesPerImage.ToString());
+            vm.Rows = 64;
+            vm.Columns = 64;
+            vm.SelectedTransferSyntax = TransferSyntaxOption.JpegBaseline;
+            var sixteenBits = await refused();
+            check("CT in JPEG Baseline: refused, since it holds 8 bits", sixteenBits.Contains("at most 8 bits"), sixteenBits);
+
+            // The custom mix of the Performance tab is the object of the Exam tab.
+            check("The Mix list ends with custom", p.Mixes.Last().Id == "custom" && p.Mixes.Count == Core.Performance.DataMixCatalog.All.Count + 1 && p.Mixes.Take(p.Mixes.Count - 1).SequenceEqual(Core.Performance.DataMixCatalog.All), null);
+            p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Load);
+            p.Associations = 1;
+            p.InstanceCount = 3;
+            p.SampleEvery = 0;
+            p.WarmUpSeconds = 0;
+            p.MaxInstances = 0;
+            p.SelectedMix = p.Mixes.Last();
+            check("custom with CT in JPEG Baseline: the plan is the problem", p.Problem != null && p.Problem.Contains("at most 8 bits") && p.PlanText == p.Problem, p.PlanText);
+
+            vm.SelectedModality = named("US Multi-frame");
+            vm.Rows = 64;
+            vm.Columns = 64;
+            vm.FramesPerImage = 6;
+            check("custom: the text beside the list says what the Exam tab describes", p.MixDescription == "From the Exam tab: US Multi-frame 64 x 64, 8 bits, 6 frames, JPEG Baseline (Process 1, lossy)", p.MixDescription);
+            check("custom: the plan names it", p.Problem == null && p.PlanText.StartsWith("Stores 3 new objects", StringComparison.Ordinal) && p.PlanText.Contains("mix custom: US Multi-frame 64 x 64, 8 bits, 6 frames"), p.PlanText);
+
+            var told = new List<string>();
+            p.PropertyChanged += (s, e) => told.Add(e.PropertyName);
+            vm.FramesPerImage = 12;
+            vm.AddPrivatePayload = true;
+            check("custom: a change on the Exam tab reaches the text and the plan", told.Contains(nameof(p.MixDescription)) && told.Contains(nameof(p.PlanText))
+                && p.MixDescription.EndsWith("12 frames, JPEG Baseline (Process 1, lossy), 1 MB private payload", StringComparison.Ordinal), p.MixDescription);
+            var entry = p.Settings.ResolvedMix.Entries.Single();
+            check("custom: the settings of a run carry the object", p.Settings.ResolvedMix.IsCustom && entry.ProfileId == "us-multiframe" && entry.Frames == 12 && entry.Rows == 64 && entry.SamplesPerPixel == 3
+                && entry.PrivatePayloadBytes == PrivatePayload.BytesPerMegabyte && p.Settings.ResolvedMix.Syntax == DicomTransferSyntax.JPEGProcess1, entry.ProfileId + " " + entry.Frames);
+            check("custom: saved by its name, without the object", !p.SaveSettings().Contains("MixOverride") && new PerformanceViewModel(p.SaveSettings(), "Load").SelectedMix.Id == "custom", p.SaveSettings());
+
+            vm.TestSuite.ResultsFolder = Path.Combine(Path.GetTempPath(), "DCST4Tests_custom_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Scp.Reset();
+                Scp.AcceptedSyntaxes = Scp.AcceptedSyntaxes.Concat(new[] { DicomTransferSyntax.JPEGProcess1 }).ToArray();
+                string asked = null;
+                vm.Confirm = message => { asked = message; return true; };
+                h.Messages.Clear();
+                await h.Execute(vm.RunPerformanceCommand);
+                var loaded = Scp.Received.ToList();
+                check("custom: the question before the run describes the object", asked != null && asked.Contains("mix custom: US Multi-frame 64 x 64, 8 bits, 12 frames"), asked);
+                check("custom: the load run stores three cine loops of 12 frames with the payload", h.Messages.Count == 0 && p.Verdict.StartsWith("PASS", StringComparison.Ordinal) && loaded.Count == 3
+                    && loaded.All(r => r.Syntax == DicomTransferSyntax.JPEGProcess1 && r.Dataset.GetSingleValue<int>(DicomTag.NumberOfFrames) == 12 && PrivatePayload.BytesIn(r.Dataset) == PrivatePayload.BytesPerMegabyte)
+                    && loaded.Select(r => r.Dataset.GetString(DicomTag.SOPInstanceUID)).Distinct().Count() == 3, p.Verdict + " " + string.Join("; ", h.Messages));
+                var report = Directory.GetFiles(vm.TestSuite.ResultsFolder, "DCST4-run-*.html").OrderBy(File.GetLastWriteTimeUtc).LastOrDefault();
+                check("custom: the report says what the mix was", report != null && File.ReadAllText(report).Contains("custom: US Multi-frame 64 x 64, 8 bits, 12 frames, JPEG Baseline (Process 1, lossy), 1 MB private payload"), report);
+            }
+            finally
+            {
+                try { Directory.Delete(vm.TestSuite.ResultsFolder, true); } catch (IOException) { }
+            }
+
+            vm.AddPrivatePayload = false;
+            p.SelectedMix = Core.Performance.DataMixCatalog.Find("ct");
+            check("Back to a mix of the catalog: its own description, and nothing of the Exam tab", p.MixDescription == Core.Performance.DataMixCatalog.Find("ct").Description && p.Settings.MixOverride == null && p.Settings.ResolvedMix.Id == "ct", p.MixDescription);
+
+            // The settings are shared with the sections that follow, in memory.
+            vm.PrivatePayloadMb = MainViewModel.DefaultPrivatePayloadMb;
+            vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
+            vm.SelectedModality = named("CT");
+            Scp.Reset();
         }
 
         /// <summary>The Tests tab, and that it gives the same result files as the command line.</summary>
@@ -1404,6 +1560,121 @@ namespace DCST4.Tests
 
             await CheckCapabilities(h, folder, check);
             await CheckTestsTabLayout(port, check);
+            await CheckExamTabLayout(port, check, null);
+        }
+
+        /// <summary>
+        /// The Exam tab with a multi-frame modality, laid out at the window's smallest size: the row added in 1.10.1 must fit
+        /// and its bindings must resolve. With a path it is also drawn to a PNG, for a look by hand.
+        /// </summary>
+        internal static async Task CheckExamTabLayout(int port, Action<string, bool, string> check, string pngPath)
+        {
+            var listener = new BindingErrorListener();
+            PresentationTraceSources.Refresh();
+            PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
+            PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
+            try
+            {
+                var window = new MainWindow();
+                var vm = (MainViewModel)window.DataContext;
+                vm.ShowMessage = (message, icon, title) => { };
+                vm.SaveSettings = () => { };
+                vm.ServerHost = "127.0.0.1";
+                vm.ServerPort = port;
+                vm.ServerAET = "MOCKSCP";
+                vm.CallingAET = "DCST4";
+                vm.ProfileName = string.Empty;
+                vm.SaveFolder = string.Empty;
+                vm.TestSuite.ResultsFolder = @"C:\Temp\DCST4 results";
+                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.FindForGenerateAndSend("US Multi-frame");
+                vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
+                vm.PrivatePayloadMb = MainViewModel.DefaultPrivatePayloadMb;
+                vm.AddPrivatePayload = true;
+
+                var content = (FrameworkElement)window.Content;
+                window.Content = null;
+                content.DataContext = vm;
+
+                var width = (int)window.MinWidth;
+                var height = (int)window.MinHeight;
+                content.Measure(new Size(width, height));
+                content.Arrange(new Rect(0, 0, width, height));
+                content.UpdateLayout();
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+
+                Func<FrameworkElement, string, bool> boundTo = (element, path) =>
+                    (element is TextBox ? System.Windows.Data.BindingOperations.GetBinding(element, TextBox.TextProperty) : System.Windows.Data.BindingOperations.GetBinding(element, System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty))?.Path.Path == path;
+                var all = VisualDescendants(content).OfType<FrameworkElement>().ToList();
+                var frames = all.OfType<TextBox>().SingleOrDefault(t => boundTo(t, nameof(vm.FramesPerImage)));
+                var tick = all.OfType<CheckBox>().SingleOrDefault(c => boundTo(c, nameof(vm.AddPrivatePayload)));
+                var size = all.OfType<TextBox>().SingleOrDefault(t => boundTo(t, nameof(vm.PrivatePayloadMb)));
+                var examTabs = all.OfType<TabControl>().First(t => t.Items.OfType<TabItem>().Any(i => (string)i.Header == "Exam"));
+
+                check("Exam tab: Frames per image, the payload box and its size are drawn", frames != null && tick != null && size != null && frames.ActualHeight > 0 && tick.ActualHeight > 0 && size.ActualWidth > 0, null);
+                Func<FrameworkElement, bool> inside = element =>
+                {
+                    var corner = element.TransformToAncestor(examTabs).Transform(new Point(0, 0));
+                    return corner.X >= 0 && corner.Y >= 0 && corner.X + element.ActualWidth <= examTabs.ActualWidth && corner.Y + element.ActualHeight <= examTabs.ActualHeight;
+                };
+                check("Exam tab: they fit inside the tab at the smallest window size", frames != null && tick != null && size != null && inside(frames) && inside(tick) && inside(size),
+                    examTabs.ActualWidth + " x " + examTabs.ActualHeight);
+                check("Exam tab: Frames is on for a multi-frame modality and shows its 30 frames, and the size is on when the box is ticked", frames != null && frames.IsEnabled && frames.Text == "30" && size != null && size.IsEnabled && size.Text == "100", frames?.Text);
+                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
+                vm.AddPrivatePayload = false;
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+                check("Exam tab: with CT, Frames shows 1 and is off, and so is the size while the box is not ticked", frames != null && !frames.IsEnabled && frames.Text == "1" && size != null && !size.IsEnabled, frames?.Text);
+                var problems = listener.Errors.Where(e => e.Contains("FramesPerImage") || e.Contains("IsMultiFrame") || e.Contains("PrivatePayload") || e.Contains("MixDescription")).ToList();
+                check("Exam tab: every new binding resolves", problems.Count == 0, string.Join("\n", problems));
+
+                if (pngPath != null)
+                {
+                    // A cine loop as an ultrasound system sends it, for the picture in the README. Nothing here is saved.
+                    vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.FindForGenerateAndSend("US Multi-frame");
+                    vm.SeriesCount = 1;
+                    vm.ImagesPerSeries = 1;
+                    vm.Rows = 960;
+                    vm.Columns = 1280;
+                    vm.FramesPerImage = 270;
+                    vm.SelectedTransferSyntax = TransferSyntaxOption.JpegBaseline;
+                    vm.SendImages = true;
+                    vm.SaveImages = false;
+                    vm.AddPrivatePayload = true;
+                    var waited = Stopwatch.StartNew();
+                    while (vm.EstimatedSizeText == "calculating..." && waited.Elapsed < TimeSpan.FromSeconds(30)) await Task.Delay(50);
+                    await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+                    var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                    bitmap.Render(content);
+                    var encoder = new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                    using (var file = File.Create(pngPath)) encoder.Save(file);
+                }
+            }
+            finally
+            {
+                PresentationTraceSources.DataBindingSource.Listeners.Remove(listener);
+            }
+        }
+
+        /// <summary>Draws the Exam tab to a PNG: DCST4.Tests.exe examtab &lt;file&gt;. Not part of the test run.</summary>
+        public static void RenderExamTab(string path)
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                var dispatcher = Dispatcher.CurrentDispatcher;
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
+                dispatcher.InvokeAsync(async () =>
+                {
+                    try { await CheckExamTabLayout(1, (name, ok, detail) => Console.WriteLine((ok ? "  PASS  " : "  FAIL  ") + name + (ok ? string.Empty : "  -> " + detail)), path); }
+                    catch (Exception ex) { failure = ex; }
+                    dispatcher.InvokeShutdown();
+                });
+                Dispatcher.Run();
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            Console.WriteLine(failure == null ? "Exam tab written to " + path : failure.ToString());
         }
 
         private static ScpContextTable CapabilityScript()

@@ -2,6 +2,7 @@ using DCST4.Core.Capability;
 using DCST4.Core.Generation;
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Network;
+using DCST4.Core.Performance;
 using DCST4.Core.Pipeline;
 using DCST4.Core.Reporting;
 using DCST4.Core.Testing;
@@ -155,7 +156,7 @@ namespace DCST4.ViewModels
         #endregion
 
         #region Properties - Exam
-        public IReadOnlyList<ModalityProfile> Modalities => ModalityCatalog.All;
+        public IReadOnlyList<ModalityProfile> Modalities { get; } = ModalityCatalog.GenerateAndSend.Select(c => c.Modality).ToList();
         public IReadOnlyList<string> CharacterSets { get; } = new[] { DicomCharacterSets.Latin1, DicomCharacterSets.Utf8, DicomCharacterSets.EmptyDisplayName };
         public IReadOnlyList<TransferSyntaxOption> TransferSyntaxes => TransferSyntaxOption.All;
         public ObservableCollection<ExamPreset> Presets { get; } = new ObservableCollection<ExamPreset>();
@@ -170,17 +171,54 @@ namespace DCST4.ViewModels
                 if (value == null || ReferenceEquals(_selectedModality, value)) return;
                 _selectedModality = value;
                 OnPropertyChanged();
-                Settings.Default.Modality = value.Code;
+                OnPropertyChanged(nameof(IsMultiFrame));
+                // The name, since Enhanced CT has the code CT too. For the ten single-frame modalities the two are the same.
+                Settings.Default.Modality = value.DisplayName;
                 FillModalityLists();
                 if (!_loading)
                 {
                     Rows = value.DefaultRows;
                     Columns = value.DefaultColumns;
                     BitsStored = value.DefaultBitDepth;
+                    FramesPerImage = value.DefaultFrames;
                     SelectedPreset = value.Presets[0];
                 }
             }
         }
+
+        /// <summary>The selected modality makes images of more than one frame.</summary>
+        public bool IsMultiFrame => _selectedModality != null && _selectedModality.IsMultiFrame;
+
+        private int _framesPerImage = 1;
+        /// <summary>Frames in each image. Always 1 for a single-frame modality.</summary>
+        public int FramesPerImage
+        {
+            get => _framesPerImage;
+            set
+            {
+                _framesPerImage = value;
+                OnPropertyChanged();
+                // Kept for the multi-frame modalities only, so that leaving one does not write 1 over the number entered.
+                if (IsMultiFrame) Settings.Default.FramesPerImage = value;
+                RefreshSizeEstimate();
+            }
+        }
+
+        private bool _addPrivatePayload;
+        /// <summary>
+        /// Adds a private binary value to every image. Never saved: it is off at each start, so that a payload of hundreds of
+        /// megabytes is not sent because it was on the last time.
+        /// </summary>
+        public bool AddPrivatePayload { get => _addPrivatePayload; set { _addPrivatePayload = value; OnPropertyChanged(); RefreshSizeEstimate(); } }
+
+        private int _privatePayloadMb = DefaultPrivatePayloadMb;
+        /// <summary>The size of the payload in megabytes per image. Used when <see cref="AddPrivatePayload"/> is on.</summary>
+        public int PrivatePayloadMb { get => _privatePayloadMb; set { _privatePayloadMb = value; OnPropertyChanged(); Settings.Default.PrivatePayloadMb = value; RefreshSizeEstimate(); } }
+
+        public const int DefaultPrivatePayloadMb = 100;
+
+        /// <summary>The payload of the request: 0 when it is off, and the entered size as it is when on, so that the validator names a bad one.</summary>
+        private long PrivatePayloadBytes => _addPrivatePayload ? _privatePayloadMb * PrivatePayload.BytesPerMegabyte : 0;
 
         private ExamPreset _selectedPreset;
         public ExamPreset SelectedPreset
@@ -194,7 +232,8 @@ namespace DCST4.ViewModels
                 Settings.Default.ExamType = value.Name;
                 if (!_loading)
                 {
-                    ImagesPerSeries = value.DefaultImages;
+                    // An exam type's number is for single images. One multi-frame object is already a whole loop or volume.
+                    ImagesPerSeries = IsMultiFrame ? 1 : value.DefaultImages;
                     RefreshPreview();
                 }
             }
@@ -440,6 +479,7 @@ namespace DCST4.ViewModels
             LoadSettings();
             Performance = new PerformanceViewModel(Settings.Default.PerformanceSettings, Settings.Default.PerformanceMode);
             Performance.SetTarget(() => "the destination above");
+            Performance.SetCustomMix(BuildCustomMix);
             Performance.SettingsChanged += () =>
             {
                 Settings.Default.PerformanceSettings = Performance.SaveSettings();
@@ -527,8 +567,11 @@ namespace DCST4.ViewModels
             _tlsIgnoreCertErrors = s.TlsIgnoreCertErrors;
             _tlsClientCertThumbprint = s.TlsClientCertThumbprint ?? string.Empty;
 
-            SelectedModality = ModalityCatalog.Find(s.Modality) ?? ModalityCatalog.All[0];
+            SelectedModality = ModalityCatalog.FindForGenerateAndSend(s.Modality) ?? ModalityCatalog.All[0];
             SelectedPreset = _selectedModality.Presets.FirstOrDefault(p => p.Name == s.ExamType) ?? _selectedModality.Presets[0];
+            _framesPerImage = !_selectedModality.IsMultiFrame ? 1 : s.FramesPerImage > 0 ? s.FramesPerImage : _selectedModality.DefaultFrames;
+            _privatePayloadMb = s.PrivatePayloadMb > 0 ? s.PrivatePayloadMb : DefaultPrivatePayloadMb;
+            _addPrivatePayload = false;
 
             _seriesCount = Math.Max(1, s.SeriesCount);
             // 0 means never set: use the modality's and exam type's own defaults.
@@ -827,6 +870,9 @@ namespace DCST4.ViewModels
         {
             if (_loading) return;
 
+            // The custom mix of the Performance tab is this exam's object, so its plan follows the same fields.
+            Performance?.RefreshPlan();
+
             CancelSizeMeasurement();
             var request = BuildRequest();
             var uncompressed = ExamSizeEstimator.UncompressedImageBytes(request);
@@ -914,7 +960,7 @@ namespace DCST4.ViewModels
 
         /// <summary>What the size of a compressed image depends on. The number of images is not part of it.</summary>
         private static string SizeKey(ExamRequest request, FellowOakDicom.DicomTransferSyntax syntax) => string.Join("|",
-            request.Modality.Code, request.Rows, request.Columns, request.BitsStored, syntax.UID.UID,
+            request.Modality.DisplayName, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes, syntax.UID.UID,
             request.BurnedInTags == null ? string.Empty : string.Join(",", request.BurnedInTags));
         #endregion
 
@@ -930,6 +976,8 @@ namespace DCST4.ViewModels
             if (request.Identity != null && request.Identity.StudyDateTimeIsAuto) request.Identity.StudyDateTime = DateTime.Now;
             if (request.Identity == null && IdentityMessage != null) problems.Add(IdentityMessage);
             else problems.AddRange(ExamValidator.Validate(request));
+            if (_addPrivatePayload && _privatePayloadMb < 1) problems.Add("The private payload must be at least 1 MB. Untick Add private payload to send none.");
+            if (problems.Count == 0) problems.AddRange(ExamValidator.SyntaxProblems(request, options.TransferSyntax));
             var optionsProblem = options.Validate();
             if (optionsProblem != null) problems.Add(optionsProblem);
             if (problems.Count > 0)
@@ -943,8 +991,8 @@ namespace DCST4.ViewModels
             foreach (var warning in ExamValidator.Warnings(request)) _logger.Warning("{warning}", warning);
 
             var id = request.Identity;
-            _logger.Information("Exam: {modality} {preset}, {series} series x {images} images, {rows}x{columns}, {bits} bits, {charset}. Patient {name}, ID {id}, born {born}, sex {sex}. Accession {accession}, Study ID {studyId}, Study UID {studyUid}",
-                request.Modality.Code, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, _characterSet,
+            _logger.Information("Exam: {modality} {preset}, {series} series x {images} images, {rows}x{columns}, {bits} bits, {frames} frames per image, private payload {payload} MB, {charset}. Patient {name}, ID {id}, born {born}, sex {sex}. Accession {accession}, Study ID {studyId}, Study UID {studyUid}",
+                request.Modality.DisplayName, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes / PrivatePayload.BytesPerMegabyte, _characterSet,
                 id.PatientName, id.PatientId, id.PatientBirthDate, id.PatientSex, id.AccessionNumber, id.StudyId, id.StudyInstanceUid);
             if (id.AdditionalTags.Count > 0)
             {
@@ -959,6 +1007,12 @@ namespace DCST4.ViewModels
 
             var run = new StoreRun(new ExamGenerator(request), options);
             run.ImageCompleted += result => _dispatcher.BeginInvoke(new Action(() => AddResult(result, request.TotalImages)), DispatcherPriority.Background);
+            // A long cine loop is encoded for minutes before it is sent. Every frame would flood the dispatcher.
+            run.FrameEncoded += (image, done, total) =>
+            {
+                if (done != total && done % EncodingProgressEvery != 0) return;
+                _dispatcher.BeginInvoke(new Action(() => StatusText = $"Encoding image {image} of {request.TotalImages}: frame {done} of {total}"), DispatcherPriority.Background);
+            };
 
             var summary = await run.ExecuteAsync(token);
 
@@ -1002,7 +1056,23 @@ namespace DCST4.ViewModels
             BitsStored = _bitsStored,
             CharacterSet = CharacterSetTagValue,
             BurnedInTags = Settings.Default.BurnInText ? BurnedInTagCatalog.Parse(Settings.Default.BurnInTags) : null,
+            FramesPerImage = IsMultiFrame ? _framesPerImage : 1,
+            PrivatePayloadBytes = PrivatePayloadBytes,
         };
+
+        private const int EncodingProgressEvery = 10;
+
+        /// <summary>
+        /// The object of the Exam tab as a mix for the Performance tab: its modality, matrix, bits, frames, transfer syntax and
+        /// private payload. A load run makes its own studies and patient, so nothing else is taken. Null if the modality is not set.
+        /// </summary>
+        public DataMix BuildCustomMix()
+        {
+            var profileId = ModalityCatalog.DatasetProfileIdOf(_selectedModality);
+            if (profileId == null || _selectedTransferSyntax == null) return null;
+            return DataMix.Custom(profileId, _selectedModality.DisplayName, _rows, _columns, _bitsStored, IsMultiFrame ? _framesPerImage : 1,
+                _selectedModality.SamplesPerPixel, _selectedTransferSyntax.Syntax, _selectedTransferSyntax.Name, PrivatePayloadBytes);
+        }
 
         private StoreRunOptions BuildRunOptions() => new StoreRunOptions
         {

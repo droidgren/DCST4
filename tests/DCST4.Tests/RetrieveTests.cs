@@ -33,6 +33,7 @@ namespace DCST4.Tests
             _check = check;
 
             await TestRoundTrip();
+            await TestTomosynthesis();
             await TestModifications();
             await TestMoveDiagnosis(closedPort);
             await TestStoreMapping(closedPort);
@@ -87,6 +88,39 @@ namespace DCST4.Tests
             var changed = frame.ToArray();
             for (var i = 0; i < Math.Min(40, changed.Length); i++) changed[i] ^= 0x7F;
             return changed;
+        }
+
+        /// <summary>
+        /// Breast Tomosynthesis was the one image type without a store test until 1.10.1, since its dataset is 700 MB by
+        /// default. The test sends it at 128 x 128 with 8 frames.
+        /// </summary>
+        private static async Task TestTomosynthesis()
+        {
+            Console.WriteLine("\nChain: Breast Tomosynthesis");
+            const string id = "store-breast-tomosynthesis";
+            var test = TestCatalog.All.SingleOrDefault(t => t.Id == id);
+            _check("The store test exists, after the other store tests and before the queries", test != null && TestCatalog.All.ToList().IndexOf(test) < TestCatalog.All.ToList().FindIndex(t => t.Id == "query-index")
+                && TestCatalog.All.ToList().IndexOf(test) > TestCatalog.All.ToList().FindIndex(t => t.Id == "store-ct"), null);
+            _check("It says how much it stores: one object of about 260 KB, not the 700 MB of the dataset", test?.Storage != null && test.Storage.Objects == 1 && test.Storage.Describe() == "1 examination, 1 object, about 258 KB", test?.Storage?.Describe());
+            _check("It is named without the size, and runs with 'all'", test?.Name == "C-STORE: Breast Tomosynthesis" && TestCatalog.Select("all", out _).Any(t => t.Id == id), test?.Name);
+
+            Fresh();
+            var report = await Execute(id + ",query-index,retrieve-cget,retrieve-cmove,verify-integrity");
+            _check("Stored, found, retrieved both ways and intact", report.Results.All(r => r.Result == TestResultClass.PASS), Show(report));
+            var row = report.Chain?.SingleOrDefault();
+            _check("A chain row of its own, named breast-tomosynthesis", row != null && row.ObjectType == "breast-tomosynthesis" && row.DisplayName == "Breast Tomosynthesis"
+                && row.Accepted?.Result == TestResultClass.PASS && row.Indexed?.Result == TestResultClass.PASS && row.Retrievable?.Result == TestResultClass.PASS && row.Intact?.Result == TestResultClass.PASS, Show(report));
+            var stored = Scp.Archive.SingleOrDefault()?.Dataset;
+            _check("The mock got one Breast Tomosynthesis object of 128 x 128 with 8 frames", stored != null && stored.GetSingleValue<DicomUID>(DicomTag.SOPClassUID) == DicomUID.BreastTomosynthesisImageStorage
+                && stored.GetSingleValue<int>(DicomTag.NumberOfFrames) == 8 && stored.GetSingleValue<ushort>(DicomTag.Rows) == 128, null);
+            var instance = Set(report, "breast-tomosynthesis", "C-GET").Instances.Single();
+            _check("What came back is byte-identical, and every frame matches the manifest", instance.Pixel == PixelVerdict.ByteIdentical && instance.FramesMatchManifest == true && instance.NormalizedHashMatchesManifest, instance.Pixel.ToString());
+
+            Fresh();
+            Scp.ContextTable = new ScpContextTable();
+            Scp.ContextTable.Set(DicomUID.BreastTomosynthesisImageStorage, ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported));
+            var refused = await Execute(id);
+            _check("A system without the SOP class: NOT_SUPPORTED, nothing sent", Result(refused, id).Result == TestResultClass.NOT_SUPPORTED && Scp.StoreCount == 0, Show(refused));
         }
 
         // ---------------------------------------------------------------- acceptance: the round trip

@@ -43,14 +43,14 @@ namespace DCST4.Core.Testing
             new StorageEstimate(studies, objects, objects * ImageBytes(matrix, matrix), note);
 
         /// <summary>One study of a dataset profile at <paramref name="matrix"/>, with the image an object refers to when it needs one.</summary>
-        public static StorageEstimate Of(DatasetProfile profile, int matrix)
+        public static StorageEstimate Of(DatasetProfile profile, int matrix, int frames = 0)
         {
             long bytes;
             if (profile.IsImage)
             {
                 var image = profile.Image;
                 var bits = image.IsBinaryMask ? 1 : image.DefaultBitDepth > BitsPerByte ? 16 : BitsPerByte;
-                bytes = ImageBytes(matrix, matrix, profile.DefaultFrames, bits, image.SamplesPerPixel);
+                bytes = ImageBytes(matrix, matrix, frames > 0 ? frames : profile.DefaultFrames, bits, image.SamplesPerPixel);
             }
             else
             {

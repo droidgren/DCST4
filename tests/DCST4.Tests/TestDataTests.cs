@@ -162,7 +162,11 @@ namespace DCST4.Tests
             refused("a binary matrix that is not whole bytes", new TestDatasetRequest { ProfileId = "segmentation", Rows = 65, Columns = 64 }, "multiples of 8");
             refused("compressing a report", new TestDatasetRequest { ProfileId = "basic-text-sr", TransferSyntax = DicomTransferSyntax.JPEGProcess14SV1 }, "no pixel data");
             refused("compressing a segmentation", new TestDatasetRequest { ProfileId = "segmentation", Rows = 64, Columns = 64, TransferSyntax = DicomTransferSyntax.RLELossless }, "uncompressed only");
-            refused("compressing the large object", new TestDatasetRequest { ProfileId = "tomosynthesis-large", TransferSyntax = DicomTransferSyntax.RLELossless }, "memory");
+            check("The large object can be compressed, since its frames are encoded one at a time", new TestDatasetRequest { ProfileId = "tomosynthesis-large", TransferSyntax = DicomTransferSyntax.RLELossless }.Validate().Count == 0, null);
+            refused("more uncompressed pixels than an image holds", new TestDatasetRequest { ProfileId = "us-multiframe", Rows = 960, Columns = 1280, Frames = 1667 }, "less than 4 GB");
+            check("The same cine loop is accepted in JPEG Baseline", new TestDatasetRequest { ProfileId = "us-multiframe", Rows = 960, Columns = 1280, Frames = 1667, TransferSyntax = DicomTransferSyntax.JPEGProcess1 }.Validate().Count == 0, null);
+            refused("a payload over the limit", new TestDatasetRequest { ProfileId = "ct", PrivatePayloadBytes = PrivatePayload.MaxBytes + 1 }, "private payload");
+            refused("a payload on a report", new TestDatasetRequest { ProfileId = "basic-text-sr", PrivatePayloadBytes = 1024 }, "not an image");
             refused("too many instances", new TestDatasetRequest { ProfileId = "ct", Patients = 1000, StudiesPerPatient = 1000 }, "at most");
             refused("no patients", new TestDatasetRequest { ProfileId = "ct", Patients = 0 }, "Patients");
         }

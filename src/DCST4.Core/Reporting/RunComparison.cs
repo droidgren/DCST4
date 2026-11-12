@@ -397,6 +397,8 @@ namespace DCST4.Core.Reporting
 
             check("mode", a.Mode, b.Mode);
             check("mix", a.Mix, b.Mix);
+            // Every custom mix has the same id, and its description says what was sent.
+            if (a.Mix == DataMix.CustomId && b.Mix == DataMix.CustomId) check("custom mix", a.MixDescription, b.MixDescription);
             check("transfer syntax", a.TransferSyntaxUid, b.TransferSyntaxUid);
             check("maximum PDU", a.MaxPdu, b.MaxPdu);
             var s = a.Settings;

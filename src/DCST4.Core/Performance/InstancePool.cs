@@ -1,3 +1,4 @@
+using DCST4.Core.Generation;
 using DCST4.Core.Generation.Datasets;
 using DCST4.Core.TestData;
 using FellowOakDicom;
@@ -84,6 +85,7 @@ namespace DCST4.Core.Performance
                     BitsStored = entry.BitsStored,
                     Frames = entry.Frames,
                     TransferSyntax = mix.Syntax,
+                    PrivatePayloadBytes = entry.PrivatePayloadBytes,
                 };
                 var problems = request.Validate();
                 if (problems.Count > 0) throw new ArgumentException($"Mix {mix.Id}: " + string.Join(" ", problems));
@@ -98,7 +100,12 @@ namespace DCST4.Core.Performance
                 foreach (var image in generator.GetImages(token))
                 {
                     token.ThrowIfCancellationRequested();
-                    instances.Add(Split(entryIndex, image.File.Dataset, mix.Syntax));
+                    var shared = SharedBytes(image.File.Dataset);
+                    if (shared > DataMix.MaxPoolBytes)
+                    {
+                        throw new PoolUnavailableException($"Mix {mix.Id}: one {entry.ProfileId} object is {shared / 1048576.0:0} MB, and a load run keeps its objects in memory, which holds at most {DataMix.MaxPoolBytes / 1048576} MB each. Use fewer frames, a smaller payload or a compressed transfer syntax, or send it with Generate & Send.");
+                    }
+                    instances.Add(Split(entryIndex, image.File.Dataset, mix.Syntax, shared));
                 }
             }
             // In turn by object type, so that a short run of a mix still sends every type: CR, US, CR, US ...
@@ -109,7 +116,27 @@ namespace DCST4.Core.Performance
             return new InstancePool(mix, interleaved);
         }
 
-        private static PoolInstance Split(int entryIndex, DicomDataset dataset, DicomTransferSyntax syntax)
+        /// <summary>
+        /// Where the part that every send shares begins: at a private payload if the object has one, otherwise at Pixel Data.
+        /// The payload is as large as the pixels or larger, so encoding it again for every send would measure DCST4.
+        /// </summary>
+        private static bool IsShared(DicomDataset dataset, DicomTag tag)
+        {
+            var start = PrivatePayload.BytesIn(dataset) > 0 ? PrivatePayload.SequenceTag : DicomTag.PixelData;
+            return tag.Group > start.Group || (tag.Group == start.Group && tag.Element >= start.Element);
+        }
+
+        /// <summary>The size of the large values in the shared part, which is nearly all of it.</summary>
+        private static long SharedBytes(DicomDataset dataset)
+        {
+            var size = PrivatePayload.BytesIn(dataset);
+            var pixels = dataset.GetDicomItem<DicomItem>(DicomTag.PixelData);
+            if (pixels is DicomFragmentSequence fragments) size += fragments.Fragments.Sum(f => f.Size + 8) + fragments.OffsetTable.Count * 4L;
+            else if (pixels is DicomElement element) size += element.Buffer.Size;
+            return size;
+        }
+
+        private static PoolInstance Split(int entryIndex, DicomDataset dataset, DicomTransferSyntax syntax, long sharedBytes)
         {
             if (dataset.InternalTransferSyntax != syntax)
             {
@@ -120,27 +147,33 @@ namespace DCST4.Core.Performance
             var tail = new DicomDataset(syntax);
             foreach (var item in dataset)
             {
-                if (item.Tag.CompareTo(DicomTag.PixelData) < 0) header.Add(item);
-                else tail.Add(item);
+                if (IsShared(dataset, item.Tag)) tail.Add(item);
+                else header.Add(item);
             }
 
-            // A private or padding element after Pixel Data would be sent as it is, which is right, but stamping only
-            // touches the header, so none of the mixes may have a UID there.
-            var tailBytes = Encode(tail, syntax);
+            // Whatever follows the start of the shared part is sent as it is, which is right, but stamping only touches
+            // the header, so none of the mixes may have a UID after it.
+            var tailBytes = Encode(tail, syntax, sharedBytes);
             var headerBytes = Encode(header, syntax).Length;
             return new PoolInstance(entryIndex, dataset.GetSingleValue<string>(DicomTag.SOPClassUID), header, tailBytes, headerBytes);
         }
 
-        /// <summary>The elements of a dataset as they go on the wire, with no File Meta Information.</summary>
-        internal static byte[] Encode(DicomDataset dataset, DicomTransferSyntax syntax)
+        /// <summary>
+        /// The elements of a dataset as they go on the wire, with no File Meta Information. <paramref name="expectedBytes"/>
+        /// sizes the buffer from the start, since one that grows by doubling cannot reach a gigabyte.
+        /// </summary>
+        internal static byte[] Encode(DicomDataset dataset, DicomTransferSyntax syntax, long expectedBytes = 0)
         {
-            using (var stream = new MemoryStream())
+            using (var stream = new MemoryStream((int)Math.Min(int.MaxValue / 2, expectedBytes + EncodingSlackBytes)))
             {
                 var writer = new DicomWriter(syntax, new DicomWriteOptions(), new StreamByteTarget(stream));
                 new DicomDatasetWalker(dataset).Walk(writer);
                 return stream.ToArray();
             }
         }
+
+        /// <summary>Room for the tags and lengths around the large values, and for the functional groups of an enhanced object.</summary>
+        private const int EncodingSlackBytes = 64 * 1024;
 
         /// <summary>A value for one run only, so that two runs never give the same UIDs, even with the same seed.</summary>
         public static string NewRunNonce()

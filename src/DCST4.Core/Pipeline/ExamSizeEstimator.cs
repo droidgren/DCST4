@@ -13,7 +13,10 @@ namespace DCST4.Core.Pipeline
         /// <summary>The Part 10 preamble, file meta information and tags of one generated image. Real files of the ten modalities have 1400 to 1900.</summary>
         public const long HeaderBytes = 1650;
 
-        private const int BitsPerByte = 8;
+        /// <summary>The creator, sequence, item and label around a private payload.</summary>
+        private const long PayloadWrapperBytes = 102;
+        /// <summary>A compressed image with more frames than this is measured on this many, and the rest are taken to be as large.</summary>
+        public const int MeasuredFrames = 4;
         private const long BytesPerUnit = 1024;
         private static readonly string[] Units = { "bytes", "KB", "MB", "GB", "TB" };
 
@@ -22,20 +25,32 @@ namespace DCST4.Core.Pipeline
         {
             if (!CanEstimate(request)) return null;
 
-            var pixels = (long)request.Rows * request.Columns * request.FramesPerImage;
-            var pixelBytes = request.Modality.IsBinaryMask
-                ? (pixels + BitsPerByte - 1) / BitsPerByte
-                : pixels * request.Modality.SamplesPerPixel * request.BitsAllocated / BitsPerByte;
+            var pixelBytes = request.UncompressedPixelBytes;
 
             // Pixel Data always has even length.
-            return HeaderBytes + pixelBytes + pixelBytes % 2;
+            return HeaderBytes + pixelBytes + pixelBytes % 2 + PayloadBytes(request);
         }
+
+        /// <summary>The private payload as it is written: an even number of bytes, and the sequence around it.</summary>
+        private static long PayloadBytes(ExamRequest request) =>
+            request.PrivatePayloadBytes <= 0 ? 0 : request.PrivatePayloadBytes + request.PrivatePayloadBytes % 2 + PayloadWrapperBytes;
 
         /// <summary>
         /// Generates one image and compresses it as a run would, and returns the size of the file. The test images compress
         /// far better than real ones, and how much depends on the picture, so a typical ratio would say very little.
         /// </summary>
         public static long MeasureImageBytes(ExamRequest request, DicomTransferSyntax syntax, CancellationToken cancellationToken)
+        {
+            if (request.FramesPerImage <= MeasuredFrames) return MeasureSample(request, request.FramesPerImage, syntax, cancellationToken) + PayloadBytes(request);
+
+            // A long cine loop takes minutes to encode. Two short ones tell what one more frame adds.
+            var few = MeasureSample(request, MeasuredFrames / 2, syntax, cancellationToken);
+            var more = MeasureSample(request, MeasuredFrames, syntax, cancellationToken);
+            var perFrame = (more - few) / (double)(MeasuredFrames - MeasuredFrames / 2);
+            return more + (long)(perFrame * (request.FramesPerImage - MeasuredFrames)) + PayloadBytes(request);
+        }
+
+        private static long MeasureSample(ExamRequest request, int frames, DicomTransferSyntax syntax, CancellationToken cancellationToken)
         {
             var sample = new ExamRequest
             {
@@ -50,13 +65,13 @@ namespace DCST4.Core.Pipeline
                 CharacterSet = request.CharacterSet,
                 BurnedInTags = request.BurnedInTags,
                 Uids = request.Uids,
-                FramesPerImage = request.FramesPerImage,
+                FramesPerImage = frames,
                 SourceImage = request.SourceImage,
             };
 
             var image = new ExamGenerator(sample).GetImages(cancellationToken).First();
             cancellationToken.ThrowIfCancellationRequested();
-            var file = TransferSyntaxConverter.Convert(image.File, syntax);
+            var file = TransferSyntaxConverter.Convert(image.File, syntax, cancellationToken);
 
             using (var stream = new MemoryStream())
             {

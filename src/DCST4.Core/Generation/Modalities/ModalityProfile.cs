@@ -141,6 +141,9 @@ namespace DCST4.Core.Generation.Modalities
         /// <summary>Frames are drawn when they are written, so that the whole object is never in memory at once.</summary>
         public virtual bool RendersFramesOnDemand => false;
 
+        /// <summary>Frames in an image unless another number is asked for. 1 for a single-frame modality.</summary>
+        public virtual int DefaultFrames => 1;
+
         public virtual string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY" };
 
         public abstract void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context);

@@ -118,6 +118,7 @@ namespace DCST4.Core.Generation.Datasets
                 Uids = uids,
                 SeriesNumberOffset = source != null ? 1 : 0,
                 SourceImage = source,
+                PrivatePayloadBytes = _request.PrivatePayloadBytes,
             };
 
             foreach (var image in new ExamGenerator(request, () => _request.ReferenceDate).GetImages(cancellationToken))
@@ -318,7 +319,7 @@ namespace DCST4.Core.Generation.Datasets
             "frames=" + Int(request.ResolvedFrames),
             "syntax=" + request.TransferSyntax.UID.UID,
             "charset=" + request.CharacterSet,
-            "edge=" + (int)request.EdgeCases,
+            "edge=" + (int)request.EdgeCases + (request.PrivatePayloadBytes > 0 ? "/payload=" + request.PrivatePayloadBytes.ToString(CultureInfo.InvariantCulture) : string.Empty),
             "counts=" + Int(request.Patients) + "/" + Int(request.StudiesPerPatient) + "/" + Int(request.SeriesPerStudy) + "/" + Int(request.InstancesPerSeries),
         });
 

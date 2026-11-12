@@ -87,8 +87,16 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("0")]
         public int BitsStored { get => (int)this[nameof(BitsStored)]; set => this[nameof(BitsStored)] = value; }
 
+        /// <summary>Frames per image of a multi-frame modality. 0 = never set: the modality's own number.</summary>
+        [UserScopedSetting, DefaultSettingValue("0")]
+        public int FramesPerImage { get => (int)this[nameof(FramesPerImage)]; set => this[nameof(FramesPerImage)] = value; }
+
+        /// <summary>The size of the private payload. Whether one is added is not saved: it is off at each start.</summary>
+        [UserScopedSetting, DefaultSettingValue("100")]
+        public int PrivatePayloadMb { get => (int)this[nameof(PrivatePayloadMb)]; set => this[nameof(PrivatePayloadMb)] = value; }
+
         [UserScopedSetting, DefaultSettingValue("ISO_IR 100")]
-        public string CharacterSet { get => (string)this[nameof(CharacterSet)]; set => this[nameof(CharacterSet)] = value; }
+        public string CharacterSet{ get => (string)this[nameof(CharacterSet)]; set => this[nameof(CharacterSet)] = value; }
 
         /// <summary>Transfer Syntax UID.</summary>
         [UserScopedSetting, DefaultSettingValue("1.2.840.10008.1.2.1")]

@@ -143,7 +143,7 @@
                     </Grid>
                 </GroupBox>
 
-                <TabControl IsEnabled="{Binding IsIdle}" MinHeight="224">
+                <TabControl IsEnabled="{Binding IsIdle}" MinHeight="280">
                     <TabItem Header="Exam">
                         <Grid Margin="8">
                             <Grid.ColumnDefinitions>
@@ -154,6 +154,8 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -205,6 +207,17 @@
                             <CheckBox Grid.Row="4" Grid.Column="4" Content="Allow fallback to Implicit VR" Margin="0,4,0,0"
                                       IsChecked="{Binding AllowFallback, Mode=TwoWay}" IsEnabled="{Binding FallbackIsRelevant}"
                                       ToolTip="Off: the run stops with an error if the server does not accept the selected syntax. On: send as Implicit VR instead, as a real modality would, and flag it.&#x0a;&#x0a;Default: off."/>
+
+                            <Label Grid.Row="5" Content="Frames per image:"/>
+                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding FramesPerImage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsMultiFrame}" VerticalAlignment="Center" Margin="0,2"
+                                     ToolTip="How many frames each image has, 1 to 10000. Only for the multi-frame modalities: US Multi-frame, Enhanced CT, Enhanced MR and Breast Tomosynthesis. An ultrasound cine loop has 30 frames per second.&#x0a;&#x0a;Without compression an image holds less than 4 GB of pixels. A long cine loop needs JPEG Baseline or JPEG Lossless, and its frames are then encoded one at a time before the image is sent.&#x0a;&#x0a;Default: 30 for US Multi-frame, 8 for the others." ToolTipService.ShowOnDisabled="True"/>
+                            <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="5" Orientation="Horizontal" Margin="5,6,0,0">
+                                <CheckBox Content="Add private payload of" IsChecked="{Binding AddPrivatePayload, Mode=TwoWay}" VerticalAlignment="Center"
+                                          ToolTip="Adds a private sequence with one large binary value to every image, as some ultrasound systems do with their raw data. The value is random bytes under the private creator DCST4 TEST, in (0099,1020). Use it to find out whether a PACS takes images with large private data.&#x0a;&#x0a;It is off every time DCST4 starts. The size is remembered.&#x0a;&#x0a;Default: off."/>
+                                <TextBox Text="{Binding PrivatePayloadMb, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding AddPrivatePayload}" Width="50" Margin="6,0,4,0" VerticalAlignment="Center"
+                                         ToolTip="The size of the private payload in megabytes, for each image: 1 to 2000.&#x0a;&#x0a;Default: 100." ToolTipService.ShowOnDisabled="True"/>
+                                <TextBlock Text="MB per image" VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Grid>
                     </TabItem>
 
@@ -534,8 +547,8 @@
                             <ComboBox ItemsSource="{Binding Performance.Modes}" SelectedItem="{Binding Performance.SelectedMode, Mode=TwoWay}" Width="300" IsEnabled="{Binding IsIdle}" ToolTip="Which performance test to run: steady load, a ramp of more and more associations, or a long soak.&#x0a;&#x0a;Default: Load: throughput and latency."/>
                             <TextBlock Text="Mix:" VerticalAlignment="Center" Margin="12,0,4,0"/>
                             <ComboBox ItemsSource="{Binding Performance.Mixes}" SelectedItem="{Binding Performance.SelectedMix, Mode=TwoWay}" Width="130" IsEnabled="{Binding IsIdle}"
-                                      ToolTip="The objects the test sends: their types, sizes and transfer syntax. The text beside the list describes the selected mix.&#x0a;&#x0a;Default: ct." DisplayMemberPath="Id"/>
-                            <TextBlock Text="{Binding Performance.SelectedMix.Description}" Foreground="#FF505050" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                      ToolTip="The objects the test sends: their types, sizes and transfer syntax. The text beside the list describes the selected mix.&#x0a;&#x0a;custom sends the object described on the Exam tab: its Modality, Rows x Columns, Bits stored, Frames per image, Transfer syntax and private payload. Exam type, Series, Images per series and the Identifiers tab are not used. One object can be at most 1 GB, since a load run keeps its objects in memory.&#x0a;&#x0a;Default: ct." DisplayMemberPath="Id"/>
+                            <TextBlock Text="{Binding Performance.MixDescription}" Foreground="#FF505050" VerticalAlignment="Center" Margin="8,0,0,0"/>
                         </StackPanel>
                         <TextBlock DockPanel.Dock="Top" Text="{Binding Performance.PlanText}" TextWrapping="Wrap" FontWeight="SemiBold" Margin="2,0,2,6"/>
                         <Grid>

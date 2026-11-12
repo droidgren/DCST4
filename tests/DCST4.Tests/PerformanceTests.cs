@@ -90,6 +90,33 @@ namespace DCST4.Tests
             Console.WriteLine("Chart written to " + path);
         }
 
+        /// <summary>
+        /// A load run with a custom mix of one large cine loop against the mock, for a check by hand of what the test run
+        /// only does small: DCST4.Tests.exe custommix &lt;rows&gt; &lt;columns&gt; &lt;frames&gt; &lt;payload MB&gt; &lt;count&gt;.
+        /// The mock keeps nothing. Prints the result, the time and the most memory the process used.
+        /// </summary>
+        public static async Task<int> RunCustomMix(string[] args)
+        {
+            Func<int, int> number = i => int.Parse(args[i], CultureInfo.InvariantCulture);
+            var mix = DataMix.Custom("us-multiframe", "US Multi-frame", number(1), number(2), 8, number(3), 3, DicomTransferSyntax.JPEGProcess1, "JPEG Baseline (Process 1, lossy)", number(4) * 1024L * 1024);
+            var settings = new LoadSettings { MixOverride = mix, Mix = DataMix.CustomId, Associations = 2, InstanceCount = number(5), SampleEvery = 0, WarmUpSeconds = 0 };
+            Console.WriteLine(settings.Validate(LoadMode.Load) ?? settings.DescribePlan(LoadMode.Load, "the mock SCP"));
+            if (settings.Validate(LoadMode.Load) != null) return 2;
+
+            var clock = Stopwatch.StartNew();
+            TestResult result;
+            using (DicomServerFactory.Create<MockStorageScp>(PerfPort))
+            {
+                ResetScp();
+                Scp.AcceptedSyntaxes = Scp.AcceptedSyntaxes.Concat(new[] { DicomTransferSyntax.JPEGProcess1 }).ToArray();
+                result = await One("load-throughput", settings, progress: p => { if (p.Stage == TestProgressStage.Activity) Console.WriteLine($"  {clock.Elapsed.TotalSeconds:0} s: {p.Activity}"); }).ConfigureAwait(false);
+                Console.WriteLine($"{Show(result)}\nStored by the mock: {Scp.StoreCount}. Pool {result.Performance?.PoolInstances} objects of {result.Performance?.AverageObjectBytes / 1048576} MB, {result.Performance?.Summary?.MegabytesPerSecond:0.0} MB/s");
+            }
+            Scp.Reset();
+            Console.WriteLine($"Peak working set {Process.GetCurrentProcess().PeakWorkingSet64 / 1048576} MB, {clock.Elapsed.TotalSeconds:0} s");
+            return result.Result == TestResultClass.PASS ? 0 : 1;
+        }
+
         // ---------------------------------------------------------------- helpers
 
         private static TargetProfile Profile(int responseTimeout = 10) => new TargetProfile
@@ -596,11 +623,60 @@ namespace DCST4.Tests
             Check("A large mix: both object types, multi-frame, arrive", big.Result == TestResultClass.PASS && frames.SequenceEqual(new[] { 2, 4 }), Show(big) + " " + string.Join(",", frames));
             Check("Enhanced CT and Tomosynthesis are two SOP classes on one association", big.NegotiatedContexts.Count == 2 && Scp.Associations.Count == 1);
 
+            await TestCustomMix();
+
             ResetScp();
             Scp.ContextTable = new ScpContextTable();
             Scp.ContextTable.Set(DicomUID.CTImageStorage, DicomTransferSyntax.ExplicitVRLittleEndian, ScpAnswer.Reject(DicomPresentationContextResult.RejectTransferSyntaxesNotSupported));
             var refused = await One("load-throughput", Settings(s => { s.InstanceCount = 4; }));
             Check("A syntax the system does not accept: NOT_SUPPORTED, nothing sent", refused.Result == TestResultClass.NOT_SUPPORTED && Scp.StoreCount == 0, Show(refused));
+        }
+
+        /// <summary>The custom mix: one object type as the Exam tab describes it, here a cine loop in JPEG Baseline with a private payload.</summary>
+        private static async Task TestCustomMix()
+        {
+            const long payload = 256 * 1024;
+            Func<long, int, DicomTransferSyntax, DataMix> cine = (bytes, frames, syntax) => DataMix.Custom("us-multiframe", "US Multi-frame", 64, 64, 8, frames, 3, syntax,
+                syntax == DicomTransferSyntax.JPEGProcess1 ? "JPEG Baseline (Process 1, lossy)" : "Explicit VR Little Endian", bytes);
+
+            var mix = cine(payload, 6, DicomTransferSyntax.JPEGProcess1);
+            Check("Custom mix: the id is custom, and the description says everything that is sent", mix.Id == "custom" && mix.IsCustom
+                && mix.Description == "US Multi-frame 64 x 64, 8 bits, 6 frames, JPEG Baseline (Process 1, lossy), 0.3 MB private payload", mix.Description);
+            Check("Custom mix: a single-frame image without payload says neither", DataMix.Custom("ct", "CT", 256, 256, 16, 1, 1, DicomTransferSyntax.ExplicitVRLittleEndian, "Explicit VR Little Endian", 0).Description == "CT 256 x 256, 16 bits, Explicit VR Little Endian");
+            Check("Custom mix: four variants of a small object, fewer of a large one, never none", mix.PoolPerEntry == 4 && cine(400L * 1024 * 1024, 6, DicomTransferSyntax.JPEGProcess1).PoolPerEntry == 2
+                && cine(900L * 1024 * 1024, 6, DicomTransferSyntax.JPEGProcess1).PoolPerEntry == 1 && cine(1900L * 1024 * 1024, 6, DicomTransferSyntax.JPEGProcess1).PoolPerEntry == 1);
+            Check("Custom mix: the payload counts in the planned volume", mix.EstimatedBytesPerObject > payload && mix.EstimatedBytesPerObject < payload + 64 * 64 * 3 * 6 + 8192, mix.EstimatedBytesPerObject.ToString(CultureInfo.InvariantCulture));
+
+            var settings = new LoadSettings { MixOverride = mix, Mix = DataMix.CustomId, Associations = 1, InstanceCount = 5, SampleEvery = 0, WarmUpSeconds = 0 };
+            Check("Custom mix: valid, and the plan describes it", settings.Validate(LoadMode.Load) == null && settings.DescribePlan(LoadMode.Load, "PACS").Contains("mix custom: US Multi-frame 64 x 64, 8 bits, 6 frames"), settings.DescribePlan(LoadMode.Load, "PACS"));
+            Check("Custom mix: named but not described is refused", new LoadSettings { Mix = DataMix.CustomId }.Validate(LoadMode.Load) == "The custom mix has not been described.");
+
+            Func<DataMix, string> problem = m => new LoadSettings { MixOverride = m, Mix = DataMix.CustomId }.Validate(LoadMode.Load) ?? string.Empty;
+            Check("Custom mix: a payload over 1 GB is refused before anything is generated, and it says why", problem(cine(1100L * 1024 * 1024, 6, DicomTransferSyntax.JPEGProcess1)).Contains("keeps its objects in memory"), problem(cine(1100L * 1024 * 1024, 6, DicomTransferSyntax.JPEGProcess1)));
+            var heavy = DataMix.Custom("us-multiframe", "US Multi-frame", 960, 1280, 8, 400, 3, DicomTransferSyntax.ExplicitVRLittleEndian, "Explicit VR Little Endian", 0);
+            Check("Custom mix: an uncompressed loop over 1 GB is refused, and the same loop compressed is not", problem(heavy).Contains("keeps its objects in memory")
+                && problem(DataMix.Custom("us-multiframe", "US Multi-frame", 960, 1280, 8, 400, 3, DicomTransferSyntax.JPEGProcess1, "JPEG Baseline", 0)).Length == 0, problem(heavy));
+            Check("Custom mix: JPEG Baseline with 16 bits is refused with the encoder's reason", problem(DataMix.Custom("ct", "CT", 64, 64, 16, 1, 1, DicomTransferSyntax.JPEGProcess1, "JPEG Baseline", 0)).Contains("at most 8 bits"),
+                problem(DataMix.Custom("ct", "CT", 64, 64, 16, 1, 1, DicomTransferSyntax.JPEGProcess1, "JPEG Baseline", 0)));
+
+            var seed = new TestRunSession(new TestRunOptions { Seed = 21 }).SeedFor("load-pool/" + mix.Id);
+            var pool = InstancePool.Build(mix, seed, Root, TestPatientNaming.RegistrySwedishName, CancellationToken.None);
+            Check("Custom mix: the payload is in the part that every send shares, not in the part stamped for each", pool.Instances.Count == 4 && pool.Instances.All(i => i.Tail.Length > payload && i.HeaderBytes < 4096),
+                string.Join(" ", pool.Instances.Select(i => i.HeaderBytes + "+" + i.Tail.Length)));
+
+            ResetScp();
+            Scp.RecordReceived = true;
+            Scp.AcceptedSyntaxes = Scp.AcceptedSyntaxes.Concat(new[] { DicomTransferSyntax.JPEGProcess1 }).ToArray();
+            var result = await One("load-throughput", settings);
+            var received = Scp.Received.ToList();
+            Check("Custom mix: PASS, and five cine loops arrive in JPEG Baseline with six frames", result.Result == TestResultClass.PASS && received.Count == 5
+                && received.All(r => r.Syntax == DicomTransferSyntax.JPEGProcess1 && r.Dataset.GetSingleValue<int>(DicomTag.NumberOfFrames) == 6 && r.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID) == DicomUID.UltrasoundMultiFrameImageStorage), Show(result));
+            Check("Custom mix: every send has a SOP Instance UID of its own", received.Select(r => r.Dataset.GetString(DicomTag.SOPInstanceUID)).Distinct().Count() == 5);
+            Check("Custom mix: each arrives with a payload of the size asked for", received.All(r => DCST4.Core.Generation.PrivatePayload.BytesIn(r.Dataset) == payload),
+                string.Join(",", received.Select(r => DCST4.Core.Generation.PrivatePayload.BytesIn(r.Dataset))));
+            Check("Custom mix: the frames arrive byte for byte as encoded in the pool", received.All(r => pool.Instances.Any(i => Contains(i.Tail, r.Frame))));
+            Check("Custom mix: the result names the mix and what it was", result.Performance.Mix == "custom" && result.Performance.MixDescription == mix.Description
+                && result.Performance.TransferSyntaxUid == DicomTransferSyntax.JPEGProcess1.UID.UID && result.Performance.PoolInstances == 4, result.Performance.MixDescription);
         }
 
         private static bool Contains(byte[] haystack, byte[] needle)
