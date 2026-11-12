@@ -19,7 +19,6 @@ namespace DCST4.ViewModels
             UidRoot = main.TestUidRoot;
             StoreSyntaxChoices = main.TestSuite.StoreSyntaxChoices;
             StoreSyntax = main.TestSuite.SelectedStoreSyntax;
-            ResultsFolder = main.TestSuite.ResultsFolder;
             CommitLingerSeconds = Text(main.CommitLingerSeconds);
             CommitWaitSeconds = Text(main.CommitWaitSeconds);
             CommitGraceSeconds = Text(main.CommitGraceSeconds);
@@ -28,17 +27,11 @@ namespace DCST4.ViewModels
             ArtimWaitSeconds = Text(main.LimitArtimWaitSeconds);
             FaultSettleSeconds = Text(main.FaultSettleSeconds);
             ExpiredClientCertThumbprint = main.TlsExpiredClientCertThumbprint;
-            WriteJson = main.WriteResultJson;
-            WriteCsv = main.WriteResultCsv;
-            WriteHtml = main.WriteResultHtml;
-            WriteSeries = main.WriteResultSeries;
-            KeepDays = Text(main.ResultsKeepDays);
         }
 
         public string UidRoot { get; set; }
         public IReadOnlyList<StoreSyntaxChoice> StoreSyntaxChoices { get; }
         public StoreSyntaxChoice StoreSyntax { get; set; }
-        public string ResultsFolder { get; set; }
         public string CommitLingerSeconds { get; set; }
         public string CommitWaitSeconds { get; set; }
         public string CommitGraceSeconds { get; set; }
@@ -47,20 +40,12 @@ namespace DCST4.ViewModels
         public string ArtimWaitSeconds { get; set; }
         public string FaultSettleSeconds { get; set; }
         public string ExpiredClientCertThumbprint { get; set; }
-        public bool WriteJson { get; set; }
-        public bool WriteCsv { get; set; }
-        public bool WriteHtml { get; set; }
-        /// <summary>The series files of the Performance tests, written while they run.</summary>
-        public bool WriteSeries { get; set; }
-        /// <summary>Result files older than this many days are deleted after a run. 0 keeps everything.</summary>
-        public string KeepDays { get; set; }
 
         /// <summary>Checks every value and, if all can be used, applies them. Returns the first problem, or null when applied.</summary>
         public string Apply()
         {
             var problem = TargetProfile.ValidateUidRoot(UidRoot);
             if (problem != null) return problem;
-            if (string.IsNullOrWhiteSpace(ResultsFolder)) return "Enter a folder for the results.";
 
             if (!TryRead(CommitLingerSeconds, "Keep the association open", out var linger, ref problem)
                 || !TryRead(CommitWaitSeconds, "Wait for the report", out var wait, ref problem)
@@ -71,12 +56,6 @@ namespace DCST4.ViewModels
                 || !TryRead(FaultSettleSeconds, "After a fault, look for", out var settle, ref problem))
             {
                 return problem;
-            }
-
-            if (!TryRead(KeepDays, "Delete results older than", out var keepDays, ref problem)) return problem;
-            if (keepDays > DCST4.Core.Reporting.ResultCleaner.LargestKeepDays)
-            {
-                return $"Delete results older than must be at most {DCST4.Core.Reporting.ResultCleaner.LargestKeepDays.ToString(CultureInfo.InvariantCulture)} days. 0 keeps everything.";
             }
 
             problem = new TestRunOptions
@@ -93,7 +72,6 @@ namespace DCST4.ViewModels
 
             _main.TestUidRoot = UidRoot.Trim();
             _main.TestSuite.SelectedStoreSyntax = StoreSyntax ?? StoreSyntaxChoices[0];
-            _main.TestSuite.ResultsFolder = ResultsFolder.Trim();
             _main.CommitLingerSeconds = linger;
             _main.CommitWaitSeconds = wait;
             _main.CommitGraceSeconds = grace;
@@ -102,11 +80,6 @@ namespace DCST4.ViewModels
             _main.LimitArtimWaitSeconds = artim;
             _main.FaultSettleSeconds = settle;
             _main.TlsExpiredClientCertThumbprint = (ExpiredClientCertThumbprint ?? string.Empty).Trim();
-            _main.WriteResultJson = WriteJson;
-            _main.WriteResultCsv = WriteCsv;
-            _main.WriteResultHtml = WriteHtml;
-            _main.WriteResultSeries = WriteSeries;
-            _main.ResultsKeepDays = keepDays;
             return null;
         }
 

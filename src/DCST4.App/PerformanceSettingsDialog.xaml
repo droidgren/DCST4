@@ -57,6 +57,30 @@
             </Grid>
         </GroupBox>
 
+        <GroupBox Header="Every test" Padding="6,4" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Max instances:" ToolTip="{Binding ToolTip, ElementName=MaxInstancesBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="MaxInstancesBox" Text="{Binding MaxInstances, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="The most new objects a run stores: the ceiling, so that what a run can leave on the destination is known before it starts. A value you set applies to all three tests. A fast destination can reach it before the duration is over, and the run then ends early. 0 uses each test's own default: 5000 for Load, 12000 for Ramp, and rate x duration for Soak.&#x0a;&#x0a;Default: 0, each test's own default."/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="{Binding MaxInstancesDefaults}"/>
+
+                <Label Grid.Row="1" Content="Warm-up:" ToolTip="{Binding ToolTip, ElementName=WarmUpBox}"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="WarmUpBox" Text="{Binding WarmUpSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds at the start of a run, and of each ramp step, that are in the chart but not in the summary, so that opening associations and a cold cache do not count. Errors are counted from the start.&#x0a;&#x0a;Default: 2 s."/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+            </Grid>
+        </GroupBox>
+
         <GroupBox Header="Load" Padding="6,4" Margin="0,8,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -141,30 +165,6 @@
             </Grid>
         </GroupBox>
 
-        <GroupBox Header="Every test" Padding="6,4" Margin="0,8,0,0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200"/>
-                    <ColumnDefinition Width="70"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <Label Grid.Row="0" Content="Max instances:" ToolTip="{Binding ToolTip, ElementName=MaxInstancesBox}"/>
-                <TextBox Grid.Row="0" Grid.Column="1" x:Name="MaxInstancesBox" Text="{Binding MaxInstances, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="The most new objects a run stores: the ceiling, so that what a run can leave on the destination is known before it starts. A value you set applies to all three tests. A fast destination can reach it before the duration is over, and the run then ends early. 0 uses each test's own default: 1000 for Load, 2000 for Ramp, and rate x duration for Soak.&#x0a;&#x0a;Default: 0, each test's own default."/>
-                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="{Binding MaxInstancesDefaults}"/>
-
-                <Label Grid.Row="1" Content="Warm-up:" ToolTip="{Binding ToolTip, ElementName=WarmUpBox}"/>
-                <TextBox Grid.Row="1" Grid.Column="1" x:Name="WarmUpBox" Text="{Binding WarmUpSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="Seconds at the start of a run, and of each ramp step, that are in the chart but not in the summary, so that opening associations and a cold cache do not count. Errors are counted from the start.&#x0a;&#x0a;Default: 2 s."/>
-                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
-            </Grid>
-        </GroupBox>
-
         <GroupBox Header="Time-to-available (Load and Soak)" Padding="6,4" Margin="0,8,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -194,6 +194,9 @@
                 <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="s, then it counts as never found"/>
             </Grid>
         </GroupBox>
+
+        <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
+                   Text="Which result files a run writes, and where, is set in Settings &gt; Test and Performance Results."/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="OK" Click="OkButton_Click" Width="80" Height="25" Margin="0,0,10,0" IsDefault="True"/>

@@ -47,7 +47,7 @@ namespace DCST4.Cli
             "  --load-mix <id>                  What is sent, from list-mixes. Default ct\n" +
             "  --load-pdu <bytes>               Maximum PDU length announced and sent with. 0 (default) is fo-dicom's default\n" +
             "  --load-warmup <seconds>          Left out of the summary at the start of the run and of each ramp step. Default 2\n" +
-            "  --load-max-instances <n>         The most instances a run sends. Default 1000, 2000 for the ramp, rate x duration for the soak\n" +
+            "  --load-max-instances <n>         The most instances a run sends. Default 5000, 12000 for the ramp, rate x duration for the soak\n" +
             "  --ramp-steps <list>              Associations per ramp step. Default 1,2,4,8\n" +
             "  --ramp-step-duration <time>      How long each ramp step runs. Default 10 s\n" +
             "  --soak-duration <time>           How long load-soak runs. Default 30m\n" +

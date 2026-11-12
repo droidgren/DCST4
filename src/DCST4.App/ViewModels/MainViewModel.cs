@@ -400,7 +400,7 @@ namespace DCST4.ViewModels
             _sizeTimer.Tick += async (s, e) => await MeasureSampleImageAsync();
 
             Action changed = RefreshPreview;
-            PatientNameField = new IdentityFieldViewModel("Patient Name", "Surname^Firstname. Auto: invented Swedish name, sometimes with å, ä or ö.", changed);
+            PatientNameField = new IdentityFieldViewModel("Patient Name", "Surname^Firstname. Auto: as chosen in Settings > Identifiers, DCST4^TEST^ and a number, or an invented Swedish name, sometimes with å, ä or ö.", changed);
             PatientIdField = new IdentityFieldViewModel("Patient ID", "Auto: from Skatteverket's official test personnummer.", changed);
             BirthDateField = new IdentityFieldViewModel("Birth Date", "YYYYMMDD. Auto: from the personnummer.", changed);
             SexField = new IdentityFieldViewModel("Sex", "M, F or O. Auto: from the personnummer.", changed);
@@ -722,6 +722,13 @@ namespace DCST4.ViewModels
             RefreshSizeEstimate();
         }
 
+        /// <summary>The patient name setting in Settings > Identifiers, used by Generate &amp; Send and by the tests.</summary>
+        private static DCST4.Core.TestData.TestPatientNaming PatientNamingSetting()
+        {
+            DCST4.Core.TestData.TestPatientNames.TryParse(Settings.Default.TestPatientNaming, out var naming);
+            return naming;
+        }
+
         private List<string> ReadOverrides(out IdentityOverrides overrides)
         {
             var problems = new List<string>();
@@ -743,6 +750,7 @@ namespace DCST4.ViewModels
                 StationName = StationField.ManualValue?.Trim(),
                 AdditionalTags = _additionalFields.Select(f => new AdditionalTagValue(f.Tag, f.Field.ManualValue?.Trim())).ToList(),
                 AutoValuesInBasicAscii = CharacterSetTagValue == DicomCharacterSets.Empty,
+                PatientNaming = PatientNamingSetting(),
             };
 
             var manualDate = StudyDateTimeField.ManualValue?.Trim();

@@ -322,6 +322,16 @@ namespace DCST4.Tests
             Check("Auto birth date comes from the number", parsed != null && identity.PatientBirthDate == parsed.BirthDate.ToString("yyyyMMdd"), identity.PatientBirthDate);
             Check("Auto sex comes from the number", parsed != null && identity.PatientSex == parsed.Sex, identity.PatientSex);
 
+            // The patient name setting: Swedish unless told otherwise, the marked name when asked, a typed name always.
+            Func<IdentityOverrides, ExamIdentity> draw = o => new IdentityGenerator(random: new Random(5)).Generate(o, Modality("CT"), Modality("CT").Presets[0]);
+            var marked = draw(new IdentityOverrides { PatientNaming = TestPatientNaming.MarkedTestName });
+            Check("Patient naming: the marked name when asked, DCST4^TEST^ and eight digits", System.Text.RegularExpressions.Regex.IsMatch(marked.PatientName, @"^DCST4\^TEST\^\d{8}$"), marked.PatientName);
+            Check("Patient naming: the same patient and study either way", marked.PatientId == identity.PatientId && marked.AccessionNumber == identity.AccessionNumber, marked.PatientId);
+            var swedishName = draw(new IdentityOverrides { PatientNaming = TestPatientNaming.RegistrySwedishName });
+            Check("Patient naming: Swedish by default in Core, and when asked", swedishName.PatientName == identity.PatientName && !swedishName.PatientName.StartsWith(TestPatientNames.MarkedPrefix, StringComparison.Ordinal), swedishName.PatientName);
+            Check("Patient naming: a typed name wins over both", draw(new IdentityOverrides { PatientName = "Typed^Name", PatientNaming = TestPatientNaming.MarkedTestName }).PatientName == "Typed^Name"
+                && draw(new IdentityOverrides { PatientName = "Typed^Name" }).PatientName == "Typed^Name");
+
             Check("Patient age in years", DicomImageBuilder.PatientAge("19800615", new DateTime(2026, 11, 6)) == "046Y");
             Check("Patient age in months", DicomImageBuilder.PatientAge("20260315", new DateTime(2026, 11, 6)) == "007M");
             Check("Patient age in days", DicomImageBuilder.PatientAge("20261101", new DateTime(2026, 11, 6)) == "005D");

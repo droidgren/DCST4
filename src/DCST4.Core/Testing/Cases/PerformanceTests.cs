@@ -155,6 +155,7 @@ namespace DCST4.Core.Testing.Cases
                 OnSecond = second =>
                 {
                     run.Series?.WriteSecond(second);
+                    (run.Performance.SeriesInMemory ?? (run.Performance.SeriesInMemory = new List<LoadSecond>())).Add(second);
                     if (second.Second % 10 == 9) run.Series?.Flush(false);
                     run.Tuning?.AddCpu(second.ClientCpuPercent);
                     context.ReportMetrics(second);

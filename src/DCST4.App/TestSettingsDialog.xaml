@@ -116,35 +116,8 @@
             </Grid>
         </GroupBox>
 
-        <GroupBox Header="Results" Padding="6,4" Margin="0,8,0,0">
-            <StackPanel>
-                <DockPanel>
-                    <Label DockPanel.Dock="Left" Content="Results folder:" Width="200" ToolTip="{Binding ToolTip, ElementName=ResultsFolderBox}"/>
-                    <Button DockPanel.Dock="Right" Content="..." Width="26" Margin="4,2,0,2" Click="BrowseButton_Click" ToolTip="Select the folder"/>
-                    <TextBox x:Name="ResultsFolderBox" Text="{Binding ResultsFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Where each run writes its JSON, CSV and HTML result files and the Performance tests their series files, and where the comparisons of runs go. It is made if it is not there.&#x0a;&#x0a;Default: %LocalAppData%\DCST4\TestRuns."/>
-                </DockPanel>
-                <DockPanel>
-                    <Label DockPanel.Dock="Left" Content="Each run writes:" Width="200" ToolTip="Which result files a run on the Tests or Performance tab writes. With none ticked a run leaves no files in the results folder. The results are shown in the program either way.&#x0a;&#x0a;Default: all four."/>
-                    <WrapPanel VerticalAlignment="Center">
-                        <CheckBox Content="JSON" IsChecked="{Binding WriteJson, Mode=TwoWay}" VerticalAlignment="Center"
-                                  ToolTip="The file with full detail, DCST4-run-&lt;time&gt;.json, and the capability matrix as JSON. Compare runs... reads this file, and Open report can make a report from it again. Without it a run cannot be compared later.&#x0a;&#x0a;Default: ticked."/>
-                        <CheckBox Content="CSV" IsChecked="{Binding WriteCsv, Mode=TwoWay}" VerticalAlignment="Center" Margin="16,0,0,0"
-                                  ToolTip="The file with one row per result, and the capability matrix and the chain as CSV, for a spreadsheet.&#x0a;&#x0a;Default: ticked."/>
-                        <CheckBox Content="HTML report" IsChecked="{Binding WriteHtml, Mode=TwoWay}" VerticalAlignment="Center" Margin="16,0,0,0"
-                                  ToolTip="The report for reading, one file that is complete in itself, which Open report opens. Without it, Open report makes one from the JSON file when you click it.&#x0a;&#x0a;Default: ticked."/>
-                        <CheckBox Content="Performance series (CSV)" IsChecked="{Binding WriteSeries, Mode=TwoWay}" VerticalAlignment="Center" Margin="16,0,0,0"
-                                  ToolTip="The files a Performance test writes while it runs: DCST4-run-&lt;time&gt;-load-throughput.csv, -load-ramp.csv or -load-soak.csv with one row per second, and for a soak -load-soak-windows.csv with one row per snapshot. They are written as the test goes, so a crash during a long soak keeps what was measured. Without them the HTML report has no per-second charts. The chart on the Performance tab, the summary and the soak's windows in the JSON file are not affected.&#x0a;&#x0a;Default: ticked."/>
-                    </WrapPanel>
-                </DockPanel>
-                <DockPanel>
-                    <Label DockPanel.Dock="Left" Content="Delete results older than:" Width="200" ToolTip="{Binding ToolTip, ElementName=KeepDaysBox}"/>
-                    <TextBox DockPanel.Dock="Left" x:Name="KeepDaysBox" Text="{Binding KeepDays, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60"
-                             ToolTip="After each run, DCST4 deletes the result files in the results folder that are older than this many days: the files whose names start with DCST4-run- or DCST4-compare- and end in .json, .csv or .html. Nothing else in the folder is touched, and nothing is deleted until a run has been saved. 0 keeps everything.&#x0a;&#x0a;Default: 0."/>
-                    <TextBlock Text="days (0 keeps everything)" Style="{StaticResource Unit}"/>
-                </DockPanel>
-            </StackPanel>
-        </GroupBox>
+        <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
+                   Text="Which result files a run writes, and where, is set in Settings &gt; Test and Performance Results."/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="OK" Click="OkButton_Click" Width="80" Height="25" Margin="0,0,10,0" IsDefault="True"/>

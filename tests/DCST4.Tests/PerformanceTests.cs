@@ -278,12 +278,12 @@ namespace DCST4.Tests
             var count = new LoadSettings { InstanceCount = 300 };
             Check("A count is the planned total, and said so exactly", count.PlannedInstances(LoadMode.Load) == 300 && count.DescribePlan(LoadMode.Load, "PACS").StartsWith("Stores 300 ", StringComparison.Ordinal), count.DescribePlan(LoadMode.Load, "PACS"));
             Check("A rate for a duration: rate x duration", new LoadSettings { RatePerSecond = 5, DurationSeconds = 20 }.PlannedInstances(LoadMode.Load) == 100);
-            Check("No rate: the ceiling, 1000 by default", new LoadSettings().PlannedInstances(LoadMode.Load) == 1000 && new LoadSettings().DescribePlan(LoadMode.Load, "PACS").StartsWith("Stores up to 1,000 ", StringComparison.Ordinal));
-            Check("Ramp: its own ceiling, 2000", new LoadSettings().PlannedInstances(LoadMode.Ramp) == 2000);
+            Check("No rate: the ceiling, 5000 by default", new LoadSettings().PlannedInstances(LoadMode.Load) == 5000 && new LoadSettings().DescribePlan(LoadMode.Load, "PACS").StartsWith("Stores up to 5,000 ", StringComparison.Ordinal));
+            Check("Ramp: its own ceiling, 12000", new LoadSettings().PlannedInstances(LoadMode.Ramp) == 12000);
             Check("Soak: rate x duration", new LoadSettings { SoakRatePerSecond = 2, SoakSeconds = 1800 }.PlannedInstances(LoadMode.Soak) == 3600);
             Check("An explicit ceiling wins", new LoadSettings { MaxInstances = 50, InstanceCount = 300 }.PlannedInstances(LoadMode.Load) == 50);
             Check("The plan names the size and the destination", new LoadSettings().DescribePlan(LoadMode.Load, "PACS at h:104").Contains("MB, mix ct) on PACS at h:104.") && !new LoadSettings().DescribePlan(LoadMode.Load, "PACS at h:104").Contains("delete"));
-            Check("Without a rate, the plan says from what rate the ceiling ends the run early", new LoadSettings().DescribePlan(LoadMode.Load, "PACS").EndsWith("A system that stores more than 50 objects per second has stored all 1,000 (Max instances) before the 20 s are up, and the run ends early. Set a rate, or raise Max instances, to measure the whole 20 s.", StringComparison.Ordinal)
+            Check("Without a rate, the plan says from what rate the ceiling ends the run early", new LoadSettings().DescribePlan(LoadMode.Load, "PACS").EndsWith("A system that stores more than 250 objects per second has stored all 5,000 (Max instances) before the 20 s are up, and the run ends early. Set a rate, or raise Max instances, to measure the whole 20 s.", StringComparison.Ordinal)
                 && !new LoadSettings { RatePerSecond = 5 }.DescribePlan(LoadMode.Load, "PACS").Contains("ends early"), new LoadSettings().DescribePlan(LoadMode.Load, "PACS"));
             var lines = new LoadSettings().DescribePlan(LoadMode.Load, "PACS at h:104", true).Split('\n');
             Check("For the question: the destination, a blank line, then one sentence per line", lines.Length == 4 && lines[0].EndsWith("on PACS at h:104.", StringComparison.Ordinal) && lines[1].Length == 0

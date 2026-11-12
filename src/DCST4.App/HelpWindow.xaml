@@ -181,7 +181,9 @@
                         the next run will use. Untick <Bold>Auto</Bold> to enter your own value. Auto values are drawn
                         when the program starts and when you click <Bold>New values</Bold>, and they stay on screen after
                         a run so you can look the exam up in PACS. The values a run used are also written to the
-                        <Bold>Log</Bold> tab.
+                        <Bold>Log</Bold> tab. The Auto patient name is DCST4^TEST^number by default, which is plainly not
+                        a person, or an invented Swedish name if you choose that on the <Bold>Identifiers</Bold> tab under
+                        <Bold>File &gt; Settings</Bold>.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Running again</Paragraph>
                     <Paragraph>
@@ -351,7 +353,7 @@
                         Beside the buttons are the <Bold>Local SCP AET</Bold> and <Bold>Port</Bold> that C-MOVE and Storage
                         Commitment reports go to. The other settings of the tests are in <Bold>Test settings...</Bold>: the UID
                         root, the transfer syntax of the store tests, the Storage Commitment times, the settings of the limit,
-                        fault and TLS tests, and the results folder. They change only when you click <Bold>OK</Bold>, and a
+                        fault and TLS tests. They change only when you click <Bold>OK</Bold>, and a
                         value that cannot be used is named and nothing is changed. Hover over a setting to see what it does and its default.
                         <Bold>Open results folder</Bold> opens the folder in Explorer.
                     </Paragraph>
@@ -393,13 +395,14 @@
                         Reports and comparison.
                     </Paragraph>
                     <Paragraph>
-                        Under <Bold>Results</Bold> in <Bold>Test settings...</Bold>, the boxes after
-                        <Bold>Each run writes</Bold> choose which files a run writes: JSON, CSV, the HTML report, and the
-                        series files of a Performance test. All four are ticked from the start. <Bold>Compare runs...</Bold>
-                        reads the JSON file, so a run saved without it cannot be compared later. The series files, one row per
-                        second, are written while a Performance test runs, so a crash keeps what was measured, and the
-                        report draws its per-second charts from them. With no box ticked a run writes nothing, and the
-                        status bar says so.
+                        The results folder and the files a run writes are under <Bold>File &gt; Settings</Bold>, on the
+                        <Bold>Test and Performance Results</Bold> tab, for runs on the Tests and Performance tabs. The boxes
+                        after <Bold>Each run writes</Bold> choose JSON, CSV, the HTML report, and the series files of a
+                        Performance test. Only the HTML report is ticked from the start. <Bold>Compare runs...</Bold>
+                        reads the JSON file, so tick JSON for runs you want to compare later. The series files, one row per
+                        second, are written while a Performance test runs, so a crash keeps what was measured. The report
+                        made right after a run has its per-second chart either way. With no box ticked a run writes
+                        nothing, and the status bar says so.
                     </Paragraph>
                     <Paragraph>
                         <Bold>Delete results older than</Bold> makes DCST4 tidy the results folder. After each run it
@@ -604,7 +607,7 @@
                         run starts, DCST4 shows how many objects it will store at most, about how much data that is, and the
                         destination, and starts only when you say yes. The test and the <Bold>Mix</Bold> are chosen on the tab,
                         and everything else in <Bold>Performance settings...</Bold>, where every setting explains itself on hover.
-                        <Bold>Max instances</Bold> caps every run. It shows the default of the selected test until you change it: 1000 for Load, 2000 for Ramp and the rate times the duration for Soak. A value you set applies to all three tests, and 0 goes back to the defaults. A fast PACS can
+                        <Bold>Max instances</Bold> caps every run. It shows the default of the selected test until you change it: 5000 for Load, 12000 for Ramp and the rate times the duration for Soak. A value you set applies to all three tests, and 0 goes back to the defaults. A fast PACS can
                         reach it before the duration is over. The run then ends early, and the result and the table say that
                         throughput and latency come from a shorter window. Raise <Bold>Max instances</Bold>, shorten the duration or
                         set a <Bold>Rate</Bold>.
@@ -661,8 +664,8 @@
                     <Paragraph>
                         <Bold>Mix</Bold> chooses what is sent: small CT images, many small CR and US images, few large
                         multi-frame images, uncompressed or in JPEG Lossless. <Bold>Max PDU</Bold> is the PDU length DCST4
-                        announces and sends with. The results go to the results folder in Test settings, with a file of one
-                        row per second next to them. <Bold>Cancel</Bold> stops the run within a few seconds and releases the
+                        announces and sends with. The results go to the results folder set under <Bold>File &gt; Settings</Bold>, with a file of
+                        one row per second next to them if <Bold>Performance series (CSV)</Bold> is ticked there. <Bold>Cancel</Bold> stops the run within a few seconds and releases the
                         associations.
                     </Paragraph>
                 </Section>
@@ -827,8 +830,8 @@
                         <Italic>--patient-naming RegistrySwedishName</Italic> on the command line.
                     </Paragraph>
                     <Paragraph Style="{StaticResource Note}">
-                        This naming setting does not affect Generate &amp; Send, which always uses Swedish names. It applies
-                        to the objects that the tests on the Tests and Performance tabs send.
+                        The same setting gives the Auto patient name of Generate &amp; Send, and of the objects that the tests
+                        on the Tests and Performance tabs send. A name typed on the Identifiers tab always wins.
                     </Paragraph>
                 </Section>
 
@@ -855,11 +858,13 @@
                             <TableRow><TableCell><Paragraph><Bold>Network: Response (DIMSE) timeout</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How long to wait for each response to a C-ECHO or C-STORE request (default 60 s, 0 = no limit).</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Identifiers</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>Whether to draw new Auto values after each run, and the patient name in test-suite datasets.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>Whether to draw new Auto values after each run, and how an Auto patient name is made, in Generate &amp; Send and in the tests: DCST4^TEST^number (the default) or a Swedish name.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Burned-in text</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>See <Italic>Burned-in text</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Additional tags</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>See <Italic>Additional tags</Italic>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Test and Performance Results</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The results folder, which files a run on the Tests and Performance tabs writes (only the HTML report by default), and after how many days old results are deleted. See <Italic>Tests</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Logging: Log DIMSE Datasets</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Write every request and response dataset to the log.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Logging: Log Data PDUs</Bold></Paragraph></TableCell>

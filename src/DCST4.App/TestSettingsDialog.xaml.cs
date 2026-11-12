@@ -25,21 +25,5 @@ namespace DCST4
             }
             DialogResult = true;
         }
-
-        private void BrowseButton_Click(object sender, RoutedEventArgs e)
-        {
-            using (var dialog = new System.Windows.Forms.FolderBrowserDialog
-            {
-                Description = "Select the folder for test results",
-                SelectedPath = ResultsFolderBox.Text,
-            })
-            {
-                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                {
-                    ResultsFolderBox.Text = dialog.SelectedPath;
-                    ResultsFolderBox.GetBindingExpression(System.Windows.Controls.TextBox.TextProperty)?.UpdateSource();
-                }
-            }
-        }
     }
 }

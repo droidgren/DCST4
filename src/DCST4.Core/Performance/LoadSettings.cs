@@ -15,8 +15,8 @@ namespace DCST4.Core.Performance
         public const int DefaultAssociations = 4;
         public const double DefaultDurationSeconds = 20;
         public const double DefaultWarmUpSeconds = 2;
-        public const int DefaultLoadMaxInstances = 1000;
-        public const int DefaultRampMaxInstances = 2000;
+        public const int DefaultLoadMaxInstances = 5000;
+        public const int DefaultRampMaxInstances = 12000;
         public const double DefaultRampStepSeconds = 10;
         public const double DefaultSoakSeconds = 30 * 60;
         public const double DefaultSoakRate = 2;
