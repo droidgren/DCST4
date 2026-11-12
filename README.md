@@ -237,6 +237,8 @@ Each run can write `DCST4-run-<UTC time>.json` with full detail, a `.csv` with o
 
 **Which files, and for how long.** These settings are under **File > Settings**, on the **Test and Performance Results** tab, and apply to runs on the Tests and Performance tabs. By default a run writes only its HTML report. The command line always writes all its files, the series files included, and never deletes anything.
 
+![The Test and Performance Results tab in Settings](screenshots/settings-results.png)
+
 | In Settings, Test and Performance Results | Default | Meaning |
 | ---------------- | ------- | ------- |
 | Each run writes: JSON | Not ticked | The file with full detail, and the capability matrix as JSON. **Compare runs...** reads this file, so a run saved without it cannot be compared later |
@@ -491,6 +493,8 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 | `large-lossless` | Enhanced CT in JPEG Lossless. Breast Tomosynthesis is generated uncompressed only |
 
 `--load-pdu` sets the maximum PDU length that DCST4 announces and sends its data PDUs with, at most what the PACS announces. 0, the default, is fo-dicom's default of 262144, which an ordinary send uses.
+
+![The Performance settings dialog](screenshots/performance-settings.png)
 
 | In Performance settings        | Command line                  | Default | Meaning |
 | ------------------------------ | ----------------------------- | ------- | ------- |
@@ -919,6 +923,7 @@ Changed:
 - The default Max instances is raised from 1,000 to 5,000 for Load and from 2,000 to 12,000 for Ramp, so that a ramp reaches its last step against a fast system. Every one of them is a new object on the destination
 - **Generate & Send** follows the patient name setting under **File > Settings**, on the Identifiers tab, like the tests. With the default, its Auto patient name is now `DCST4^TEST^<number>` in place of a Swedish name. Choose **Swedish name** there to get the Swedish names back. A name typed on the Identifiers tab always wins
 - The results list on the Tests tab scrolls to each new result while a run is going
+- The README screenshots are retaken, with new ones of the Performance settings dialog and the Test and Performance Results tab in Settings
 
 ### 1.9.1
 
