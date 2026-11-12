@@ -19,6 +19,7 @@ namespace DCST4.Core.Generation.Modalities
         private const int FramesPerSecond = 30;
 
         public override string DisplayName => "US Multi-frame";
+        public override string ObjectName => "Ultrasound Multi-frame Image";
         public override DicomUID SopClass => DicomUID.UltrasoundMultiFrameImageStorage;
         public override int SamplesPerPixel => 3;
         public override bool IsMultiFrame => true;
@@ -198,6 +199,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "CT";
         public override string DisplayName => "Enhanced CT";
+        public override string ObjectName => "Enhanced CT Image";
         public override DicomUID SopClass => DicomUID.EnhancedCTImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 16 };
         public override int DefaultBitDepth => 16;
@@ -223,6 +225,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "MR";
         public override string DisplayName => "Enhanced MR";
+        public override string ObjectName => "Enhanced MR Image";
         public override DicomUID SopClass => DicomUID.EnhancedMRImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -261,6 +264,7 @@ namespace DCST4.Core.Generation.Modalities
 
         public override string Code => "MG";
         public override string DisplayName => "Breast Tomosynthesis";
+        public override string ObjectName => "Breast Tomosynthesis Image";
         public override DicomUID SopClass => DicomUID.BreastTomosynthesisImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 14;

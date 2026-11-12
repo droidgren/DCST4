@@ -74,7 +74,7 @@
                     <Paragraph Style="{StaticResource H2}">A first exam in four steps</Paragraph>
                     <List MarkerStyle="Decimal">
                         <ListItem><Paragraph>Under <Bold>Server</Bold>, enter the server's <Bold>AET</Bold>, <Bold>IP/Hostname</Bold> and <Bold>Port</Bold>. Try <Bold>Ping</Bold> and <Bold>Dicom Echo</Bold>.</Paragraph></ListItem>
-                        <ListItem><Paragraph>Under <Bold>Exam</Bold>, select the modality (CT, MR, CR, DX, US, XA, RF, MG, PT or NM, or a multi-frame image) and exam type, and how many images you want. 1 series with 1 image gives a single test image. <Bold>Estimated size</Bold> shows how much data that is.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Under <Bold>Exam</Bold>, select the modality (CT, MR, CR, DX, US, XA, RF, MG, PT or NM), which of its images under <Bold>Object</Bold>, the exam type, and how many images you want. 1 series with 1 image gives a single test image. <Bold>Estimated size</Bold> shows how much data that is.</Paragraph></ListItem>
                         <ListItem><Paragraph>Click <Bold>Generate &amp; Send</Bold>, and follow each image in the <Bold>Results</Bold> tab.</Paragraph></ListItem>
                         <ListItem><Paragraph>Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text under <Bold>File &gt; Settings</Bold> first.</Paragraph></ListItem>
                     </List>
@@ -138,13 +138,13 @@
                         </Table.Columns>
                         <TableRowGroup>
                             <TableRow><TableCell><Paragraph><Bold>Modality</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>CT, MR, CR, DX, US, XA, RF, MG, PT or NM, and last the multi-frame images US Multi-frame, Enhanced CT, Enhanced MR and Breast Tomosynthesis. Choosing one sets its usual matrix, bit depth, frames and exam type.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>CT, MR, CR, DX, US, XA, RF, MG, PT or NM. Choosing one sets its usual matrix, bit depth and exam type, and its ordinary image under Object.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Exam type</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Sets the descriptions, body part, modality-specific tags and usual number of images.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Series</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Number of series. A run can have at most 100,000 images in total.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Images per series</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>Number of images in each series. The total is shown next to the field. For a multi-frame modality it is the number of multi-frame objects, and starts at 1.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>Number of images in each series. The total is shown next to the field. For a multi-frame object it is the number of such objects, and starts at 1.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Rows x Columns</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>The matrix, 64 to 4096.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Bits stored</Bold></Paragraph></TableCell>
@@ -155,8 +155,10 @@
                                 <TableCell><Paragraph>Implicit VR, Explicit VR, JPEG Lossless or, for 8 bits stored, JPEG Baseline, which is lossy. See <Italic>Transfer syntax and fallback</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How much data the whole exam will be. It updates as you change the other fields.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Object</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Which image of the modality to generate, named after its IOD. US, CT, MR and MG also have a multi-frame image; the other six have one image each.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Frames per image</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>For a multi-frame modality: how many frames each image has, 1 to 10,000. 30 for a cine loop and 8 for the others when the modality is selected.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>For a multi-frame object: how many frames each image has, 1 to 10,000. 30 for a cine loop and 8 for the others when the object is selected.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Add private payload</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Adds a large private binary value of the given size to every image. Off at every start. See below.</Paragraph></TableCell></TableRow>
                         </TableRowGroup>
@@ -171,15 +173,17 @@
                     <Paragraph>The DICOMDIR of a saved File-set is not counted. For a compressed multi-frame image the sample has a few frames, and the rest are taken to be as large. A private payload is added as it is.</Paragraph>
                     <Paragraph Style="{StaticResource H2}">Multi-frame images</Paragraph>
                     <Paragraph>
-                        <Bold>US Multi-frame</Bold> is a colour cine loop of 30 frames per second, as an ultrasound system
-                        sends. <Bold>Enhanced CT</Bold>, <Bold>Enhanced MR</Bold> and <Bold>Breast Tomosynthesis</Bold> are
-                        the multi-frame objects with functional groups for each frame. The frames are drawn as they are
-                        written and are never all in memory, so an object can be larger than the computer's memory.
+                        <Bold>Object</Bold> says which image of the modality to generate. US, CT, MR and MG have a
+                        multi-frame one as well: <Bold>Ultrasound Multi-frame Image</Bold>, a colour cine loop of 30 frames
+                        per second as an ultrasound system sends, and <Bold>Enhanced CT Image</Bold>,
+                        <Bold>Enhanced MR Image</Bold> and <Bold>Breast Tomosynthesis Image</Bold>, which have functional
+                        groups for each frame. The frames are drawn as they are written and are never all in memory, so an
+                        object can be larger than the computer's memory.
                     </Paragraph>
                     <List>
                         <ListItem><Paragraph>With JPEG Lossless or JPEG Baseline the frames are encoded before the image is sent, a few at a time. The status bar counts them, and <Bold>Cancel</Bold> works meanwhile. JPEG Baseline is the slow one: a cine loop of 1,667 frames of 960 x 1280 takes a few minutes.</Paragraph></ListItem>
                         <ListItem><Paragraph>Without compression the pixels of one image must be less than 4 GB, which is what a DICOM element can hold. A long cine loop needs JPEG Baseline or JPEG Lossless, and the run stops with a message otherwise.</Paragraph></ListItem>
-                        <ListItem><Paragraph>JPEG Baseline holds 8 bits, so it can be chosen for US, US Multi-frame, and CR, DX, XA, RF and NM at 8 bits stored. The image is marked as lossy and as DERIVED, and a colour image is stored as YBR_FULL_422.</Paragraph></ListItem>
+                        <ListItem><Paragraph>JPEG Baseline holds 8 bits, so it can be chosen for both US images, and for CR, DX, XA, RF and NM at 8 bits stored. The image is marked as lossy and as DERIVED, and a colour image is stored as YBR_FULL_422.</Paragraph></ListItem>
                     </List>
                     <Paragraph Style="{StaticResource H2}">Private payload</Paragraph>
                     <Paragraph>
@@ -487,8 +491,8 @@
                         on what the store tests of the same run stored, so tick a store test with them.
                     </Paragraph>
                     <Paragraph>
-                        There is a store test for each kind of object, the multi-frame ones included: US Multi-frame,
-                        Enhanced CT, Enhanced MR and Breast Tomosynthesis are sent with 8 frames of 128 by 128.
+                        There is a store test for each kind of object, the multi-frame ones included: the ultrasound cine
+                        loop, Enhanced CT, Enhanced MR and Breast Tomosynthesis are sent with 8 frames of 128 by 128.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Test settings</Paragraph>
                     <Paragraph>
@@ -699,8 +703,8 @@
                     <Paragraph>
                         <Bold>Mix</Bold> chooses what is sent: small CT images, many small CR and US images, few large
                         multi-frame images, uncompressed or in JPEG Lossless. The last one, <Bold>custom</Bold>, sends the
-                        object described on the <Bold>Exam</Bold> tab: its Modality, Rows x Columns, Bits stored, Frames per
-                        image, Transfer syntax and private payload. Exam type, Series, Images per series and the Identifiers
+                        object described on the <Bold>Exam</Bold> tab: its Modality, Object, Rows x Columns, Bits stored,
+                        Frames per image, Transfer syntax and private payload. Exam type, Series, Images per series and the Identifiers
                         tab are not used, since a load run makes its own studies and patient. The text beside the list says
                         what will be sent, and so do the plan, the result file and the report. A load run keeps its objects
                         in memory, so one object of the custom mix can be at most 1 GB, and a long cine loop takes minutes

@@ -45,7 +45,8 @@ namespace DCST4.Tests
 
         private static void Check(string name, bool ok, string detail = null) => _check(name, ok, detail);
 
-        private static ModalityProfile Named(string name) => ModalityCatalog.FindForGenerateAndSend(name);
+        /// <summary>The profile that generates an object, by the id of the dataset profile that makes the same one.</summary>
+        private static ModalityProfile Named(string datasetProfileId) => ModalityCatalog.FindObject(datasetProfileId)?.Image;
 
         private static ExamRequest Request(ModalityProfile modality, int frames = Frames, int rows = 64, int columns = 64, int bits = 0, long payload = 0)
         {
@@ -106,22 +107,31 @@ namespace DCST4.Tests
 
         private static void TestCatalog()
         {
-            Console.WriteLine("\nMulti-frame: the Modality list of Generate & Send");
-            var names = ModalityCatalog.GenerateAndSend.Select(c => c.Modality.DisplayName).ToList();
-            Check("The ten modalities, then the four multi-frame images", names.SequenceEqual(new[] { "CT", "MR", "CR", "DX", "US", "XA", "RF", "MG", "PT", "NM", "US Multi-frame", "Enhanced CT", "Enhanced MR", "Breast Tomosynthesis" }), string.Join(", ", names));
-            Check("Every name is there once", names.Distinct(StringComparer.OrdinalIgnoreCase).Count() == names.Count);
-            Check("A setting saved before 1.10.1 holds a code, and selects the same modality", ReferenceEquals(Named("US"), ModalityCatalog.Find("US")) && ReferenceEquals(Named("CT"), ModalityCatalog.Find("CT")) && !Named("US").IsMultiFrame);
-            Check("The new ones are found by name, and an unknown name by nothing", Named("Enhanced CT").SopClass == DicomUID.EnhancedCTImageStorage && Named("us multi-frame").SopClass == DicomUID.UltrasoundMultiFrameImageStorage && Named("nope") == null);
-            Check("The dataset list is unchanged by them", DatasetProfileCatalog.All.Count(p => p.Id == "us" || p.Id == "ct") == 2 && ModalityCatalog.All.Count == 10);
+            Console.WriteLine("\nMulti-frame: the objects of a modality in Generate & Send");
+            Check("The Modality list is the ten modalities, unchanged", ModalityCatalog.All.Select(m => m.Code).SequenceEqual(new[] { "CT", "MR", "CR", "DX", "US", "XA", "RF", "MG", "PT", "NM" }), string.Join(",", ModalityCatalog.All.Select(m => m.Code)));
 
-            var mapped = ModalityCatalog.GenerateAndSend.All(c =>
+            Func<string, IReadOnlyList<ImageObject>> objectsOf = code => ModalityCatalog.ObjectsOf(ModalityCatalog.Find(code));
+            Func<string, string> listOf = code => string.Join(" | ", objectsOf(code).Select(o => o.Name + " (" + o.DatasetProfileId + ")"));
+            Check("US: the ultrasound image and the cine loop, in that order", listOf("US") == "Ultrasound Image (us) | Ultrasound Multi-frame Image (us-multiframe)", listOf("US"));
+            Check("CT, MR and MG: the ordinary image and the enhanced one", listOf("CT") == "CT Image (ct) | Enhanced CT Image (enhanced-ct)" && listOf("MR") == "MR Image (mr) | Enhanced MR Image (enhanced-mr)"
+                && listOf("MG") == "Digital Mammography X-Ray Image (mg) | Breast Tomosynthesis Image (tomosynthesis-large)", listOf("CT") + " / " + listOf("MR") + " / " + listOf("MG"));
+            Check("The other six have one object each, named after their IOD", new[] { "CR", "DX", "XA", "RF", "PT", "NM" }.All(c => objectsOf(c).Count == 1 && !objectsOf(c)[0].IsMultiFrame && objectsOf(c)[0].DatasetProfileId == c.ToLowerInvariant()),
+                listOf("CR") + " / " + listOf("NM"));
+            Check("Only the second object of a modality is multi-frame", ModalityCatalog.All.All(m => !ModalityCatalog.ObjectsOf(m)[0].IsMultiFrame && ModalityCatalog.ObjectsOf(m).Skip(1).All(o => o.IsMultiFrame)));
+
+            var all = ModalityCatalog.All.SelectMany(ModalityCatalog.ObjectsOf).ToList();
+            Check("Fourteen objects in all, each named once", all.Count == 14 && all.Select(o => o.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 14, string.Join(", ", all.Select(o => o.Name)));
+            Check("The same instances every time, so a selection stays selected", ModalityCatalog.ObjectsOf(ModalityCatalog.Find("US")).SequenceEqual(objectsOf("US")));
+            Check("Each has a dataset profile of the same SOP class, for the custom mix", all.All(o =>
             {
-                var profile = DatasetProfileCatalog.Find(c.DatasetProfileId);
-                return profile != null && profile.IsImage && profile.Image.SopClass == c.Modality.SopClass && ModalityCatalog.DatasetProfileIdOf(c.Modality) == c.DatasetProfileId;
-            });
-            Check("Each has a dataset profile of the same SOP class, for the custom mix", mapped);
-            Check("Default frames: 30 for a cine loop, 8 for the enhanced images, 1 otherwise", Named("US Multi-frame").DefaultFrames == 30 && Named("Enhanced CT").DefaultFrames == 8 && Named("Enhanced MR").DefaultFrames == 8
-                && Named("Breast Tomosynthesis").DefaultFrames == 8 && Named("CT").DefaultFrames == 1);
+                var profile = DatasetProfileCatalog.Find(o.DatasetProfileId);
+                return profile != null && profile.IsImage && profile.Image.SopClass == o.Image.SopClass;
+            }));
+            Check("Found by id, within a modality and across all of them", ModalityCatalog.FindObject("us-multiframe").Image.SopClass == DicomUID.UltrasoundMultiFrameImageStorage
+                && ModalityCatalog.FindObject(ModalityCatalog.Find("US"), "us-multiframe") != null && ModalityCatalog.FindObject(ModalityCatalog.Find("CT"), "us-multiframe") == null && ModalityCatalog.FindObject("nope") == null);
+            Check("The dataset list is unchanged by them", DatasetProfileCatalog.All.Count(p => p.Id == "us" || p.Id == "ct") == 2 && ModalityCatalog.All.Count == 10);
+            Check("Default frames: 30 for a cine loop, 8 for the enhanced images, 1 otherwise", Named("us-multiframe").DefaultFrames == 30 && Named("enhanced-ct").DefaultFrames == 8 && Named("enhanced-mr").DefaultFrames == 8
+                && Named("tomosynthesis-large").DefaultFrames == 8 && Named("ct").DefaultFrames == 1);
         }
 
         // ---------------------------------------------------------------- frames on demand
@@ -129,9 +139,10 @@ namespace DCST4.Tests
         private static void TestFramesOnDemand()
         {
             Console.WriteLine("\nMulti-frame: frames drawn as they are written");
-            foreach (var name in new[] { "US Multi-frame", "Enhanced CT", "Enhanced MR", "Breast Tomosynthesis" })
+            foreach (var id in new[] { "us-multiframe", "enhanced-ct", "enhanced-mr", "tomosynthesis-large" })
             {
-                var modality = Named(name);
+                var modality = Named(id);
+                var name = modality.ObjectName;
                 var file = First(Request(modality));
                 var dataset = file.Dataset;
                 var buffer = PixelBuffer(dataset);
@@ -150,13 +161,13 @@ namespace DCST4.Tests
                 Check($"{name}: Implicit VR holds the same frames", FramesOf(Reopened(implicitVr).Dataset).Select((f, i) => f.SequenceEqual(original[i])).All(same => same));
             }
 
-            var cine = First(Request(Named("US Multi-frame"))).Dataset;
+            var cine = First(Request(Named("us-multiframe"))).Dataset;
             Check("Cine loop: RGB, Frame Time and the frame rate", cine.GetString(DicomTag.PhotometricInterpretation) == "RGB" && cine.GetSingleValue<ushort>(DicomTag.SamplesPerPixel) == 3
                 && cine.GetString(DicomTag.FrameTime) == "33" && cine.GetString(DicomTag.CineRate) == "30" && cine.GetString(DicomTag.RecommendedDisplayFrameRate) == "30"
                 && cine.GetSingleValue<DicomTag>(DicomTag.FrameIncrementPointer) == DicomTag.FrameTime);
 
             // 65 x 65 x 3 x 5 bytes is an odd number, and Pixel Data must have even length.
-            var odd = First(Request(Named("US Multi-frame"), rows: 65, columns: 65));
+            var odd = First(Request(Named("us-multiframe"), rows: 65, columns: 65));
             var oddBuffer = PixelBuffer(odd.Dataset);
             var oddBack = Reopened(odd);
             Check("An odd number of bytes is padded to an even one", oddBuffer.Size == 65 * 65 * 3 * Frames + 1 && oddBuffer.Data[oddBuffer.Size - 1] == 0, oddBuffer.Size.ToString());
@@ -170,21 +181,21 @@ namespace DCST4.Tests
             Console.WriteLine("\nMulti-frame: frames encoded one at a time");
             var cases = new[]
             {
-                Tuple.Create("US Multi-frame", "jpeg-baseline"),
-                Tuple.Create("US Multi-frame", "jpeg-lossless"),
-                Tuple.Create("US Multi-frame", "rle"),
-                Tuple.Create("Enhanced CT", "jpeg-lossless"),
-                Tuple.Create("Enhanced CT", "jpeg-ls"),
-                Tuple.Create("Enhanced MR", "jpeg-lossless"),
-                Tuple.Create("Breast Tomosynthesis", "jpeg-lossless"),
-                Tuple.Create("Breast Tomosynthesis", "jpeg2000"),
+                Tuple.Create("us-multiframe", "jpeg-baseline"),
+                Tuple.Create("us-multiframe", "jpeg-lossless"),
+                Tuple.Create("us-multiframe", "rle"),
+                Tuple.Create("enhanced-ct", "jpeg-lossless"),
+                Tuple.Create("enhanced-ct", "jpeg-ls"),
+                Tuple.Create("enhanced-mr", "jpeg-lossless"),
+                Tuple.Create("tomosynthesis-large", "jpeg-lossless"),
+                Tuple.Create("tomosynthesis-large", "jpeg2000"),
             };
 
             foreach (var item in cases)
             {
                 var modality = Named(item.Item1);
                 var choice = CompressionCatalog.Find(item.Item2);
-                var label = $"{item.Item1} in {item.Item2}";
+                var label = $"{modality.ObjectName} in {item.Item2}";
                 if (!CompressionCatalog.Probe(choice, modality.DefaultBitDepth, modality.SamplesPerPixel).Available)
                 {
                     Console.WriteLine($"  SKIP  {label}: the encoder is not available on this computer");
@@ -224,14 +235,14 @@ namespace DCST4.Tests
         private static void TestProgressCancelAndMemory()
         {
             Console.WriteLine("\nMulti-frame: progress, cancelling and memory");
-            var cine = Named("US Multi-frame");
+            var cine = Named("us-multiframe");
 
             var seen = new List<string>();
             TransferSyntaxConverter.Convert(First(Request(cine)), DicomTransferSyntax.JPEGProcess1, CancellationToken.None, (done, total) => seen.Add(done + "/" + total));
             Check("Each encoded frame is reported", seen.SequenceEqual(new[] { "1/5", "2/5", "3/5", "4/5", "5/5" }), string.Join(" ", seen));
 
             var none = new List<string>();
-            TransferSyntaxConverter.Convert(First(Request(Named("CT"))), DicomTransferSyntax.JPEGProcess14SV1, CancellationToken.None, (done, total) => none.Add(done + "/" + total));
+            TransferSyntaxConverter.Convert(First(Request(Named("ct"))), DicomTransferSyntax.JPEGProcess14SV1, CancellationToken.None, (done, total) => none.Add(done + "/" + total));
             TransferSyntaxConverter.Convert(First(Request(cine)), DicomTransferSyntax.ImplicitVRLittleEndian, CancellationToken.None, (done, total) => none.Add(done + "/" + total));
             Check("A single-frame image and an uncompressed one report nothing", none.Count == 0, string.Join(" ", none));
 
@@ -309,7 +320,7 @@ namespace DCST4.Tests
         private static void TestPayload(string temp)
         {
             Console.WriteLine("\nPrivate payload");
-            var ct = Named("CT");
+            var ct = Named("ct");
             var plain = First(Request(ct)).Dataset;
             Check("None by default: no private group in the object", !plain.Any(i => i.Tag.Group == 0x0099) && PrivatePayload.BytesIn(plain) == 0);
 
@@ -344,7 +355,7 @@ namespace DCST4.Tests
 
             var jpeg = TransferSyntaxConverter.Convert(First(Request(ct, payload: PayloadBytes)), DicomTransferSyntax.JPEGProcess14SV1);
             Check("Compressing the image leaves the payload as it is, still not in memory", PayloadBuffer(jpeg.Dataset)?.IsMemory == false && PayloadBuffer(jpeg.Dataset).Size == PayloadWritten);
-            var cine = TransferSyntaxConverter.Convert(First(Request(Named("US Multi-frame"), payload: PayloadBytes)), DicomTransferSyntax.JPEGProcess1);
+            var cine = TransferSyntaxConverter.Convert(First(Request(Named("us-multiframe"), payload: PayloadBytes)), DicomTransferSyntax.JPEGProcess1);
             Check("... also when the frames are encoded one at a time", PayloadBuffer(cine.Dataset)?.IsMemory == false && PayloadBuffer(cine.Dataset).Size == PayloadWritten
                 && PayloadBuffer(Reopened(cine).Dataset).Data.Length == PayloadWritten);
         }
@@ -354,12 +365,12 @@ namespace DCST4.Tests
         private static void TestRules()
         {
             Console.WriteLine("\nMulti-frame and payload: what is refused");
-            var cine = Named("US Multi-frame");
+            var cine = Named("us-multiframe");
             Func<ExamRequest, string> validate = r => string.Join(" ", ExamValidator.Validate(r));
             Func<ExamRequest, DicomTransferSyntax, string> syntax = (r, s) => string.Join(" ", ExamValidator.SyntaxProblems(r, s));
 
             Check("10000 frames are allowed, 10001 are not", validate(Request(cine, frames: 10000)).Length == 0 && validate(Request(cine, frames: 10001)).Contains("at most 10000"), validate(Request(cine, frames: 10001)));
-            var single = Request(Named("CT"));
+            var single = Request(Named("ct"));
             single.FramesPerImage = 2;
             Check("Frames on a single-frame modality are refused", validate(single).Contains("one frame"), validate(single));
             Check("A payload of 2000 MB is allowed, a larger one is not", validate(Request(cine, payload: PrivatePayload.MaxBytes)).Length == 0 && validate(Request(cine, payload: PrivatePayload.MaxBytes + 1)).Contains("at most 2000 MB"),
@@ -369,10 +380,10 @@ namespace DCST4.Tests
             Check("1667 frames of 960 x 1280 uncompressed: refused, with the size and what to do", syntax(canon, DicomTransferSyntax.ExplicitVRLittleEndian).Contains("5.7 GB") && syntax(canon, DicomTransferSyntax.ExplicitVRLittleEndian).Contains("compressed transfer syntax"),
                 syntax(canon, DicomTransferSyntax.ExplicitVRLittleEndian));
             Check("The same loop in JPEG Baseline: fine", syntax(canon, DicomTransferSyntax.JPEGProcess1).Length == 0, syntax(canon, DicomTransferSyntax.JPEGProcess1));
-            Check("JPEG Baseline with 12 or 16 bits: refused, and it says 8 bits", syntax(Request(Named("CT"), bits: 12), DicomTransferSyntax.JPEGProcess1).Contains("at most 8 bits")
-                && syntax(Request(Named("Enhanced CT")), DicomTransferSyntax.JPEGProcess1).Contains("at most 8 bits"), syntax(Request(Named("CT"), bits: 12), DicomTransferSyntax.JPEGProcess1));
-            Check("JPEG Baseline with 8 bits, grayscale or colour: fine", syntax(Request(Named("US")), DicomTransferSyntax.JPEGProcess1).Length == 0 && syntax(Request(Named("CR"), bits: 8), DicomTransferSyntax.JPEGProcess1).Length == 0);
-            Check("The uncompressed syntaxes and JPEG Lossless: fine for CT", new[] { DicomTransferSyntax.ExplicitVRLittleEndian, DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.JPEGProcess14SV1 }.All(s => syntax(Request(Named("CT")), s).Length == 0));
+            Check("JPEG Baseline with 12 or 16 bits: refused, and it says 8 bits", syntax(Request(Named("ct"), bits: 12), DicomTransferSyntax.JPEGProcess1).Contains("at most 8 bits")
+                && syntax(Request(Named("enhanced-ct")), DicomTransferSyntax.JPEGProcess1).Contains("at most 8 bits"), syntax(Request(Named("ct"), bits: 12), DicomTransferSyntax.JPEGProcess1));
+            Check("JPEG Baseline with 8 bits, grayscale or colour: fine", syntax(Request(Named("us")), DicomTransferSyntax.JPEGProcess1).Length == 0 && syntax(Request(Named("cr"), bits: 8), DicomTransferSyntax.JPEGProcess1).Length == 0);
+            Check("The uncompressed syntaxes and JPEG Lossless: fine for CT", new[] { DicomTransferSyntax.ExplicitVRLittleEndian, DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.JPEGProcess14SV1 }.All(s => syntax(Request(Named("ct")), s).Length == 0));
             Check("Generate & Send offers JPEG Baseline last, after the three it had", TransferSyntaxOption.All.Select(o => o.Syntax).SequenceEqual(new[] { DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.ExplicitVRLittleEndian, DicomTransferSyntax.JPEGProcess14SV1, DicomTransferSyntax.JPEGProcess1 }));
         }
 
@@ -381,7 +392,7 @@ namespace DCST4.Tests
         private static void TestSizeEstimate()
         {
             Console.WriteLine("\nMulti-frame and payload: size estimate");
-            var cine = Named("US Multi-frame");
+            var cine = Named("us-multiframe");
             var without = ExamSizeEstimator.UncompressedImageBytes(Request(cine)).Value;
             var with = ExamSizeEstimator.UncompressedImageBytes(Request(cine, payload: PayloadBytes)).Value;
             var actual = Saved(First(Request(cine, payload: PayloadBytes))).Length - Saved(First(Request(cine))).Length;
@@ -413,7 +424,7 @@ namespace DCST4.Tests
         private static async Task TestSending()
         {
             Console.WriteLine("\nMulti-frame and payload: sending");
-            var cine = Named("US Multi-frame");
+            var cine = Named("us-multiframe");
 
             Scp.Reset();
             Scp.AcceptedSyntaxes = Scp.AcceptedSyntaxes.Concat(new[] { DicomTransferSyntax.JPEGProcess1 }).ToArray();
@@ -435,7 +446,7 @@ namespace DCST4.Tests
             // A receiver that only takes Implicit VR sees private tags without their VR.
             Scp.Reset();
             Scp.AcceptedSyntaxes = new[] { DicomTransferSyntax.ImplicitVRLittleEndian };
-            var ct = Request(Named("CT"), payload: PayloadBytes);
+            var ct = Request(Named("ct"), payload: PayloadBytes);
             var ctPayload = PayloadBuffer(First(ct).Dataset).Data;
             var fallback = await new StoreRun(new ExamGenerator(ct), SendOptions(DicomTransferSyntax.ExplicitVRLittleEndian, fallback: true)).ExecuteAsync(CancellationToken.None);
             var implicitVr = Scp.Received.ToList();
@@ -443,8 +454,8 @@ namespace DCST4.Tests
                 && Carries(implicitVr[0].Dataset, ctPayload), fallback + " / " + fallback.FatalError);
 
             Scp.Reset();
-            var enhanced = await new StoreRun(new ExamGenerator(Request(Named("Enhanced CT"))), SendOptions(DicomTransferSyntax.ExplicitVRLittleEndian)).ExecuteAsync(CancellationToken.None);
-            var tomo = await new StoreRun(new ExamGenerator(Request(Named("Breast Tomosynthesis"))), SendOptions(DicomTransferSyntax.JPEGProcess14SV1)).ExecuteAsync(CancellationToken.None);
+            var enhanced = await new StoreRun(new ExamGenerator(Request(Named("enhanced-ct"))), SendOptions(DicomTransferSyntax.ExplicitVRLittleEndian)).ExecuteAsync(CancellationToken.None);
+            var tomo = await new StoreRun(new ExamGenerator(Request(Named("tomosynthesis-large"))), SendOptions(DicomTransferSyntax.JPEGProcess14SV1)).ExecuteAsync(CancellationToken.None);
             var both = Scp.Received.ToList();
             Check("Enhanced CT uncompressed and Breast Tomosynthesis in JPEG Lossless are stored", enhanced.Success == 1 && tomo.Success == 1 && both.Count == 2
                 && both.All(r => r.Dataset.GetSingleValue<int>(DicomTag.NumberOfFrames) == Frames) && both[1].Syntax == DicomTransferSyntax.JPEGProcess14SV1, enhanced + " / " + tomo);

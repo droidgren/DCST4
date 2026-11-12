@@ -103,6 +103,9 @@ namespace DCST4.Core.Generation.Modalities
     {
         public abstract string Code { get; }
         public abstract string DisplayName { get; }
+
+        /// <summary>The name of the IOD, as the Object list of Generate &amp; Send shows it.</summary>
+        public virtual string ObjectName => DisplayName;
         public abstract DicomUID SopClass { get; }
         /// <summary>The Bits Stored values this modality's IOD allows.</summary>
         public abstract IReadOnlyList<int> BitDepths { get; }

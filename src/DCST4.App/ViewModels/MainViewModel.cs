@@ -156,7 +156,9 @@ namespace DCST4.ViewModels
         #endregion
 
         #region Properties - Exam
-        public IReadOnlyList<ModalityProfile> Modalities { get; } = ModalityCatalog.GenerateAndSend.Select(c => c.Modality).ToList();
+        public IReadOnlyList<ModalityProfile> Modalities => ModalityCatalog.All;
+        /// <summary>The images the selected modality can generate, its multi-frame one included where DCST4 has one.</summary>
+        public ObservableCollection<ImageObject> ImageObjects { get; } = new ObservableCollection<ImageObject>();
         public IReadOnlyList<string> CharacterSets { get; } = new[] { DicomCharacterSets.Latin1, DicomCharacterSets.Utf8, DicomCharacterSets.EmptyDisplayName };
         public IReadOnlyList<TransferSyntaxOption> TransferSyntaxes => TransferSyntaxOption.All;
         public ObservableCollection<ExamPreset> Presets { get; } = new ObservableCollection<ExamPreset>();
@@ -171,23 +173,50 @@ namespace DCST4.ViewModels
                 if (value == null || ReferenceEquals(_selectedModality, value)) return;
                 _selectedModality = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(IsMultiFrame));
-                // The name, since Enhanced CT has the code CT too. For the ten single-frame modalities the two are the same.
-                Settings.Default.Modality = value.DisplayName;
-                FillModalityLists();
+                Settings.Default.Modality = value.Code;
+                FillObjectList();
+                // The modality's ordinary image to begin with. Its multi-frame one is a second choice.
+                SelectedImageObject = ImageObjects[0];
                 if (!_loading)
                 {
                     Rows = value.DefaultRows;
                     Columns = value.DefaultColumns;
                     BitsStored = value.DefaultBitDepth;
-                    FramesPerImage = value.DefaultFrames;
-                    SelectedPreset = value.Presets[0];
                 }
             }
         }
 
-        /// <summary>The selected modality makes images of more than one frame.</summary>
-        public bool IsMultiFrame => _selectedModality != null && _selectedModality.IsMultiFrame;
+        private ImageObject _selectedImageObject;
+        /// <summary>Which image of the modality to generate: its ordinary one, or its multi-frame one.</summary>
+        public ImageObject SelectedImageObject
+        {
+            get => _selectedImageObject;
+            set
+            {
+                if (value == null || ReferenceEquals(_selectedImageObject, value)) return;
+                var examType = _selectedPreset?.Name;
+                _selectedImageObject = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsMultiFrame));
+                Settings.Default.ImageObject = value.DatasetProfileId;
+                FillImageLists();
+                // Emptying the list of bit depths clears the box, which has to be told to show the value again.
+                OnPropertyChanged(nameof(BitsStored));
+                if (_loading) return;
+
+                // What the other image also allows is kept: the exam type by name, and the bit depth.
+                SelectedPreset = Presets.FirstOrDefault(p => p.Name == examType) ?? Presets[0];
+                if (!value.Image.BitDepths.Contains(_bitsStored)) BitsStored = value.Image.DefaultBitDepth;
+                FramesPerImage = value.Image.DefaultFrames;
+                RefreshSizeEstimate();
+            }
+        }
+
+        /// <summary>The profile that generates the images: the selected object, which may be the modality's multi-frame one.</summary>
+        private ModalityProfile Generating => _selectedImageObject?.Image ?? _selectedModality;
+
+        /// <summary>The selected object has more than one frame.</summary>
+        public bool IsMultiFrame => _selectedImageObject != null && _selectedImageObject.IsMultiFrame;
 
         private int _framesPerImage = 1;
         /// <summary>Frames in each image. Always 1 for a single-frame modality.</summary>
@@ -567,18 +596,22 @@ namespace DCST4.ViewModels
             _tlsIgnoreCertErrors = s.TlsIgnoreCertErrors;
             _tlsClientCertThumbprint = s.TlsClientCertThumbprint ?? string.Empty;
 
-            SelectedModality = ModalityCatalog.FindForGenerateAndSend(s.Modality) ?? ModalityCatalog.All[0];
-            SelectedPreset = _selectedModality.Presets.FirstOrDefault(p => p.Name == s.ExamType) ?? _selectedModality.Presets[0];
-            _framesPerImage = !_selectedModality.IsMultiFrame ? 1 : s.FramesPerImage > 0 ? s.FramesPerImage : _selectedModality.DefaultFrames;
+            // Read before the modality is selected, since selecting one writes the object it starts with.
+            var savedObject = s.ImageObject;
+            SelectedModality = ModalityCatalog.Find(s.Modality) ?? ModalityCatalog.All[0];
+            // A settings file from before 1.10.1 names no object, which gives the modality's ordinary image.
+            SelectedImageObject = ModalityCatalog.FindObject(_selectedModality, savedObject) ?? ImageObjects[0];
+            SelectedPreset = Generating.Presets.FirstOrDefault(p => p.Name == s.ExamType) ?? Generating.Presets[0];
+            _framesPerImage = !IsMultiFrame ? 1 : s.FramesPerImage > 0 ? s.FramesPerImage : Generating.DefaultFrames;
             _privatePayloadMb = s.PrivatePayloadMb > 0 ? s.PrivatePayloadMb : DefaultPrivatePayloadMb;
             _addPrivatePayload = false;
 
             _seriesCount = Math.Max(1, s.SeriesCount);
             // 0 means never set: use the modality's and exam type's own defaults.
-            _imagesPerSeries = s.ImagesPerSeries > 0 ? s.ImagesPerSeries : _selectedPreset.DefaultImages;
-            _rows = s.Rows > 0 ? s.Rows : _selectedModality.DefaultRows;
-            _columns = s.Columns > 0 ? s.Columns : _selectedModality.DefaultColumns;
-            _bitsStored = _selectedModality.BitDepths.Contains(s.BitsStored) ? s.BitsStored : _selectedModality.DefaultBitDepth;
+            _imagesPerSeries = s.ImagesPerSeries > 0 ? s.ImagesPerSeries : IsMultiFrame ? 1 : _selectedPreset.DefaultImages;
+            _rows = s.Rows > 0 ? s.Rows : Generating.DefaultRows;
+            _columns = s.Columns > 0 ? s.Columns : Generating.DefaultColumns;
+            _bitsStored = Generating.BitDepths.Contains(s.BitsStored) ? s.BitsStored : Generating.DefaultBitDepth;
 
             _characterSet = CharacterSets.Contains(s.CharacterSet) ? s.CharacterSet : DicomCharacterSets.Latin1;
             _selectedTransferSyntax = TransferSyntaxOption.All.FirstOrDefault(o => o.Syntax.UID.UID == s.TransferSyntax) ?? TransferSyntaxOption.ExplicitVrLe;
@@ -590,12 +623,25 @@ namespace DCST4.ViewModels
             _saveFolder = s.SaveFolder ?? string.Empty;
         }
 
-        private void FillModalityLists()
+        private void FillObjectList()
+        {
+            ImageObjects.Clear();
+            foreach (var item in ModalityCatalog.ObjectsOf(_selectedModality)) ImageObjects.Add(item);
+        }
+
+        /// <summary>The exam types and bit depths of the selected object, which an Enhanced image has fewer of than its modality.</summary>
+        private void FillImageLists()
         {
             Presets.Clear();
-            foreach (var preset in _selectedModality.Presets) Presets.Add(preset);
+            foreach (var preset in Generating.Presets) Presets.Add(preset);
             BitDepths.Clear();
-            foreach (var bits in _selectedModality.BitDepths) BitDepths.Add(bits);
+            foreach (var bits in Generating.BitDepths) BitDepths.Add(bits);
+        }
+
+        private void FillModalityLists()
+        {
+            FillObjectList();
+            FillImageLists();
         }
         #endregion
 
@@ -710,7 +756,7 @@ namespace DCST4.ViewModels
         /// </summary>
         private void RefreshPreview()
         {
-            if (_loading || _selectedModality == null || _selectedPreset == null) return;
+            if (_loading || _selectedImageObject == null || _selectedPreset == null) return;
 
             IdentityOverrides overrides;
             var problems = ReadOverrides(out overrides);
@@ -718,7 +764,7 @@ namespace DCST4.ViewModels
             try
             {
                 var generator = new IdentityGenerator(random: new Random(_previewSeed));
-                _identity = generator.Generate(overrides, _selectedModality, _selectedPreset, _minAge, _maxAge);
+                _identity = generator.Generate(overrides, Generating, _selectedPreset, _minAge, _maxAge);
             }
             catch (InvalidOperationException ex)
             {
@@ -960,7 +1006,7 @@ namespace DCST4.ViewModels
 
         /// <summary>What the size of a compressed image depends on. The number of images is not part of it.</summary>
         private static string SizeKey(ExamRequest request, FellowOakDicom.DicomTransferSyntax syntax) => string.Join("|",
-            request.Modality.DisplayName, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes, syntax.UID.UID,
+            request.Modality.ObjectName, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes, syntax.UID.UID,
             request.BurnedInTags == null ? string.Empty : string.Join(",", request.BurnedInTags));
         #endregion
 
@@ -991,8 +1037,8 @@ namespace DCST4.ViewModels
             foreach (var warning in ExamValidator.Warnings(request)) _logger.Warning("{warning}", warning);
 
             var id = request.Identity;
-            _logger.Information("Exam: {modality} {preset}, {series} series x {images} images, {rows}x{columns}, {bits} bits, {frames} frames per image, private payload {payload} MB, {charset}. Patient {name}, ID {id}, born {born}, sex {sex}. Accession {accession}, Study ID {studyId}, Study UID {studyUid}",
-                request.Modality.DisplayName, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes / PrivatePayload.BytesPerMegabyte, _characterSet,
+            _logger.Information("Exam: {object} {preset}, {series} series x {images} images, {rows}x{columns}, {bits} bits, {frames} frames per image, private payload {payload} MB, {charset}. Patient {name}, ID {id}, born {born}, sex {sex}. Accession {accession}, Study ID {studyId}, Study UID {studyUid}",
+                request.Modality.ObjectName, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes / PrivatePayload.BytesPerMegabyte, _characterSet,
                 id.PatientName, id.PatientId, id.PatientBirthDate, id.PatientSex, id.AccessionNumber, id.StudyId, id.StudyInstanceUid);
             if (id.AdditionalTags.Count > 0)
             {
@@ -1046,7 +1092,7 @@ namespace DCST4.ViewModels
 
         private ExamRequest BuildRequest() => new ExamRequest
         {
-            Modality = _selectedModality,
+            Modality = Generating,
             Preset = _selectedPreset,
             Identity = _identity,
             SeriesCount = _seriesCount,
@@ -1068,10 +1114,9 @@ namespace DCST4.ViewModels
         /// </summary>
         public DataMix BuildCustomMix()
         {
-            var profileId = ModalityCatalog.DatasetProfileIdOf(_selectedModality);
-            if (profileId == null || _selectedTransferSyntax == null) return null;
-            return DataMix.Custom(profileId, _selectedModality.DisplayName, _rows, _columns, _bitsStored, IsMultiFrame ? _framesPerImage : 1,
-                _selectedModality.SamplesPerPixel, _selectedTransferSyntax.Syntax, _selectedTransferSyntax.Name, PrivatePayloadBytes);
+            if (_selectedImageObject == null || _selectedTransferSyntax == null) return null;
+            return DataMix.Custom(_selectedImageObject.DatasetProfileId, _selectedImageObject.Name, _rows, _columns, _bitsStored, IsMultiFrame ? _framesPerImage : 1,
+                Generating.SamplesPerPixel, _selectedTransferSyntax.Syntax, _selectedTransferSyntax.Name, PrivatePayloadBytes);
         }
 
         private StoreRunOptions BuildRunOptions() => new StoreRunOptions

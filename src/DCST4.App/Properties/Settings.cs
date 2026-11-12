@@ -69,8 +69,12 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("CT")]
         public string Modality { get => (string)this[nameof(Modality)]; set => this[nameof(Modality)] = value; }
 
+        /// <summary>Which image of the modality: the id of the dataset profile that makes it. Empty = its ordinary image.</summary>
         [UserScopedSetting, DefaultSettingValue("")]
-        public string ExamType { get => (string)this[nameof(ExamType)]; set => this[nameof(ExamType)] = value; }
+        public string ImageObject { get => (string)this[nameof(ImageObject)]; set => this[nameof(ImageObject)] = value; }
+
+        [UserScopedSetting, DefaultSettingValue("")]
+        public string ExamType{ get => (string)this[nameof(ExamType)]; set => this[nameof(ExamType)] = value; }
 
         [UserScopedSetting, DefaultSettingValue("1")]
         public int SeriesCount { get => (int)this[nameof(SeriesCount)]; set => this[nameof(SeriesCount)] = value; }

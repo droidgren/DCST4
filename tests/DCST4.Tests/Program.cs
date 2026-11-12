@@ -2126,18 +2126,20 @@ namespace DCST4.Tests
 
         /// <summary>
         /// One multi-frame object at full size, for a check by hand of what the test run only does small:
-        /// DCST4.Tests.exe cine &lt;folder&gt; &lt;modality name&gt; &lt;rows&gt; &lt;columns&gt; &lt;frames&gt; &lt;payload MB&gt; implicit|explicit|jpeg|baseline [port].
+        /// DCST4.Tests.exe cine &lt;folder&gt; &lt;object&gt; &lt;rows&gt; &lt;columns&gt; &lt;frames&gt; &lt;payload MB&gt; implicit|explicit|jpeg|baseline [port],
+        /// where the object is the id of a dataset profile: us-multiframe, enhanced-ct, tomosynthesis-large, ct ...
         /// Saves it in the folder, and with a port also sends it to 127.0.0.1, never anywhere else. Prints the time and the
         /// most memory the process used.
         /// </summary>
         private static int Cine(string[] args)
         {
-            var modality = ModalityCatalog.FindForGenerateAndSend(args[2]);
-            if (modality == null)
+            var chosen = ModalityCatalog.FindObject(args[2]);
+            if (chosen == null)
             {
-                Console.WriteLine("Unknown modality. One of: " + string.Join(", ", ModalityCatalog.GenerateAndSend.Select(c => c.Modality.DisplayName)));
+                Console.WriteLine("Unknown object. One of: " + string.Join(", ", ModalityCatalog.All.SelectMany(ModalityCatalog.ObjectsOf).Select(o => o.DatasetProfileId)));
                 return 2;
             }
+            var modality = chosen.Image;
             var syntax = args[7] == "implicit" ? DicomTransferSyntax.ImplicitVRLittleEndian : args[7] == "jpeg" ? DicomTransferSyntax.JPEGProcess14SV1
                 : args[7] == "baseline" ? DicomTransferSyntax.JPEGProcess1 : DicomTransferSyntax.ExplicitVRLittleEndian;
             var port = args.Length > 8 ? int.Parse(args[8], CultureInfo.InvariantCulture) : 0;
