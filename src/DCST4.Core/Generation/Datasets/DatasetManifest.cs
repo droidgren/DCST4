@@ -157,6 +157,14 @@ namespace DCST4.Core.Generation.Datasets
             var hashes = new List<string>();
             if (!dataset.Contains(DicomTag.PixelData)) return hashes;
 
+            // Frames that are drawn when read are asked for by number: fo-dicom counts a frame's position in 32 bits, which
+            // a long cine loop goes past.
+            if (dataset.GetDicomItem<DicomElement>(DicomTag.PixelData)?.Buffer is RenderedFramesBuffer rendered)
+            {
+                for (var frame = 0; frame < rendered.Frames; frame++) hashes.Add(Sha256Hex(rendered.ReadFrame(frame)));
+                return hashes;
+            }
+
             var pixelData = DicomPixelData.Create(dataset);
             var frameSize = (int)pixelData.UncompressedFrameSize;
             for (var frame = 0; frame < pixelData.NumberOfFrames; frame++)

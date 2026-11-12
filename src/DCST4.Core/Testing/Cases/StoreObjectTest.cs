@@ -16,31 +16,38 @@ namespace DCST4.Core.Testing.Cases
         private readonly DatasetProfile _profile;
         private readonly string _objectType;
         private readonly EdgeCases _edgeCases;
+        private readonly int _frames;
+        private readonly string _displayName;
 
-        public StoreObjectTest(DatasetProfile profile, string objectType = null, EdgeCases edgeCases = EdgeCases.None)
+        /// <summary><paramref name="frames"/> replaces the profile's own number, where that makes too large an object. 0 keeps it.</summary>
+        public StoreObjectTest(DatasetProfile profile, string objectType = null, EdgeCases edgeCases = EdgeCases.None, int frames = 0)
         {
             _profile = profile;
             _objectType = objectType ?? profile.Id;
             _edgeCases = edgeCases;
+            _frames = frames;
+            _displayName = profile.DisplayName;
         }
 
         public string Id => "store-" + _objectType;
         public string Name => "C-STORE: " + DisplayName;
         public TestCategory Category => TestCategory.Integrity;
         public string Description => _edgeCases == EdgeCases.None
-            ? $"Sends one small {_profile.DisplayName} object with C-STORE and keeps a copy to compare with later. The query, retrieve, integrity and Storage Commitment tests later in the run work on what it stored."
-            : $"Sends one small {_profile.DisplayName} object with private tags, long strings and nested sequences, and checks what the destination keeps of them when it is retrieved later in the run.";
+            ? $"Sends one small {_displayName} object with C-STORE and keeps a copy to compare with later. The query, retrieve, integrity and Storage Commitment tests later in the run work on what it stored."
+            : $"Sends one small {_displayName} object with private tags, long strings and nested sequences, and checks what the destination keeps of them when it is retrieved later in the run.";
         public string Group => TestGroups.Store;
         public bool StoresObjects => true;
-        public StorageEstimate Storage => StorageEstimate.Of(_profile, Fixtures.Matrix);
+        public StorageEstimate Storage => StorageEstimate.Of(_profile, Fixtures.Matrix, _frames);
 
-        private string DisplayName => _edgeCases == EdgeCases.None ? _profile.DisplayName : _profile.DisplayName + " with private tags and edge cases";
+        private string DisplayName => _edgeCases == EdgeCases.None ? _displayName : _displayName + " with private tags and edge cases";
 
         public async Task<TestResult> ExecuteAsync(TestContext context, CancellationToken token)
         {
             var session = context.Session;
             var selection = StoreSyntaxSelector.Select(_profile, context, _edgeCases);
-            var generator = new TestDatasetGenerator(Fixtures.Request(context, _profile.Id, Fixtures.StorePurpose, selection.Item1, edgeCases: _edgeCases));
+            var request = Fixtures.Request(context, _profile.Id, Fixtures.StorePurpose, selection.Item1, edgeCases: _edgeCases);
+            request.Frames = _frames;
+            var generator = new TestDatasetGenerator(request);
 
             var record = new StoredObjectRecord
             {

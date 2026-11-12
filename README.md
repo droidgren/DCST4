@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.10.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.10.1-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -34,15 +34,16 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 ## Features
 
 - **Zero Dependencies:** Built on .NET 4.8 (included natively in Windows 10 and 11). No external runtime installation is required.
-- **Realistic exams:** CT, MR and PT stacks, CR, DX, US, XA, RF, MG and NM images, built to their IODs and checked with outside validators, with consistent slice geometry and believable timestamps. See [Checking with another toolkit](#checking-with-another-toolkit) for what is still reported.
+- **Realistic exams:** CT, MR and PT stacks, CR, DX, US, XA, RF, MG and NM images, and the multi-frame US Multi-frame (cine loop), Enhanced CT, Enhanced MR and Breast Tomosynthesis, built to their IODs and checked with outside validators, with consistent slice geometry and believable timestamps. See [Checking with another toolkit](#checking-with-another-toolkit) for what is still reported.
 - **Everything is automatic, and everything can be overridden:** patient, accession number, study ID, UIDs, date and time. The fields show what the next run will use.
 - **Additional tags:** add common tags with generated values, or any custom tag, including private ones, under **File > Settings**.
 - **Official test patients:** random Patient IDs come only from Skatteverket's list of test personnummer. Birth date and sex follow from the number.
 - **Patient names:** `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name, chosen under **File > Settings**. About 40% of the Swedish names contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192. An empty Specific Character Set (Basic ASCII) is also available, and random names then lose their diacritics.
 - **Optional burned-in text:** turn on a text box in the pixels and choose which tags it shows, so you can compare them with the tags in the viewer. It is off by default.
-- **Configurable images:** number of series and images, matrix from 64 to 4096, and 8 to 16 bits stored as the modality allows.
+- **Configurable images:** number of series and images, matrix from 64 to 4096, 8 to 16 bits stored as the modality allows, and up to 10,000 frames in a multi-frame image.
+- **Private payload:** optionally, a large private binary value in every image, as some ultrasound systems send their raw data, to find out whether a PACS takes it. It is off by default and at every start. See [Multi-frame images and private payload](#multi-frame-images-and-private-payload).
 - **Estimated size:** the Exam box shows how much data the whole exam will be, and updates as you change the settings.
-- **Transfer syntaxes:** Implicit VR LE, Explicit VR LE, JPEG Lossless (Process 14 SV1).
+- **Transfer syntaxes:** Implicit VR LE, Explicit VR LE, JPEG Lossless (Process 14 SV1) and, for 8 bits stored, JPEG Baseline (Process 1, lossy).
 - **Full response logging:** status code, state, description, Error Comment, Offending Element and time for every image, including warnings and vendor-specific codes.
 - **Save to disk:** instead of, or in addition to, sending, as a DICOM File-set with a DICOMDIR that viewers can open.
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
@@ -52,7 +53,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Store, query and retrieve:** proves the chain accepted, indexed, retrievable and intact for each object type, with C-STORE, C-FIND, C-GET and C-MOVE. What comes back is compared with what was sent, level by level. See [Store, query and retrieve](#store-query-and-retrieve).
 - **Storage Commitment:** asks the PACS to commit to what it stored, with N-ACTION, and takes its N-EVENT-REPORT either on the same association or on one the PACS opens to this computer. It records which way the PACS used, how long the report took and the Failure Reason of each instance that was not committed. See [Storage Commitment](#storage-commitment).
 - **Limits and faults:** finds how many associations the PACS holds at once, how long it keeps an idle association or a connection that never sends a request, and whether it keeps to the maximum PDU length it announces. Breaks a C-STORE off on purpose in three ways, and checks what the PACS kept and how it takes the retry. With TLS, checks that a client certificate from an unknown authority or an expired one is refused. See [Limits and faults](#limits-and-faults).
-- **Performance:** throughput and latency under load, on N parallel associations, from images encoded in advance with new UIDs for every send. A ramp of 1, 2, 4, 8 ... associations finds where the PACS saturates, a soak of hours writes snapshots as it goes and flags degradation, and time-to-available says how soon a stored image can be found. A live chart on the Performance tab, and the plan of how many objects will be stored before anything is sent. See [Performance](#performance).
+- **Performance:** throughput and latency under load, on N parallel associations, from images encoded in advance with new UIDs for every send. A ramp of 1, 2, 4, 8 ... associations finds where the PACS saturates, a soak of hours writes snapshots as it goes and flags degradation, and time-to-available says how soon a stored image can be found. A live chart on the Performance tab, and the plan of how many objects will be stored before anything is sent. The mix `custom` sends the object described on the Exam tab. See [Performance](#performance).
 - **Reports:** every run is also written as one HTML file that is complete in itself, with the summary, the capability matrix, the chain, the integrity findings, the limits, Storage Commitment, charts of the Performance tests and the protocol timeline of each failed test. It loads nothing from the network and holds no script. See [Reports and comparison](#reports-and-comparison).
 - **Comparison of runs:** two or more saved runs against a baseline: what the PACS no longer supports, tests that now fail, and throughput and latency against a threshold, from the program or with `DCST4.Cli.exe compare`, whose exit code says whether anything regressed. A vendor fingerprint of each system, side by side, for comparing versions and vendors.
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
@@ -86,7 +87,7 @@ The program is not digitally signed, so you may see a **Windows protected your P
 ## Usage
 
 1. Enter the server's AE title, host and port. Try **Ping** and **Dicom Echo**.
-2. On the **Exam** tab, select modality and exam type, and how many images you want. 1 series with 1 image gives a single test image. **Estimated size** shows how much data that is. For Implicit and Explicit VR it is calculated. For JPEG Lossless, one sample image is compressed in the background and the result multiplied by the number of images. A saved File-set's DICOMDIR is not counted.
+2. On the **Exam** tab, select modality and exam type, and how many images you want. 1 series with 1 image gives a single test image. **Estimated size** shows how much data that is. For Implicit and Explicit VR it is calculated. For JPEG Lossless and JPEG Baseline, one sample image is compressed in the background and the result multiplied by the number of images. A saved File-set's DICOMDIR is not counted.
 3. Optionally, enter your own values on the **Identifiers** tab by unticking **Auto**.
 4. Click **Generate & Send** and follow each image in **Results**.
 5. Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text first.
@@ -132,6 +133,30 @@ When the program starts, it asks GitHub for the latest release (`api.github.com`
 To turn this off, untick **Show a window at startup when a new version is available** under **File > Settings**, on the **Updates** tab. Nothing is then sent at startup.
 
 Opening **Help > About** also asks GitHub and shows the result in that window, including if the check failed. Nothing is sent except an ordinary web request with the program's version as its User-Agent, and nothing is downloaded or installed.
+
+### Multi-frame images and private payload
+
+![The Exam tab set up for an ultrasound cine loop in JPEG Baseline with a private payload](screenshots/exam-multiframe.png)
+
+The **Modality** list ends with four multi-frame images: **US Multi-frame** (an RGB cine loop at 8 bits, with Frame Time and Cine Rate for 30 frames per second), **Enhanced CT**, **Enhanced MR** and **Breast Tomosynthesis**. **Frames per image** says how many frames each object has, 1 to 10,000, and is 30 for a cine loop and 8 for the others when the modality is selected. Images per series then starts at 1 and is the number of multi-frame objects. Every frame is drawn and marked like any other test image, with its frame number.
+
+The frames are drawn as they are written and are never all in memory, so an object can be much larger than the computer's memory. With JPEG Lossless or JPEG Baseline the frames are encoded before the object is sent, a few at a time on the processor's cores, and the status bar counts them. Cancel works while this goes on. JPEG Baseline is the slow one: a cine loop of 1,667 frames of 960 x 1280 took about three minutes on a computer with 12 cores, and DCST4 used about 500 MB of memory meanwhile. The pixels of an uncompressed image must be less than 4 GB, which is what the length of a DICOM element can hold, so a long cine loop needs a compressed transfer syntax: 1,667 frames of 960 x 1280 in colour are 5.7 GB, and the run then stops with a message that says so.
+
+**JPEG Baseline** is lossy and holds 8 bits, so it can be chosen for US, US Multi-frame, and CR, DX, XA, RF and NM at 8 bits stored. The image is then marked with Lossy Image Compression `01`, the ratio and the method, and Image Type `DERIVED`. A colour image is stored as `YBR_FULL_422`, as ultrasound systems store theirs. The test images compress better than real ones: a frame of 960 x 1280 is about 58 KB here, and about 90 KB from an ultrasound system.
+
+Enhanced CT, Enhanced MR and Breast Tomosynthesis still lack some attributes that a strict validator names, see [Checking with another toolkit](#checking-with-another-toolkit). US Multi-frame passes `dciodvfy` without errors.
+
+**Add private payload of ... MB per image** adds one large private value to every image, the way some ultrasound systems send their raw data along with a cine loop, where it can be four times the size of the pixels. Use it to find out whether a PACS takes images with large private data, and whether it keeps it. It is unticked every time DCST4 starts. The size, 1 to 2,000 MB, is remembered.
+
+| What is written | Where |
+| --------------- | ----- |
+| Private creator `DCST4 TEST` | (0099,0010) |
+| A sequence with one item | (0099,1020) |
+| In the item: the creator again, the label `DCST4 test payload` (LO), and the payload (OB) | (0099,0010), (0099,1021), (0099,1022) |
+
+The payload is random bytes that follow from the SOP Instance UID, so it does not compress away and two images never carry the same one. It is written as it is generated and is never in memory. A receiver using Implicit VR sees the private tags as UN unless it knows the creator.
+
+To imitate a long cine loop from an ultrasound system that sends its raw data along: US Multi-frame, 960 x 1280, 1,667 frames, JPEG Baseline and a payload of 657 MB, which is an object of 790 MB. Assume that the PACS cannot delete what it receives, and try a large object against a test system first.
 
 ### Transfer syntax behaviour
 
@@ -316,7 +341,7 @@ These tests prove, per object type, that what the PACS accepted can be found, ca
 
 | Test                                 | What it answers                                                                                                                 |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `store-<type>`                       | One for each dataset profile except `tomosynthesis-large`, and `store-ct-edge` with private tags and values at maximum length. The Accepted step |
+| `store-<type>`                       | One for each dataset profile except `tomosynthesis-large`, `store-breast-tomosynthesis` with that object at 128 by 128 and 8 frames, and `store-ct-edge` with private tags and values at maximum length. The Accepted step |
 | `query-index`                        | Is each stored instance found with C-FIND at IMAGE level? Waits for a system that indexes in the background. The Indexed step  |
 | `query-levels`                       | Which levels work under Patient Root and Study Root. PATIENT under Study Root should be refused                                |
 | `query-return-keys`                  | Which of a broad set of return keys come back populated, empty or not at all, and whether they match what was sent             |
@@ -490,7 +515,10 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 | `small`          | Many small objects: CR 512 x 512 and US 800 x 600, in turn, Explicit VR LE |
 | `small-lossless` | The same in JPEG Lossless (Process 14 SV1) |
 | `large`          | Few large objects: Enhanced CT 512 x 512 x 32 frames (16 MB) and Breast Tomosynthesis 1024 x 1024 x 16 frames (32 MB) |
-| `large-lossless` | Enhanced CT in JPEG Lossless. Breast Tomosynthesis is generated uncompressed only |
+| `large-lossless` | Enhanced CT 512 x 512 x 32 frames in JPEG Lossless |
+| `custom`         | The object described on the Exam tab. In the program only |
+
+**The custom mix** takes Modality, Rows x Columns, Bits stored, Frames per image, Transfer syntax and the private payload from the Exam tab, and nothing else: a load run makes its own studies and patient, as with the other mixes, so Exam type, Series, Images per series, the Identifiers tab and burned-in text are not used. The text beside the list, the plan, the question before the run, the result file and the report all say what it was, for example `US Multi-frame 960 x 1280, 8 bits, 270 frames, JPEG Baseline (Process 1, lossy), 100 MB private payload`. A load run keeps its objects in memory, encoded, so one object can be at most 1 GB, and the pool holds four variants of an object only while they fit in 1 GB together, down to one. Each variant is generated and encoded before the run starts, which takes minutes for a long cine loop. A larger object stops the run before anything is sent; send that one with Generate & Send. Two runs with the custom mix are compared only if their descriptions are the same. With a large object, lower Max instances first: the default of 5,000 times a 700 MB object is 3.5 TB.
 
 `--load-pdu` sets the maximum PDU length that DCST4 announces and sends its data PDUs with, at most what the PACS announces. 0, the default, is fo-dicom's default of 262144, which an ordinary send uses.
 
@@ -648,6 +676,8 @@ Assume that a PACS cannot delete what it receives, and keep the volumes small. `
 
 **The manifest** holds, for each object, the SOP Class and Instance UID, the transfer syntax, a SHA-256 of the whole file, a SHA-256 of each frame and a normalized hash of the other attributes. The frame hashes are taken from the raw frames before any encoding, so that no decoder is involved. The normalized hash leaves out the file meta group, Specific Character Set, Pixel Data, a Number of Frames of 1, VRs and private sequences, and compares text as Unicode, so it survives a change of transfer syntax or character set. Private sequences are left out because Implicit VR returns them as unreadable bytes. The whole-file hash still covers them. An object that refers to an image, such as a Key Object Selection, gets one small CT image of its own first, marked `source-image` in the manifest.
 
+A multi-frame image has its frames encoded one at a time, so `tomosynthesis-large` and a long `us-multiframe` can be generated compressed. Uncompressed, the pixels of one image must be less than 4 GB.
+
 **Compressed variants** are tried per bit depth, since PureCodecs is pre-1.0. `list-codecs` shows what works on this computer. What cannot be produced is reported as unavailable in the output and the manifest, and is not an error. JPEG Baseline is 8-bit only and JPEG Extended at most 12-bit. A lossy variant has Lossy Image Compression `01` with ratio and method, and Image Type `DERIVED`.
 
 ## Generated tags
@@ -659,6 +689,8 @@ Assume that a PACS cannot delete what it receives, and keep the volumes small. `
 | MR         | Frame of Reference, Patient Position, slice geometry, Scanning Sequence, Sequence Variant, Scan Options, TR, TE, Echo Train Length, Flip Angle, Field Strength, Imaging Frequency                                                                                                                                                                                                                                                                                                                                                          |
 | CR         | View Position, Imager Pixel Spacing, Patient Orientation, KVP, Exposure Time, Tube Current                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | DX         | As CR, plus Presentation Intent, Presentation LUT Shape, Pixel Intensity Relationship, Rescale, Detector Type, Image Laterality, Positioner Type                                                                                                                                                                                                                                                                                                                                                                                                            |
+| US Multi-frame | As US, in colour (RGB, 8 bits per sample), with Number of Frames, Frame Time 33 ms, Frame Increment Pointer, Cine Rate and Recommended Display Frame Rate 30 |
+| Enhanced CT, Enhanced MR, Breast Tomosynthesis | Multi-frame with Shared and Per-frame Functional Groups: Pixel Measures, Plane Orientation and Position, Frame Content, a frame type, Frame Anatomy, Frame VOI LUT, and Pixel Value Transformation where the image has a rescale. Dimension Organization and Index. Image Type `DERIVED` |
 | US         | Single-frame grayscale B-mode (MONOCHROME2, 8 bits): Image Type with application and `0001`, Transducer Data and Type, Depth of Scan Field, Mechanical and Thermal Index, Sequence of Ultrasound Regions with calibration in cm                                                                                                                                                                                                                                                                                                            |
 | XA, RF     | Single frame: Image Type with `SINGLE PLANE`, Imager Pixel Spacing, Pixel Intensity Relationship, Radiation Setting, KVP, Tube Current, Exposure Time, Exposure, and for XA Positioner Primary and Secondary Angle |
 | MG         | As DX, For Presentation, plus Positioner Type, Organ Exposed, left or right CC or MLO view with Patient Orientation, and Anatomic Region and View Code Sequences |
@@ -688,12 +720,12 @@ The list holds future dates and people born in the 1890s, so random selection on
 
 ```
 src\DCST4.Core\     No WPF reference
-  Generation\       Exam request, identity, modality profiles, pixel renderer, image builder
-    Modalities\     ModalityCatalog (Generate & Send) and MultiFrameProfiles (datasets only)
+  Generation\       Exam request, identity, modality profiles, pixel renderer, image builder, RenderedFramesBuffer (frames drawn when read), PrivatePayload and GeneratedBytesBuffer
+    Modalities\     ModalityCatalog (the ten single-frame modalities, and GenerateAndSend with the multi-frame ones) and MultiFrameProfiles
     Objects\        Objects without pixels: SR, KOS, GSPS, PDF, RT Structure Set
     Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
   TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
-  Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary, ExamSizeEstimator
+  Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary, ExamSizeEstimator, TransferSyntaxConverter (which encodes a multi-frame image frame by frame)
   Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), Storage Commitment (StorageCommitment.cs), RawAssociation (limit, fault and load tests), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
   Performance\      Load engine and its workers (LoadEngine.cs), InstancePool and UidStamper, DataMixCatalog, LoadSettings, MetricsCollector and LatencyHistogram, SaturationDetector, DegradationDetector, RateGate, AvailabilityPoller, MetricsFileWriter
   Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
@@ -735,11 +767,15 @@ Generation knows nothing about sending. The two meet at `IImageSource`, which su
 | Sending existing files from a folder, with optional new UIDs | A new `IImageSource`. Sending does not change.                                                     |
 | MPPS                                                         | `ExamRequest` holds the study and series identity. `Network\` gets a new service.                  |
 
-To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog`. An image type only for datasets goes in `DatasetProfileCatalog` instead, so that it stays out of the Generate & Send list. A non-image object subclasses `ObjectProfile`.
+To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog.All`, which makes it a single-frame modality of Generate & Send and a dataset profile. A multi-frame image goes in `DatasetProfileCatalog` and, to be offered in Generate & Send, in `ModalityCatalog.GenerateAndSend` with the id of its dataset profile, which is what the custom mix generates it by. The App saves the selected modality by `DisplayName`, since Enhanced CT has the code CT too. An image type only for datasets goes in `DatasetProfileCatalog` alone. A non-image object subclasses `ObjectProfile`.
 
 `TestDatasetGenerator` is an `IImageSource`, so its objects go through `StoreRun` like any others. It composes `ExamGenerator` with an `IUidSource`: `GeneratedUidSource` is the default, and `DeterministicUidSource` derives UIDs from the root, seed and counters. Every parameter that changes the data is part of the hashed context, so two variants never share a SOP Instance UID on a PACS. Each object leaves the generator in its final syntax, so a run must use `TestDatasetGenerator.TransferSyntax`. The manifest and the hashes (`ManifestHashes`, `NormalizedAttributes`) are what Phase 4 uses to verify integrity.
 
-Pixel Data of `tomosynthesis-large` comes from `RenderedFramesBuffer`, which draws each frame when it is read and keeps only the latest in memory, so a 700 MB object takes little more than one frame of heap. A dataset has one or two SOP classes, since `StoreService` negotiates from its first window of images.
+Pixel Data of every multi-frame image (`ModalityProfile.RendersFramesOnDemand`: US Multi-frame, Enhanced CT, Enhanced MR and Breast Tomosynthesis) comes from `RenderedFramesBuffer`, which draws each frame when it is read and keeps only the latest in memory, so a 700 MB object takes little more than one frame of heap. It is OB for 8 bits allocated and OW for 16, and pads an odd length. fo-dicom's transcoder reads every frame before it writes the first, so `TransferSyntaxConverter.Convert` encodes such an image itself when the target is encapsulated: each frame is drawn, run through the transcoder as a one-frame image, and its fragment added with `DicomPixelData.AddFrame`, which also builds the Basic Offset Table. The frames are drawn one after the other, since the drawing is not made for several threads, and encoded in batches, as many frames at a time as there are cores and at most 16, then added in their order. After a batch of large frames the garbage is collected, or the encoders' buffers pile up to over a gigabyte in a long loop. The harness checks that the file is byte for byte what the transcoder gives for the same image held in memory. `Convert` takes a `CancellationToken` and reports each frame, which `StoreRun.FrameEncoded` passes on to the status bar. A dataset has one or two SOP classes, since `StoreService` negotiates from its first window of images.
+
+`PrivatePayload.Add` writes the private payload from `ExamRequest.PrivatePayloadBytes`, and `TestDatasetRequest.PrivatePayloadBytes` passes it on. Its bytes come from `GeneratedBytesBuffer`, an `IByteBuffer` that works out any part of itself from a seed and the position, so fo-dicom streams it to a file or the network without it ever being in memory. `ExamValidator.SyntaxProblems` says before a run whether an exam can be written in a transfer syntax: an encoder that cannot hold the bit depth, by `CompressionCatalog.Probe`, or uncompressed pixels of 4 GB or more.
+
+The custom mix is `DataMix.Custom`, with the id `custom` and a description built from its values. `LoadSettings.Mix` then names it and `LoadSettings.MixOverride` holds it, which is not saved. In the App, `PerformanceViewModel` reads it from `MainViewModel.BuildCustomMix` each time the plan is shown or a run starts. `InstancePool` cuts an object with a payload at the payload sequence instead of at Pixel Data, so that the payload is in the part every send shares, and refuses an object whose shared part is over `DataMix.MaxPoolBytes`.
 
 
 ## Reporting Bugs & Feature Requests
@@ -803,6 +839,20 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe matrix C:\Temp\matrix
 
 # File-sets with a DICOMDIR: every modality in both character sets, uncompressed and JPEG
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe fileset C:\Temp\fileset
+
+# One multi-frame object at full size, saved in a folder and, with a port, sent to 127.0.0.1 only. Prints the time and the peak memory.
+# Folder, modality name, rows, columns, frames, payload in MB, implicit|explicit|jpeg|baseline, optionally a port
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe cine C:\Temp\cine "US Multi-frame" 960 1280 1667 657 baseline 11112
+
+# A load run with a custom mix of one large cine loop in JPEG Baseline, against the mock SCP, which keeps nothing
+# Rows, columns, frames, payload in MB, number of sends
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe custommix 960 1280 270 400 6
+
+# Only the multi-frame, JPEG Baseline and private payload tests
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe multiframe
+
+# The Exam tab with a multi-frame modality, drawn to a PNG at the window's smallest size
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe examtab C:\Temp\examtab.png
 
 # Send one exam to any SCP: host, port, called AE, modality, images, bits, implicit|explicit|jpeg, optionally fallback
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe send 127.0.0.1 11112 MYSCP CT 60 16 jpeg
@@ -895,6 +945,33 @@ What this means for a reader: compare a system with itself only over several run
 | Series of a Performance test, written as it runs | Next to the result files, as `DCST4-run-<start>-<test id>.csv`, and for the soak also `-windows.csv` |
 
 ## Changelog
+
+### 1.10.1
+
+New:
+
+- Four multi-frame images in **Generate & Send**, last in the Modality list: **US Multi-frame** (a colour cine loop), **Enhanced CT**, **Enhanced MR** and **Breast Tomosynthesis**, with a new field, **Frames per image**, 1 to 10,000. Images per series starts at 1 for them
+- **JPEG Baseline (Process 1, lossy)** in the Transfer syntax list, for 8 bits stored. A colour image is stored as YBR_FULL_422. Other bit depths stop the run with a message
+- **Add private payload of ... MB per image** on the Exam tab: a private sequence, (0099,1020) under the creator `DCST4 TEST`, with one binary value of 1 to 2,000 MB of random bytes in every image, as some ultrasound systems send their raw data. It is off by default and unticked at every start; the size is remembered
+- The frames of a multi-frame image are drawn as they are written and encoded a few at a time, so a cine loop of 1,667 frames with a 657 MB payload, 790 MB in all, is generated and sent with about 500 MB of memory. The status bar counts the frames while they are encoded, and Cancel works meanwhile
+- **Estimated size** counts frames and the payload. For a compressed multi-frame image it is measured on a few frames
+- The mix **custom** on the Performance tab sends the object described on the Exam tab: its modality, matrix, bits, frames, transfer syntax and private payload. The plan, the question before the run, the result file and the report say what it was. One object can be at most 1 GB, and two custom runs are compared only if they sent the same thing
+- A new store test, `store-breast-tomosynthesis`, on the Tests tab and in `DCST4.Cli.exe run`: one Breast Tomosynthesis object of 128 by 128 with 8 frames, which goes through query, retrieve, integrity and Storage Commitment like the other object types. It was the one image type without a store test
+- In the test harness, for checks by hand: `DCST4.Tests.exe cine` generates one multi-frame object at full size, `custommix` runs a load with a large custom mix against the mock SCP, and `examtab` draws the Exam tab to a PNG
+
+Changed:
+
+- `DCST4.Cli.exe generate` can now compress `tomosynthesis-large`, and a `us-multiframe`, `enhanced-ct` or `enhanced-mr` dataset of any length, since their frames are no longer all held in memory. The files of these datasets are the same as before
+- An uncompressed image whose pixels would be 4 GB or more is refused before anything is generated, with the advice to choose a compressed transfer syntax or fewer frames. A DICOM element cannot be longer
+- The dataset and the store test name Breast Tomosynthesis without "(large)"
+- US Multi-frame has Cine Rate and Recommended Display Frame Rate, 30 frames per second
+- The saved Modality setting holds the name in the list. Settings saved with an earlier version are kept
+
+Fixed:
+
+- A Cancel that arrived just as a limit, fault or load test had opened a connection could end the test as `TOOL_ERROR` with a NullReferenceException. It now ends as cancelled
+
+Checked by hand with DCMTK 3.7.1 and dicom3tools, against local receivers only: the 790 MB cine loop was saved and sent to `storescp`, which received it whole; `dcmdump` shows one fragment per frame and the private sequence; `dcmdjpeg` decodes a JPEG Baseline loop and a frame of it looks right; `dciodvfy` reports no error on US Multi-frame. A load run with a custom mix of a 415 MB cine loop stored all six sends on the mock SCP.
 
 ### 1.10.0
 

@@ -93,9 +93,25 @@ namespace DCST4.Tests
                 return 0;
             }
 
+            if (args.Length == 6 && args[0] == "custommix")
+            {
+                return PerformanceTests.RunCustomMix(args).GetAwaiter().GetResult();
+            }
+
+            if (args.Length == 2 && args[0] == "examtab")
+            {
+                ViewModelTests.RenderExamTab(args[1]);
+                return 0;
+            }
+
             if (args.Length >= 8 && args[0] == "send")
             {
                 return SendTo(args);
+            }
+
+            if (args.Length >= 8 && args[0] == "cine")
+            {
+                return Cine(args);
             }
 
             if (args.Length >= 2 && args[0] == "scp")
@@ -127,15 +143,16 @@ namespace DCST4.Tests
                 return _fail == 0 ? 0 : 1;
             }
 
-            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit" || args[0] == "report"))
+            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit" || args[0] == "report" || args[0] == "multiframe"))
             {
                 try
                 {
                     using (DicomServerFactory.Create<MockStorageScp>(Port))
                     {
+                        if (args[0] == "multiframe") MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "report") ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve") RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
-                        if (args[0] != "report") CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                        if (args[0] == "retrieve" || args[0] == "commit") CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     }
                 }
                 catch (Exception ex)
@@ -182,6 +199,7 @@ namespace DCST4.Tests
                     TestSaving(temp).GetAwaiter().GetResult();
                     TestAdditionalTagDelivery(temp).GetAwaiter().GetResult();
                     TestDataTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                    MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                     CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
@@ -1090,7 +1108,9 @@ namespace DCST4.Tests
         private static async Task TestSendingSyntaxes()
         {
             Console.WriteLine("\nSending: transfer syntaxes");
-            foreach (var option in TransferSyntaxOption.All)
+            // JPEG Baseline is lossy and holds 8 bits, so it has checks of its own in MultiFrameTests.
+            var lossless = TransferSyntaxOption.All.Where(o => !o.Syntax.IsLossy).ToList();
+            foreach (var option in lossless)
             {
                 foreach (var bits in new[] { 12, 16 })
                 {
@@ -1118,7 +1138,7 @@ namespace DCST4.Tests
             var values1 = new Dictionary<string, int[]>();
             var manualRequest = MakeRequest("CR", rows: 128, columns: 128, bits: 12, overrides: new IdentityOverrides { PatientId = "189001019802", PatientName = "A^B", AccessionNumber = "A", StudyDateTime = new DateTime(2026, 1, 1) });
             manualRequest.Identity.ReferringPhysicianName = "C^D";
-            foreach (var option in TransferSyntaxOption.All)
+            foreach (var option in lossless)
             {
                 Scp.Reset();
                 await Run(manualRequest, SendOptions(option.Syntax));
@@ -1966,7 +1986,7 @@ namespace DCST4.Tests
                         var images = new ExamGenerator(request).GetImages(CancellationToken.None).ToList();
                         for (var i = 0; i < images.Count; i++)
                         {
-                            foreach (var option in TransferSyntaxOption.All)
+                            foreach (var option in TransferSyntaxOption.All.Where(o => !o.Syntax.IsLossy))
                             {
                                 var suffix = option.Syntax == DicomTransferSyntax.ImplicitVRLittleEndian ? "implicit" : option.Syntax == DicomTransferSyntax.JPEGProcess14SV1 ? "jpeg" : "explicit";
                                 var name = $"{modality.Code}_{preset.Name.Replace(" ", string.Empty)}_{bits}bit_{i + 1}_{suffix}.dcm";
@@ -2102,6 +2122,59 @@ namespace DCST4.Tests
                 Console.WriteLine($"  series {line.SeriesNumber} instance {line.InstanceNumber}: {line.State} {line.StatusCodeText} {line.Description}");
             }
             return summary.Success == request.TotalImages ? 0 : 1;
+        }
+
+        /// <summary>
+        /// One multi-frame object at full size, for a check by hand of what the test run only does small:
+        /// DCST4.Tests.exe cine &lt;folder&gt; &lt;modality name&gt; &lt;rows&gt; &lt;columns&gt; &lt;frames&gt; &lt;payload MB&gt; implicit|explicit|jpeg|baseline [port].
+        /// Saves it in the folder, and with a port also sends it to 127.0.0.1, never anywhere else. Prints the time and the
+        /// most memory the process used.
+        /// </summary>
+        private static int Cine(string[] args)
+        {
+            var modality = ModalityCatalog.FindForGenerateAndSend(args[2]);
+            if (modality == null)
+            {
+                Console.WriteLine("Unknown modality. One of: " + string.Join(", ", ModalityCatalog.GenerateAndSend.Select(c => c.Modality.DisplayName)));
+                return 2;
+            }
+            var syntax = args[7] == "implicit" ? DicomTransferSyntax.ImplicitVRLittleEndian : args[7] == "jpeg" ? DicomTransferSyntax.JPEGProcess14SV1
+                : args[7] == "baseline" ? DicomTransferSyntax.JPEGProcess1 : DicomTransferSyntax.ExplicitVRLittleEndian;
+            var port = args.Length > 8 ? int.Parse(args[8], CultureInfo.InvariantCulture) : 0;
+
+            var request = new ExamRequest
+            {
+                Modality = modality,
+                Preset = modality.Presets[0],
+                Identity = new IdentityGenerator().Generate(new IdentityOverrides { PatientNaming = TestPatientNaming.MarkedTestName }, modality, modality.Presets[0]),
+                Rows = int.Parse(args[3], CultureInfo.InvariantCulture),
+                Columns = int.Parse(args[4], CultureInfo.InvariantCulture),
+                BitsStored = modality.DefaultBitDepth,
+                FramesPerImage = int.Parse(args[5], CultureInfo.InvariantCulture),
+                PrivatePayloadBytes = long.Parse(args[6], CultureInfo.InvariantCulture) * PrivatePayload.BytesPerMegabyte,
+            };
+            var problems = ExamValidator.Validate(request).Concat(ExamValidator.SyntaxProblems(request, syntax)).ToList();
+            if (problems.Count > 0)
+            {
+                Console.WriteLine(string.Join("\n", problems));
+                return 2;
+            }
+
+            var options = SendOptions(syntax, port, responseTimeout: 600);
+            options.Send = port > 0;
+            options.Save = true;
+            options.SaveFolder = args[1];
+
+            var clock = Stopwatch.StartNew();
+            var run = new StoreRun(new ExamGenerator(request), options);
+            run.FrameEncoded += (image, done, total) => { if (done % 100 == 0 || done == total) Console.WriteLine($"  encoded frame {done} of {total} after {clock.Elapsed.TotalSeconds:0} s"); };
+            var summary = run.ExecuteAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+            var process = Process.GetCurrentProcess();
+            Console.WriteLine($"{summary} | stopped by: {summary.FatalError ?? "nothing"} | used: {summary.NegotiationSummary}");
+            foreach (var line in summary.Results) Console.WriteLine($"  {line.State} {line.StatusCodeText} {line.Description} {line.SavedPath} {line.SaveError}");
+            Console.WriteLine($"Peak working set {process.PeakWorkingSet64 / 1048576} MB, managed heap now {GC.GetTotalMemory(false) / 1048576} MB, {clock.Elapsed.TotalSeconds:0} s");
+            return summary.Results.Count == 1 && summary.Results[0].SaveError == null && (port == 0 || summary.Success == 1) ? 0 : 1;
         }
 
         // ---------------------------------------------------------------- standalone SCP

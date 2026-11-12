@@ -75,7 +75,10 @@ namespace DCST4.Core.Performance
         public double PollIntervalSeconds { get; set; } = DefaultPollIntervalSeconds;
         public double PollTimeoutSeconds { get; set; } = DefaultPollTimeoutSeconds;
 
-        /// <summary>Replaces the mix from the catalog, for the test harness.</summary>
+        /// <summary>
+        /// Replaces the mix from the catalog: the custom mix of a front-end, which <see cref="Mix"/> then names
+        /// <see cref="DataMix.CustomId"/>, or a mix of the test harness.
+        /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public DataMix MixOverride { get; set; }
 
@@ -134,7 +137,7 @@ namespace DCST4.Core.Performance
             var size = PlannedMegabytes(mode);
             var sizeText = size >= 1000 ? (size / 1000).ToString("0.0", CultureInfo.InvariantCulture) + " GB" : size.ToString("0", CultureInfo.InvariantCulture) + " MB";
             var mix = ResolvedMix;
-            var plan = $"{(exact ? "Stores" : "Stores up to")} {count.ToString("N0", CultureInfo.InvariantCulture)} new objects ({(mix != null && mix.Syntax.IsEncapsulated ? "at most " : "about ")}{sizeText}, mix {mix?.Id ?? Mix}) on {target}.";
+            var plan = $"{(exact ? "Stores" : "Stores up to")} {count.ToString("N0", CultureInfo.InvariantCulture)} new objects ({(mix != null && mix.Syntax.IsEncapsulated ? "at most " : "about ")}{sizeText}, mix {mix?.Id ?? Mix}{(mix != null && mix.IsCustom ? ": " + mix.Description : string.Empty)}) on {target}.";
 
             // Without a rate, a fast system uses up the ceiling before the duration is over, and the measured window shrinks.
             if (mode == LoadMode.Load && InstanceCount == 0 && RatePerSecond <= 0 && DurationSeconds > 0)
@@ -148,10 +151,51 @@ namespace DCST4.Core.Performance
             return plan;
         }
 
+        /// <summary>What keeps a custom mix from being generated, found before the pool is built. Null if nothing does.</summary>
+        private static string CustomMixProblem(DataMix mix)
+        {
+            foreach (var entry in mix.Entries)
+            {
+                var request = new Generation.Datasets.TestDatasetRequest
+                {
+                    ProfileId = entry.ProfileId,
+                    Rows = entry.Rows,
+                    Columns = entry.Columns,
+                    BitsStored = entry.BitsStored,
+                    Frames = entry.Frames,
+                    TransferSyntax = mix.Syntax,
+                    PrivatePayloadBytes = entry.PrivatePayloadBytes,
+                };
+                var problems = request.Validate();
+                if (problems.Count > 0) return "The custom mix cannot be generated: " + string.Join(" ", problems);
+
+                if (mix.Syntax.IsEncapsulated)
+                {
+                    var choice = Generation.Datasets.CompressionCatalog.For(mix.Syntax);
+                    var probe = choice == null ? null : Generation.Datasets.CompressionCatalog.Probe(choice, entry.BitsStored, entry.SamplesPerPixel);
+                    if (probe == null || !probe.Available) return $"The custom mix cannot be generated in {mix.Syntax.UID.Name}: {probe?.Reason ?? "DCST4 has no encoder for it."}";
+                }
+                // What is known before anything is encoded: an uncompressed object, or a payload, that alone is too large.
+                var known = entry.PrivatePayloadBytes + (mix.Syntax.IsEncapsulated ? 0 : entry.EstimatedBytes - entry.PrivatePayloadBytes);
+                if (known > DataMix.MaxPoolBytes)
+                {
+                    return $"One object of the custom mix is {known / 1048576.0:0} MB, and a load run keeps its objects in memory, which holds at most {DataMix.MaxPoolBytes / 1048576} MB each. Use fewer frames, a smaller payload or a compressed transfer syntax, or send it with Generate & Send.";
+                }
+            }
+            return null;
+        }
+
         /// <summary>Returns the first problem, or null if the settings can be used for <paramref name="mode"/>.</summary>
         public string Validate(LoadMode mode)
         {
-            if (ResolvedMix == null) return $"Unknown data mix '{Mix}'. Mixes: {string.Join(", ", DataMixCatalog.All.Select(m => m.Id))}.";
+            if (ResolvedMix == null)
+            {
+                return string.Equals(Mix, DataMix.CustomId, StringComparison.OrdinalIgnoreCase)
+                    ? "The custom mix has not been described."
+                    : $"Unknown data mix '{Mix}'. Mixes: {string.Join(", ", DataMixCatalog.All.Select(m => m.Id))}.";
+            }
+            var custom = ResolvedMix.IsCustom ? CustomMixProblem(ResolvedMix) : null;
+            if (custom != null) return custom;
             if (Associations < 1 || Associations > LargestAssociations) return $"The number of associations must be between 1 and {Int(LargestAssociations)}.";
             if (InstancesPerAssociation < 0) return "Instances per association cannot be negative.";
             if (MaxInstances < 0) return "The instance ceiling cannot be negative.";

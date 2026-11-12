@@ -1,6 +1,7 @@
 using FellowOakDicom;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace DCST4.Core.Performance
@@ -8,7 +9,7 @@ namespace DCST4.Core.Performance
     /// <summary>One object type in a mix, as a dataset profile with its image size.</summary>
     public sealed class DataMixEntry
     {
-        public DataMixEntry(string profileId, int rows, int columns, int bitsStored, int frames = 1, int samplesPerPixel = 1)
+        public DataMixEntry(string profileId, int rows, int columns, int bitsStored, int frames = 1, int samplesPerPixel = 1, long privatePayloadBytes = 0)
         {
             ProfileId = profileId;
             Rows = rows;
@@ -16,6 +17,7 @@ namespace DCST4.Core.Performance
             BitsStored = bitsStored;
             Frames = frames;
             SamplesPerPixel = samplesPerPixel;
+            PrivatePayloadBytes = privatePayloadBytes;
         }
 
         public string ProfileId { get; }
@@ -24,9 +26,11 @@ namespace DCST4.Core.Performance
         public int BitsStored { get; }
         public int Frames { get; }
         public int SamplesPerPixel { get; }
+        /// <summary>A private binary value in each object, as raw data from a modality would be. 0 for none.</summary>
+        public long PrivatePayloadBytes { get; }
 
-        /// <summary>The pixel data uncompressed, plus a few kilobytes of attributes.</summary>
-        public long EstimatedBytes => (long)Rows * Columns * (BitsStored > 8 ? 2 : 1) * SamplesPerPixel * Frames + HeaderEstimate;
+        /// <summary>The pixel data uncompressed, plus a few kilobytes of attributes and the private payload.</summary>
+        public long EstimatedBytes => (long)Rows * Columns * (BitsStored > 8 ? 2 : 1) * SamplesPerPixel * Frames + HeaderEstimate + PrivatePayloadBytes;
 
         internal const int HeaderEstimate = 4000;
     }
@@ -55,6 +59,30 @@ namespace DCST4.Core.Performance
         public long EstimatedBytesPerObject => Entries.Count == 0 ? 0 : (long)Entries.Average(e => (double)e.EstimatedBytes);
 
         public override string ToString() => Id;
+
+        /// <summary>The id of a mix that is not in the catalog: one object type, described by whoever starts the run.</summary>
+        public const string CustomId = "custom";
+
+        /// <summary>The whole pool of a load run is held in memory, encoded.</summary>
+        public const long MaxPoolBytes = 1024L * 1024 * 1024;
+
+        public bool IsCustom => Id == CustomId;
+
+        /// <summary>
+        /// A mix of one object type. Its description says everything that decides what is sent, since two custom mixes
+        /// have the same id. A large object gets fewer variants in the pool, down to one.
+        /// </summary>
+        public static DataMix Custom(string profileId, string name, int rows, int columns, int bitsStored, int frames, int samplesPerPixel, DicomTransferSyntax syntax, string syntaxName, long privatePayloadBytes)
+        {
+            var entry = new DataMixEntry(profileId, rows, columns, bitsStored, frames, samplesPerPixel, privatePayloadBytes);
+            var description = string.Format(CultureInfo.InvariantCulture, "{0} {1} x {2}, {3} bits", name, rows, columns, bitsStored)
+                + (frames > 1 ? string.Format(CultureInfo.InvariantCulture, ", {0} frames", frames) : string.Empty)
+                + ", " + syntaxName
+                + (privatePayloadBytes > 0 ? string.Format(CultureInfo.InvariantCulture, ", {0:0.#} MB private payload", privatePayloadBytes / (1024.0 * 1024)) : string.Empty);
+
+            var variants = (int)Math.Max(1, Math.Min(DefaultPoolPerEntry, MaxPoolBytes / Math.Max(1, entry.EstimatedBytes)));
+            return new DataMix(CustomId, description, syntax, entry) { PoolPerEntry = variants };
+        }
     }
 
     /// <summary>The mixes a load run can send. The ids are stable, since result files name them.</summary>

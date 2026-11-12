@@ -250,16 +250,19 @@ namespace DCST4.Core.Network
                         }
                     }
 
+                    Stream stream;
                     try
                     {
                         await connect.ConfigureAwait(false);
+                        // A cancel right after the connection is made closes it on another thread, and GetStream on a
+                        // client that is being closed throws whatever it runs into, a NullReferenceException included.
+                        stream = tcp.GetStream();
                     }
                     catch (Exception) when (token.IsCancellationRequested)
                     {
                         throw new OperationCanceledException(token);
                     }
 
-                    Stream stream = tcp.GetStream();
                     if (tls != null)
                     {
                         var plain = stream;
@@ -281,6 +284,13 @@ namespace DCST4.Core.Network
                     token.ThrowIfCancellationRequested();
                     return new RawAssociation(tcp, stream, endpoint, clock, timeline);
                 }
+            }
+            catch (Exception ex) when (token.IsCancellationRequested && !(ex is OperationCanceledException))
+            {
+                // A cancel closes the connection on the thread that cancels, at whatever point this one has reached, also
+                // before the connection is asked for. What then fails here is the cancel, not the other side.
+                SafeClose(tcp);
+                throw new OperationCanceledException(token);
             }
             catch
             {

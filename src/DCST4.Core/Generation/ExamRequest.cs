@@ -62,15 +62,31 @@ namespace DCST4.Core.Generation
         public int SeriesNumberOffset { get; set; }
         /// <summary>The image a derived object such as a segmentation refers to. Null if it refers to none.</summary>
         public ReferencedImage SourceImage { get; set; }
+        /// <summary>The size of a private binary value added to each image, as raw data from a modality would be. 0 adds none.</summary>
+        public long PrivatePayloadBytes { get; set; }
 
         public int BitsAllocated => BitsStored <= 8 ? 8 : 16;
         public int TotalImages => SeriesCount * ImagesPerSeries;
+
+        /// <summary>The Pixel Data of one image without compression, in bytes.</summary>
+        public long UncompressedPixelBytes
+        {
+            get
+            {
+                if (Modality == null) return 0;
+                var pixels = (long)Rows * Columns * FramesPerImage;
+                return Modality.IsBinaryMask ? (pixels + 7) / 8 : pixels * Modality.SamplesPerPixel * BitsAllocated / 8;
+            }
+        }
     }
 
     /// <summary>Checks an exam before anything is generated, so that problems name the field instead of failing inside fo-dicom.</summary>
     public static class ExamValidator
     {
         public const int MaxTotalImages = 100000;
+        public const int MaxFrames = 10000;
+        /// <summary>The length of an element is 32 bits, and FFFFFFFF means undefined, so native Pixel Data ends below this.</summary>
+        public const long MaxNativePixelBytes = uint.MaxValue - 1;
 
         /// <summary>Problems that block the run.</summary>
         public static List<string> Validate(ExamRequest request)
@@ -86,7 +102,9 @@ namespace DCST4.Core.Generation
             if (request.ImagesPerSeries < 1) errors.Add("Images per series must be at least 1.");
             if ((long)request.SeriesCount * request.ImagesPerSeries > MaxTotalImages) errors.Add($"A run can have at most {MaxTotalImages} images.");
             if (request.FramesPerImage < 1) errors.Add("Frames per image must be at least 1.");
+            if (request.FramesPerImage > MaxFrames) errors.Add($"Frames per image must be at most {MaxFrames}.");
             if (request.Modality != null && request.FramesPerImage > 1 && !request.Modality.IsMultiFrame) errors.Add($"{request.Modality.DisplayName} images have one frame.");
+            if (request.PrivatePayloadBytes < 0 || request.PrivatePayloadBytes > PrivatePayload.MaxBytes) errors.Add($"The private payload can be at most {PrivatePayload.MaxMegabytes} MB.");
             if (request.Rows < ExamRequest.MinMatrix || request.Rows > ExamRequest.MaxMatrix) errors.Add($"Rows must be between {ExamRequest.MinMatrix} and {ExamRequest.MaxMatrix}.");
             if (request.Columns < ExamRequest.MinMatrix || request.Columns > ExamRequest.MaxMatrix) errors.Add($"Columns must be between {ExamRequest.MinMatrix} and {ExamRequest.MaxMatrix}.");
             if (request.Modality != null && !request.Modality.BitDepths.Contains(request.BitsStored))
@@ -134,6 +152,42 @@ namespace DCST4.Core.Generation
             errors.AddRange(AdditionalTagRules.CheckAll(id.AdditionalTags, request.CharacterSet));
 
             return errors;
+        }
+
+        /// <summary>
+        /// Problems with sending or saving this exam in a transfer syntax: an encoder that cannot hold the bit depth or is
+        /// missing on this computer, or Pixel Data too long to write without compression.
+        /// </summary>
+        public static List<string> SyntaxProblems(ExamRequest request, DicomTransferSyntax syntax)
+        {
+            var problems = new List<string>();
+            if (request.Modality == null || syntax == null) return problems;
+
+            if (!syntax.IsEncapsulated)
+            {
+                if (request.UncompressedPixelBytes > MaxNativePixelBytes)
+                {
+                    var gigabytes = (request.UncompressedPixelBytes / 1073741824.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                    problems.Add($"{request.FramesPerImage} frames of {request.Rows} x {request.Columns} are {gigabytes} GB of Pixel Data, and an uncompressed image holds less than 4 GB. Select a compressed transfer syntax, or fewer frames.");
+                }
+                return problems;
+            }
+
+            if (request.Modality.IsBinaryMask)
+            {
+                problems.Add($"{request.Modality.DisplayName} is generated uncompressed only.");
+                return problems;
+            }
+
+            var choice = Datasets.CompressionCatalog.For(syntax);
+            if (choice == null)
+            {
+                problems.Add($"{syntax.UID.Name} is not a transfer syntax DCST4 can generate.");
+                return problems;
+            }
+            var probe = Datasets.CompressionCatalog.Probe(choice, request.BitsStored, request.Modality.SamplesPerPixel);
+            if (!probe.Available) problems.Add($"{request.Modality.DisplayName} with {request.BitsStored} bits stored cannot be sent as {syntax.UID.Name}: {probe.Reason}");
+            return problems;
         }
 
         /// <summary>Things worth telling the user that do not block the run.</summary>

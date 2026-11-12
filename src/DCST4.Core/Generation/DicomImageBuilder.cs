@@ -86,6 +86,7 @@ namespace DCST4.Core.Generation
             // After the program's own tags, so that a custom tag can replace one such as Manufacturer. The rules keep it from the pixel description.
             foreach (var additional in id.AdditionalTags) AdditionalTagWriter.Write(dataset, additional);
 
+            PrivatePayload.Add(dataset, request.PrivatePayloadBytes);
             AddPixels(dataset, request, imageIndex);
             return dataset;
         }
@@ -180,9 +181,10 @@ namespace DCST4.Core.Generation
 
             if (modality.RendersFramesOnDemand)
             {
-                var frameSize = first.Data.Length;
-                dataset.AddOrUpdate(new DicomOtherWord(DicomTag.PixelData,
-                    new RenderedFramesBuffer(request.FramesPerImage, frameSize, frame => RenderFrame(request, imageIndex, frame, lines).Data)));
+                var frames = new RenderedFramesBuffer(request.FramesPerImage, first.Data.Length, frame => RenderFrame(request, imageIndex, frame, lines).Data);
+                // OB for 8 bits allocated and OW for 16, as fo-dicom chooses for frames held in memory.
+                if (request.BitsAllocated <= BitsPerByte) dataset.AddOrUpdate(new DicomOtherByte(DicomTag.PixelData, frames));
+                else dataset.AddOrUpdate(new DicomOtherWord(DicomTag.PixelData, frames));
                 dataset.AddOrUpdate(DicomTag.NumberOfFrames, request.FramesPerImage);
                 return;
             }

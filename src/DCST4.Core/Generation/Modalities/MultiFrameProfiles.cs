@@ -8,21 +8,30 @@ namespace DCST4.Core.Generation.Modalities
 {
     // These are used by the test-suite datasets. They are not in ModalityCatalog, which is the list offered in Generate & Send.
 
-    /// <summary>Ultrasound Multi-frame Image IOD: a colour cine loop, RGB at 8 bits per sample.</summary>
+    /// <summary>
+    /// Ultrasound Multi-frame Image IOD: a colour cine loop, RGB at 8 bits per sample. A real loop has hundreds of frames, so
+    /// they are drawn as they are written.
+    /// </summary>
     public sealed class UsMultiFrameProfile : UsProfile
     {
+        public const int CineFrames = 30;
         private const int FrameTimeMs = 33;
+        private const int FramesPerSecond = 30;
 
         public override string DisplayName => "US Multi-frame";
         public override DicomUID SopClass => DicomUID.UltrasoundMultiFrameImageStorage;
         public override int SamplesPerPixel => 3;
         public override bool IsMultiFrame => true;
+        public override bool RendersFramesOnDemand => true;
+        public override int DefaultFrames => CineFrames;
 
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
             base.AddModalityTags(dataset, preset, context);
             dataset.AddOrUpdate(DicomTag.FrameTime, FrameTimeMs.ToString(CultureInfo.InvariantCulture));
             dataset.AddOrUpdate(DicomTag.FrameIncrementPointer, DicomTag.FrameTime);
+            dataset.AddOrUpdate(DicomTag.CineRate, FramesPerSecond.ToString(CultureInfo.InvariantCulture));
+            dataset.AddOrUpdate(DicomTag.RecommendedDisplayFrameRate, FramesPerSecond.ToString(CultureInfo.InvariantCulture));
         }
     }
 
@@ -57,6 +66,7 @@ namespace DCST4.Core.Generation.Modalities
     /// </summary>
     public abstract class FunctionalGroupProfile : ModalityProfile
     {
+        public const int EnhancedFrames = 8;
         private const string StackId = "1";
 
         public override bool IsMultiFrame => true;
@@ -137,9 +147,15 @@ namespace DCST4.Core.Generation.Modalities
         }
     }
 
-    /// <summary>What Enhanced CT, Enhanced MR and Breast Tomosynthesis have in common: a frame type and the anatomy of the frames.</summary>
+    /// <summary>
+    /// What Enhanced CT, Enhanced MR and Breast Tomosynthesis have in common: a frame type and the anatomy of the frames.
+    /// Their frames are drawn as they are written, so that the whole object is never in memory at once.
+    /// </summary>
     public abstract class EnhancedImageProfile : FunctionalGroupProfile
     {
+        public override bool RendersFramesOnDemand => true;
+        public override int DefaultFrames => EnhancedFrames;
+
         protected abstract DicomTag FrameTypeSequence { get; }
         /// <summary>SNOMED CT code of the imaged region, with its meaning.</summary>
         protected abstract string[] Anatomy { get; }
@@ -237,16 +253,14 @@ namespace DCST4.Core.Generation.Modalities
         }
     }
 
-    /// <summary>
-    /// Breast Tomosynthesis Image IOD, for performance tests. A real object is hundreds of megabytes, so its frames are drawn
-    /// as they are written instead of being held in memory.
-    /// </summary>
+    /// <summary>Breast Tomosynthesis Image IOD. A real object is hundreds of megabytes.</summary>
     public sealed class BreastTomosynthesisProfile : EnhancedImageProfile
     {
-        public const int DefaultFrames = 60;
+        /// <summary>The frames of the <c>tomosynthesis-large</c> dataset, which makes an object of about 700 MB.</summary>
+        public const int LargeFrames = 60;
 
         public override string Code => "MG";
-        public override string DisplayName => "Breast Tomosynthesis (large)";
+        public override string DisplayName => "Breast Tomosynthesis";
         public override DicomUID SopClass => DicomUID.BreastTomosynthesisImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 14;
@@ -255,7 +269,6 @@ namespace DCST4.Core.Generation.Modalities
         public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(30);
         public override double? RescaleIntercept => 0;
         public override string RescaleType => "US";
-        public override bool RendersFramesOnDemand => true;
         protected override DicomTag FrameTypeSequence => DicomTag.XRay3DFrameTypeSequence;
         protected override string[] Anatomy { get; } = { "76752008", "Breast" };
 
@@ -278,7 +291,10 @@ namespace DCST4.Core.Generation.Modalities
     /// <summary>Segmentation IOD: one binary segment, with every frame derived from the source image. Rows and Columns must be multiples of 8.</summary>
     public sealed class SegmentationProfile : FunctionalGroupProfile
     {
+        public const int SegmentationFrames = 4;
         private const ushort SegmentNumber = 1;
+
+        public override int DefaultFrames => SegmentationFrames;
 
         public override string Code => "SEG";
         public override string DisplayName => "Segmentation";

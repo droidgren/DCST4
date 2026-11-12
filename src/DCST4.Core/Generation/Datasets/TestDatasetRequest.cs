@@ -33,7 +33,7 @@ namespace DCST4.Core.Generation.Datasets
     /// <summary>What to generate. Zero for Rows, Columns, Bits Stored or Frames means the profile's default.</summary>
     public sealed class TestDatasetRequest
     {
-        public const int MaxFrames = 10000;
+        public const int MaxFrames = ExamValidator.MaxFrames;
 
         /// <summary>Everything dated follows from this, so that the same request gives the same result on any day.</summary>
         public static readonly DateTime DefaultReferenceDate = new DateTime(2026, 1, 15, 9, 0, 0, DateTimeKind.Unspecified);
@@ -55,6 +55,8 @@ namespace DCST4.Core.Generation.Datasets
         public DicomTransferSyntax TransferSyntax { get; set; } = DicomTransferSyntax.ExplicitVRLittleEndian;
         public CharacterSetVariant CharacterSet { get; set; } = CharacterSetVariant.Default;
         public EdgeCases EdgeCases { get; set; } = EdgeCases.None;
+        /// <summary>The size of a private binary value added to each image. 0 adds none.</summary>
+        public long PrivatePayloadBytes { get; set; }
         /// <summary>Null means the embedded list.</summary>
         public TestPersonnummerRegistry Registry { get; set; }
 
@@ -97,8 +99,10 @@ namespace DCST4.Core.Generation.Datasets
             {
                 if (!profile.HasPixelData) problems.Add($"{profile.DisplayName} has no pixel data, so {TransferSyntax.UID.Name} does not apply.");
                 else if (profile.Image.IsBinaryMask) problems.Add($"{profile.DisplayName} is generated uncompressed only.");
-                else if (profile.Image.RendersFramesOnDemand) problems.Add($"{profile.DisplayName} is generated uncompressed only, since compressing it would need the whole object in memory.");
             }
+
+            if (PrivatePayloadBytes < 0 || PrivatePayloadBytes > PrivatePayload.MaxBytes) problems.Add($"The private payload can be at most {PrivatePayload.MaxMegabytes} MB.");
+            else if (PrivatePayloadBytes > 0 && !profile.IsImage) problems.Add($"{profile.DisplayName} is not an image, and only images get a private payload.");
 
             if (profile.IsImage) ValidateImage(problems, profile);
             return problems;
@@ -122,6 +126,11 @@ namespace DCST4.Core.Generation.Datasets
             var frames = ResolvedFrames;
             if (frames < 1 || frames > MaxFrames) problems.Add($"Frames must be between 1 and {MaxFrames}.");
             else if (frames > 1 && !image.IsMultiFrame) problems.Add($"{profile.DisplayName} images have one frame.");
+            else if (problems.Count == 0 && TransferSyntax != null && !TransferSyntax.IsEncapsulated)
+            {
+                var bytes = image.IsBinaryMask ? 0 : (long)rows * columns * frames * image.SamplesPerPixel * (ResolvedBits <= 8 ? 1 : 2);
+                if (bytes > ExamValidator.MaxNativePixelBytes) problems.Add($"{frames} frames of {rows} x {columns} are more Pixel Data than an uncompressed image holds, which is less than 4 GB. Select a compressed transfer syntax, or fewer frames.");
+            }
         }
     }
 

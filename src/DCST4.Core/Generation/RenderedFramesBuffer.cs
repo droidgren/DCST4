@@ -16,6 +16,7 @@ namespace DCST4.Core.Generation
         private readonly int _frameSize;
         private readonly Func<int, byte[]> _render;
         private readonly object _gate = new object();
+        private readonly int _padding;
 
         private int _cachedFrame = -1;
         private byte[] _cached;
@@ -25,11 +26,16 @@ namespace DCST4.Core.Generation
             _frames = frames;
             _frameSize = frameSize;
             _render = render;
+            // Pixel Data has even length (PS3.5 8.1.1), which only frames of 8 bits per sample can break.
+            _padding = (int)((long)frames * frameSize % 2);
         }
+
+        public int Frames => _frames;
+        public int FrameSize => _frameSize;
 
         public bool IsMemory => false;
 
-        public long Size => (long)_frames * _frameSize;
+        public long Size => (long)_frames * _frameSize + _padding;
 
         public byte[] Data
         {
@@ -41,6 +47,18 @@ namespace DCST4.Core.Generation
             }
         }
 
+        /// <summary>A copy of one frame, which the caller may keep.</summary>
+        public byte[] ReadFrame(int index)
+        {
+            if (index < 0 || index >= _frames) throw new ArgumentOutOfRangeException(nameof(index));
+            var copy = new byte[_frameSize];
+            lock (_gate)
+            {
+                Buffer.BlockCopy(Frame(index), 0, copy, 0, _frameSize);
+            }
+            return copy;
+        }
+
         public void GetByteRange(long offset, int count, byte[] output)
         {
             if (offset < 0 || offset + count > Size) throw new ArgumentOutOfRangeException(nameof(offset));
@@ -50,6 +68,12 @@ namespace DCST4.Core.Generation
             {
                 var position = offset + written;
                 var frame = (int)(position / _frameSize);
+                if (frame >= _frames)
+                {
+                    // The padding byte.
+                    output[written++] = 0;
+                    continue;
+                }
                 var inFrame = (int)(position % _frameSize);
                 var length = Math.Min(count - written, _frameSize - inFrame);
 
@@ -71,6 +95,7 @@ namespace DCST4.Core.Generation
                     stream.Write(Frame(frame), 0, _frameSize);
                 }
             }
+            if (_padding > 0) stream.WriteByte(0);
         }
 
         public async Task CopyToStreamAsync(Stream stream, CancellationToken cancellationToken)
@@ -84,6 +109,7 @@ namespace DCST4.Core.Generation
                 }
                 await stream.WriteAsync(data, 0, _frameSize, cancellationToken).ConfigureAwait(false);
             }
+            if (_padding > 0) await stream.WriteAsync(new byte[1], 0, 1, cancellationToken).ConfigureAwait(false);
         }
 
         private byte[] Frame(int index)

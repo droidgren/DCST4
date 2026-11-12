@@ -16,6 +16,42 @@ namespace DCST4.Core.Generation.Modalities
 
         public static ModalityProfile Find(string code) =>
             All.FirstOrDefault(m => string.Equals(m.Code, code, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
+        /// What Generate &amp; Send offers: the ten above and the multi-frame images, each with the id of its dataset profile.
+        /// The names are unique, the codes are not: Enhanced CT is CT too.
+        /// </summary>
+        public static IReadOnlyList<GenerateAndSendChoice> GenerateAndSend { get; } = All
+            .Select(m => new GenerateAndSendChoice(m, m.Code.ToLowerInvariant()))
+            .Concat(new[]
+            {
+                new GenerateAndSendChoice(new UsMultiFrameProfile(), "us-multiframe"),
+                new GenerateAndSendChoice(new EnhancedCtProfile(), "enhanced-ct"),
+                new GenerateAndSendChoice(new EnhancedMrProfile(), "enhanced-mr"),
+                new GenerateAndSendChoice(new BreastTomosynthesisProfile(), "tomosynthesis-large"),
+            }).ToList();
+
+        /// <summary>By the name shown in the list. A setting saved before 1.10.1 holds a code, which is the name of the ten.</summary>
+        public static ModalityProfile FindForGenerateAndSend(string displayName) =>
+            GenerateAndSend.FirstOrDefault(c => string.Equals(c.Modality.DisplayName, displayName?.Trim(), StringComparison.OrdinalIgnoreCase))?.Modality;
+
+        /// <summary>The dataset profile that makes the same kind of object, for a Performance mix. Null if the list does not have the modality.</summary>
+        public static string DatasetProfileIdOf(ModalityProfile modality) =>
+            GenerateAndSend.FirstOrDefault(c => ReferenceEquals(c.Modality, modality))?.DatasetProfileId;
+    }
+
+    /// <summary>One entry of the Modality list in Generate &amp; Send.</summary>
+    public sealed class GenerateAndSendChoice
+    {
+        internal GenerateAndSendChoice(ModalityProfile modality, string datasetProfileId)
+        {
+            Modality = modality;
+            DatasetProfileId = datasetProfileId;
+        }
+
+        public ModalityProfile Modality { get; }
+        public string DatasetProfileId { get; }
+        public override string ToString() => Modality.DisplayName;
     }
 
     /// <summary>CT Image IOD. Requires 16 bits allocated and 12-16 bits stored.</summary>

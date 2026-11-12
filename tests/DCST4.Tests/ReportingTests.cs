@@ -439,6 +439,19 @@ namespace DCST4.Tests
             Check("Other settings: shown, not comparable and not a regression", otherSettings.Regressions == 0 && otherSettings.Runs[0].Findings.Single().Kind == FindingKind.NotComparable
                 && otherSettings.Runs[0].Findings.Single().Note.Contains("associations 4 and 1") && otherSettings.Runs[0].Performance.Any(p => p.Worse && !p.Regression), Findings(otherSettings));
 
+            // Every custom mix has the id "custom", so its description decides whether two runs sent the same thing.
+            Func<string, TestResult> custom = description =>
+            {
+                var run = Load(100, 20, 0, s => s.Mix = DataMix.CustomId);
+                run.Performance.MixDescription = description;
+                return run;
+            };
+            var sameCustom = Compare(Report(custom("US Multi-frame 64 x 64, 8 bits, 6 frames, JPEG Baseline")), Report(custom("US Multi-frame 64 x 64, 8 bits, 6 frames, JPEG Baseline")));
+            var otherCustom = Compare(Report(custom("US Multi-frame 64 x 64, 8 bits, 6 frames, JPEG Baseline")), Report(custom("US Multi-frame 64 x 64, 8 bits, 600 frames, JPEG Baseline")));
+            Check("Two runs of the same custom mix are compared", sameCustom.Runs[0].Findings.All(f => f.Kind != FindingKind.NotComparable), Findings(sameCustom));
+            Check("Two custom mixes that differ: not comparable, and it says how", otherCustom.Regressions == 0 && otherCustom.Runs[0].Findings.Single().Kind == FindingKind.NotComparable
+                && otherCustom.Runs[0].Findings.Single().Note.Contains("custom mix") && otherCustom.Runs[0].Findings.Single().Note.Contains("600 frames"), Findings(otherCustom));
+
             Func<TestResultClass, TestResultClass, ComparisonFinding> change = (before, after) => Compare(Report(Simple("x", before)), Report(Simple("x", after))).Runs[0].Findings.SingleOrDefault(f => f.Area == "Result");
             Check("PASS to FAIL and to TIMEOUT: regressions", change(TestResultClass.PASS, TestResultClass.FAIL).Kind == FindingKind.Regression && change(TestResultClass.EXPECTED_FAILURE, TestResultClass.TIMEOUT).Kind == FindingKind.Regression, null);
             Check("PASS to NOT_SUPPORTED, and NOT_SUPPORTED to FAIL: regressions", change(TestResultClass.PASS, TestResultClass.NOT_SUPPORTED).Kind == FindingKind.Regression && change(TestResultClass.NOT_SUPPORTED, TestResultClass.FAIL).Kind == FindingKind.Regression, null);
