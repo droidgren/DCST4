@@ -18,40 +18,62 @@ namespace DCST4.Core.Generation.Modalities
             All.FirstOrDefault(m => string.Equals(m.Code, code, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>
-        /// What Generate &amp; Send offers: the ten above and the multi-frame images, each with the id of its dataset profile.
-        /// The names are unique, the codes are not: Enhanced CT is CT too.
+        /// The images a modality can generate in Generate &amp; Send: its ordinary one first, and second the multi-frame
+        /// image where DCST4 has one. Empty for a modality that is not in <see cref="All"/>.
         /// </summary>
-        public static IReadOnlyList<GenerateAndSendChoice> GenerateAndSend { get; } = All
-            .Select(m => new GenerateAndSendChoice(m, m.Code.ToLowerInvariant()))
-            .Concat(new[]
+        public static IReadOnlyList<ImageObject> ObjectsOf(ModalityProfile modality) =>
+            modality != null && Objects.TryGetValue(modality.Code, out var objects) ? objects : NoObjects;
+
+        /// <summary>The image of this modality with that dataset profile id. Null if the modality does not generate it.</summary>
+        public static ImageObject FindObject(ModalityProfile modality, string datasetProfileId) =>
+            ObjectsOf(modality).FirstOrDefault(o => string.Equals(o.DatasetProfileId, datasetProfileId?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>The image with that dataset profile id, whatever its modality. Null if no modality generates it.</summary>
+        public static ImageObject FindObject(string datasetProfileId) =>
+            All.SelectMany(ObjectsOf).FirstOrDefault(o => string.Equals(o.DatasetProfileId, datasetProfileId?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        private static readonly IReadOnlyList<ImageObject> NoObjects = new ImageObject[0];
+
+        private static readonly Dictionary<string, IReadOnlyList<ImageObject>> Objects = BuildObjects();
+
+        private static Dictionary<string, IReadOnlyList<ImageObject>> BuildObjects()
+        {
+            // The multi-frame image a modality can also send, by modality code, with the dataset profile that makes it.
+            var multiFrame = new Dictionary<string, ImageObject>(StringComparer.OrdinalIgnoreCase)
             {
-                new GenerateAndSendChoice(new UsMultiFrameProfile(), "us-multiframe"),
-                new GenerateAndSendChoice(new EnhancedCtProfile(), "enhanced-ct"),
-                new GenerateAndSendChoice(new EnhancedMrProfile(), "enhanced-mr"),
-                new GenerateAndSendChoice(new BreastTomosynthesisProfile(), "tomosynthesis-large"),
-            }).ToList();
+                { "US", new ImageObject(new UsMultiFrameProfile(), "us-multiframe") },
+                { "CT", new ImageObject(new EnhancedCtProfile(), "enhanced-ct") },
+                { "MR", new ImageObject(new EnhancedMrProfile(), "enhanced-mr") },
+                { "MG", new ImageObject(new BreastTomosynthesisProfile(), "tomosynthesis-large") },
+            };
 
-        /// <summary>By the name shown in the list. A setting saved before 1.10.1 holds a code, which is the name of the ten.</summary>
-        public static ModalityProfile FindForGenerateAndSend(string displayName) =>
-            GenerateAndSend.FirstOrDefault(c => string.Equals(c.Modality.DisplayName, displayName?.Trim(), StringComparison.OrdinalIgnoreCase))?.Modality;
-
-        /// <summary>The dataset profile that makes the same kind of object, for a Performance mix. Null if the list does not have the modality.</summary>
-        public static string DatasetProfileIdOf(ModalityProfile modality) =>
-            GenerateAndSend.FirstOrDefault(c => ReferenceEquals(c.Modality, modality))?.DatasetProfileId;
+            var objects = new Dictionary<string, IReadOnlyList<ImageObject>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var modality in All)
+            {
+                var list = new List<ImageObject> { new ImageObject(modality, modality.Code.ToLowerInvariant()) };
+                if (multiFrame.TryGetValue(modality.Code, out var more)) list.Add(more);
+                objects[modality.Code] = list;
+            }
+            return objects;
+        }
     }
 
-    /// <summary>One entry of the Modality list in Generate &amp; Send.</summary>
-    public sealed class GenerateAndSendChoice
+    /// <summary>One entry of the Object list in Generate &amp; Send: an image a modality can generate, named after its IOD.</summary>
+    public sealed class ImageObject
     {
-        internal GenerateAndSendChoice(ModalityProfile modality, string datasetProfileId)
+        internal ImageObject(ModalityProfile image, string datasetProfileId)
         {
-            Modality = modality;
+            Image = image;
             DatasetProfileId = datasetProfileId;
         }
 
-        public ModalityProfile Modality { get; }
+        /// <summary>The profile that generates it.</summary>
+        public ModalityProfile Image { get; }
+        /// <summary>The dataset profile that makes the same object, which a Performance mix generates it by.</summary>
         public string DatasetProfileId { get; }
-        public override string ToString() => Modality.DisplayName;
+        public string Name => Image.ObjectName;
+        public bool IsMultiFrame => Image.IsMultiFrame;
+        public override string ToString() => Name;
     }
 
     /// <summary>CT Image IOD. Requires 16 bits allocated and 12-16 bits stored.</summary>
@@ -59,6 +81,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "CT";
         public override string DisplayName => "CT";
+        public override string ObjectName => "CT Image";
         public override DicomUID SopClass => DicomUID.CTImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 16;
@@ -98,6 +121,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "MR";
         public override string DisplayName => "MR";
+        public override string ObjectName => "MR Image";
         public override DicomUID SopClass => DicomUID.MRImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 12;
@@ -139,6 +163,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "CR";
         public override string DisplayName => "CR";
+        public override string ObjectName => "Computed Radiography Image";
         public override DicomUID SopClass => DicomUID.ComputedRadiographyImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -170,6 +195,7 @@ namespace DCST4.Core.Generation.Modalities
 
         public override string Code => "US";
         public override string DisplayName => "US";
+        public override string ObjectName => "Ultrasound Image";
         public override DicomUID SopClass => DicomUID.UltrasoundImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8 };
         public override int DefaultBitDepth => 8;
@@ -220,6 +246,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "DX";
         public override string DisplayName => "DX";
+        public override string ObjectName => "Digital X-Ray Image";
         public override DicomUID SopClass => DicomUID.DigitalXRayImageStorageForPresentation;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -248,6 +275,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "XA";
         public override string DisplayName => "XA";
+        public override string ObjectName => "X-Ray Angiographic Image";
         public override DicomUID SopClass => DicomUID.XRayAngiographicImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -275,6 +303,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "RF";
         public override string DisplayName => "RF";
+        public override string ObjectName => "X-Ray Radiofluoroscopic Image";
         public override DicomUID SopClass => DicomUID.XRayRadiofluoroscopicImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -301,6 +330,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "MG";
         public override string DisplayName => "MG";
+        public override string ObjectName => "Digital Mammography X-Ray Image";
         public override DicomUID SopClass => DicomUID.DigitalMammographyXRayImageStorageForPresentation;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 14;
@@ -340,6 +370,7 @@ namespace DCST4.Core.Generation.Modalities
 
         public override string Code => "PT";
         public override string DisplayName => "PT";
+        public override string ObjectName => "Positron Emission Tomography Image";
         public override DicomUID SopClass => DicomUID.PositronEmissionTomographyImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 16 };
         public override int DefaultBitDepth => 16;
@@ -390,6 +421,7 @@ namespace DCST4.Core.Generation.Modalities
 
         public override string Code => "NM";
         public override string DisplayName => "NM";
+        public override string ObjectName => "Nuclear Medicine Image";
         public override DicomUID SopClass => DicomUID.NuclearMedicineImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 16 };
         public override int DefaultBitDepth => 16;

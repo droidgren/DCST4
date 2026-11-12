@@ -691,37 +691,60 @@ namespace DCST4.Tests
             check("Delete saved to disk at once", h.Saves == 3, h.Saves.ToString());
         }
 
-        /// <summary>1.10.1: the multi-frame modalities, Frames per image, JPEG Baseline, the private payload and the custom mix.</summary>
+        /// <summary>1.10.1: the Object list, Frames per image, JPEG Baseline, the private payload and the custom mix.</summary>
         private static async Task RunMultiFrame(int port, Action<string, bool, string> check)
         {
             Console.WriteLine("\nExam tab: multi-frame images, private payload and the custom mix");
             var h = new Harness(port);
             var vm = h.Vm;
             var p = vm.Performance;
-            Func<string, Core.Generation.Modalities.ModalityProfile> named = Core.Generation.Modalities.ModalityCatalog.FindForGenerateAndSend;
+            // The modality, then which of its images: by the id of the dataset profile that makes the same object.
+            Action<string, string> select = (code, objectId) =>
+            {
+                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find(code);
+                vm.SelectedImageObject = Core.Generation.Modalities.ModalityCatalog.FindObject(vm.SelectedModality, objectId);
+            };
+            Func<string> objectList = () => string.Join(" | ", vm.ImageObjects.Select(o => o.Name));
             Func<Task> measured = async () =>
             {
                 var sw = Stopwatch.StartNew();
                 while (vm.EstimatedSizeText == "calculating..." && sw.Elapsed < TimeSpan.FromSeconds(30)) await Task.Delay(20);
             };
 
-            check("The Modality list: the ten, then the four multi-frame images", string.Join(",", vm.Modalities.Select(m => m.ToString())) == "CT,MR,CR,DX,US,XA,RF,MG,PT,NM,US Multi-frame,Enhanced CT,Enhanced MR,Breast Tomosynthesis", string.Join(",", vm.Modalities.Select(m => m.ToString())));
+            check("The Modality list is the ten modalities, as before", string.Join(",", vm.Modalities.Select(m => m.Code)) == "CT,MR,CR,DX,US,XA,RF,MG,PT,NM", string.Join(",", vm.Modalities.Select(m => m.Code)));
+            check("CT: its two objects, the CT image selected", objectList() == "CT Image | Enhanced CT Image" && vm.SelectedImageObject.DatasetProfileId == "ct" && !vm.IsMultiFrame, objectList());
             check("The Transfer syntax list ends with JPEG Baseline", vm.TransferSyntaxes.Last() == TransferSyntaxOption.JpegBaseline && vm.TransferSyntaxes.Count == 4, null);
             check("CT: one frame, and the Frames field is off", !vm.IsMultiFrame && vm.FramesPerImage == 1, vm.FramesPerImage.ToString());
             check("The private payload is off, at 100 MB", !vm.AddPrivatePayload && vm.PrivatePayloadMb == 100, vm.PrivatePayloadMb.ToString());
 
             var notified = new List<string>();
             vm.PropertyChanged += (s, e) => notified.Add(e.PropertyName);
-            vm.SelectedModality = named("US Multi-frame");
-            check("US Multi-frame: 30 frames of 600 x 800 at 8 bits, and the Frames field is on", vm.IsMultiFrame && vm.FramesPerImage == 30 && vm.Rows == 600 && vm.Columns == 800 && vm.BitsStored == 8
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
+            check("US: its two objects, and the ultrasound image to begin with", objectList() == "Ultrasound Image | Ultrasound Multi-frame Image" && vm.SelectedImageObject.DatasetProfileId == "us"
+                && !vm.IsMultiFrame && vm.FramesPerImage == 1 && vm.ImagesPerSeries == vm.SelectedPreset.DefaultImages, objectList() + " " + vm.SelectedImageObject);
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CR");
+            check("CR: one object, named after its IOD", objectList() == "Computed Radiography Image" && !vm.IsMultiFrame, objectList());
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
+
+            vm.SelectedImageObject = vm.ImageObjects[1];
+            check("The cine loop: 30 frames of 600 x 800 at 8 bits, and the Frames field is on", vm.IsMultiFrame && vm.FramesPerImage == 30 && vm.Rows == 600 && vm.Columns == 800 && vm.BitsStored == 8
                 && notified.Contains(nameof(vm.IsMultiFrame)) && notified.Contains(nameof(vm.FramesPerImage)), vm.FramesPerImage + " " + vm.Rows + "x" + vm.Columns);
-            check("A multi-frame modality starts with one image per series, whatever the exam type says for single images", vm.ImagesPerSeries == 1 && vm.SelectedPreset.DefaultImages == 8, vm.ImagesPerSeries.ToString());
+            check("A multi-frame object starts with one image per series, whatever the exam type says for single images", vm.ImagesPerSeries == 1 && vm.SelectedPreset.DefaultImages == 8, vm.ImagesPerSeries.ToString());
+            check("The exam type is kept when the object changes", vm.SelectedPreset.Name == "Abdomen", vm.SelectedPreset.Name);
             check("Estimated size counts the frames and the three samples", vm.EstimatedSizeText == "about " + ExamSizeEstimator.Format(ExamSizeEstimator.HeaderBytes + 600L * 800 * 3 * 30), vm.EstimatedSizeText);
-            vm.SelectedModality = named("Breast Tomosynthesis");
-            check("Breast Tomosynthesis: 8 frames at its own matrix, 88 MB", vm.FramesPerImage == 8 && vm.Rows == 2816 && vm.Columns == 2048 && vm.EstimatedSizeText == "about 88.0 MB", vm.FramesPerImage + " " + vm.EstimatedSizeText);
+
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
+            check("Another modality starts at its ordinary image again", !vm.IsMultiFrame && vm.FramesPerImage == 1 && vm.SelectedImageObject.DatasetProfileId == "ct" && vm.Rows == 512 && vm.BitsStored == 16,
+                vm.SelectedImageObject + " " + vm.FramesPerImage + " " + vm.Rows + " " + vm.BitsStored);
+            select("MG", "tomosynthesis-large");
+            check("Breast Tomosynthesis: 8 frames, its own bit depth and its own exam type", vm.FramesPerImage == 8 && vm.BitsStored == 14 && vm.SelectedPreset.Name == "Left CC" && vm.IsMultiFrame,
+                vm.FramesPerImage + " " + vm.BitsStored + " " + vm.SelectedPreset.Name);
+            vm.Rows = 2816;
+            vm.Columns = 2048;
+            check("Breast Tomosynthesis at its own matrix is 88 MB", vm.EstimatedSizeText == "about 88.0 MB", vm.EstimatedSizeText);
 
             // A cine loop in JPEG Baseline with a payload, sent from the Exam tab.
-            vm.SelectedModality = named("US Multi-frame");
+            select("US", "us-multiframe");
             vm.Rows = 64;
             vm.Columns = 64;
             vm.FramesPerImage = 6;
@@ -746,8 +769,23 @@ namespace DCST4.Tests
                 && Core.TestData.TestPersonnummerRegistry.Default.Contains(received[0].Dataset.GetString(DicomTag.PatientID)), null);
 
             var restarted = new MainViewModel();
-            check("At the next start: the modality, the frames and the size are back, and the payload is off", restarted.SelectedModality == named("US Multi-frame") && restarted.FramesPerImage == 6
-                && restarted.PrivatePayloadMb == 1 && !restarted.AddPrivatePayload && restarted.SelectedTransferSyntax == TransferSyntaxOption.JpegBaseline, restarted.SelectedModality + " " + restarted.FramesPerImage + " " + restarted.AddPrivatePayload);
+            check("At the next start: the modality, the object, the frames and the size are back, and the payload is off",
+                restarted.SelectedModality.Code == "US" && restarted.SelectedImageObject.DatasetProfileId == "us-multiframe" && restarted.FramesPerImage == 6
+                && restarted.PrivatePayloadMb == 1 && !restarted.AddPrivatePayload && restarted.SelectedTransferSyntax == TransferSyntaxOption.JpegBaseline,
+                restarted.SelectedModality + " " + restarted.SelectedImageObject + " " + restarted.FramesPerImage + " " + restarted.AddPrivatePayload);
+
+            // A settings file from before 1.10.1 holds the modality code and no object, which the catalog answers with
+            // nothing and the view model with the modality's ordinary image, as selecting that one does.
+            var us = Core.Generation.Modalities.ModalityCatalog.Find("US");
+            check("An object that is not named, or not of the modality, is found by nothing",
+                Core.Generation.Modalities.ModalityCatalog.FindObject(us, string.Empty) == null && Core.Generation.Modalities.ModalityCatalog.FindObject(us, null) == null
+                && Core.Generation.Modalities.ModalityCatalog.FindObject(us, "enhanced-ct") == null, null);
+            select("US", "us");
+            var older = new MainViewModel();
+            check("Settings naming the ordinary image: the same modality and that image, with one frame", older.SelectedModality.Code == "US" && older.SelectedImageObject.DatasetProfileId == "us"
+                && !older.IsMultiFrame && older.FramesPerImage == 1, older.SelectedModality + " " + older.SelectedImageObject + " " + older.FramesPerImage);
+            select("US", "us-multiframe");
+            vm.FramesPerImage = 6;
 
             // What is refused, before anything is sent.
             Func<Task<string>> refused = async () =>
@@ -776,7 +814,7 @@ namespace DCST4.Tests
             var tooMany = await refused();
             check("10001 frames are refused", tooMany.Contains("at most 10000"), tooMany);
 
-            vm.SelectedModality = named("CT");
+            select("CT", "ct");
             check("Back to CT: one frame again", !vm.IsMultiFrame && vm.FramesPerImage == 1, vm.FramesPerImage.ToString());
             vm.Rows = 64;
             vm.Columns = 64;
@@ -795,12 +833,12 @@ namespace DCST4.Tests
             p.SelectedMix = p.Mixes.Last();
             check("custom with CT in JPEG Baseline: the plan is the problem", p.Problem != null && p.Problem.Contains("at most 8 bits") && p.PlanText == p.Problem, p.PlanText);
 
-            vm.SelectedModality = named("US Multi-frame");
+            select("US", "us-multiframe");
             vm.Rows = 64;
             vm.Columns = 64;
             vm.FramesPerImage = 6;
-            check("custom: the text beside the list says what the Exam tab describes", p.MixDescription == "From the Exam tab: US Multi-frame 64 x 64, 8 bits, 6 frames, JPEG Baseline (Process 1, lossy)", p.MixDescription);
-            check("custom: the plan names it", p.Problem == null && p.PlanText.StartsWith("Stores 3 new objects", StringComparison.Ordinal) && p.PlanText.Contains("mix custom: US Multi-frame 64 x 64, 8 bits, 6 frames"), p.PlanText);
+            check("custom: the text beside the list says what the Exam tab describes", p.MixDescription == "From the Exam tab: Ultrasound Multi-frame Image 64 x 64, 8 bits, 6 frames, JPEG Baseline (Process 1, lossy)", p.MixDescription);
+            check("custom: the plan names it", p.Problem == null && p.PlanText.StartsWith("Stores 3 new objects", StringComparison.Ordinal) && p.PlanText.Contains("mix custom: Ultrasound Multi-frame Image 64 x 64, 8 bits, 6 frames"), p.PlanText);
 
             var told = new List<string>();
             p.PropertyChanged += (s, e) => told.Add(e.PropertyName);
@@ -823,12 +861,12 @@ namespace DCST4.Tests
                 h.Messages.Clear();
                 await h.Execute(vm.RunPerformanceCommand);
                 var loaded = Scp.Received.ToList();
-                check("custom: the question before the run describes the object", asked != null && asked.Contains("mix custom: US Multi-frame 64 x 64, 8 bits, 12 frames"), asked);
+                check("custom: the question before the run describes the object", asked != null && asked.Contains("mix custom: Ultrasound Multi-frame Image 64 x 64, 8 bits, 12 frames"), asked);
                 check("custom: the load run stores three cine loops of 12 frames with the payload", h.Messages.Count == 0 && p.Verdict.StartsWith("PASS", StringComparison.Ordinal) && loaded.Count == 3
                     && loaded.All(r => r.Syntax == DicomTransferSyntax.JPEGProcess1 && r.Dataset.GetSingleValue<int>(DicomTag.NumberOfFrames) == 12 && PrivatePayload.BytesIn(r.Dataset) == PrivatePayload.BytesPerMegabyte)
                     && loaded.Select(r => r.Dataset.GetString(DicomTag.SOPInstanceUID)).Distinct().Count() == 3, p.Verdict + " " + string.Join("; ", h.Messages));
                 var report = Directory.GetFiles(vm.TestSuite.ResultsFolder, "DCST4-run-*.html").OrderBy(File.GetLastWriteTimeUtc).LastOrDefault();
-                check("custom: the report says what the mix was", report != null && File.ReadAllText(report).Contains("custom: US Multi-frame 64 x 64, 8 bits, 12 frames, JPEG Baseline (Process 1, lossy), 1 MB private payload"), report);
+                check("custom: the report says what the mix was", report != null && File.ReadAllText(report).Contains("custom: Ultrasound Multi-frame Image 64 x 64, 8 bits, 12 frames, JPEG Baseline (Process 1, lossy), 1 MB private payload"), report);
             }
             finally
             {
@@ -842,7 +880,7 @@ namespace DCST4.Tests
             // The settings are shared with the sections that follow, in memory.
             vm.PrivatePayloadMb = MainViewModel.DefaultPrivatePayloadMb;
             vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
-            vm.SelectedModality = named("CT");
+            select("CT", "ct");
             Scp.Reset();
         }
 
@@ -1586,7 +1624,8 @@ namespace DCST4.Tests
                 vm.ProfileName = string.Empty;
                 vm.SaveFolder = string.Empty;
                 vm.TestSuite.ResultsFolder = @"C:\Temp\DCST4 results";
-                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.FindForGenerateAndSend("US Multi-frame");
+                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
+                vm.SelectedImageObject = Core.Generation.Modalities.ModalityCatalog.FindObject(vm.SelectedModality, "us-multiframe");
                 vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
                 vm.PrivatePayloadMb = MainViewModel.DefaultPrivatePayloadMb;
                 vm.AddPrivatePayload = true;
@@ -1605,31 +1644,42 @@ namespace DCST4.Tests
                 Func<FrameworkElement, string, bool> boundTo = (element, path) =>
                     (element is TextBox ? System.Windows.Data.BindingOperations.GetBinding(element, TextBox.TextProperty) : System.Windows.Data.BindingOperations.GetBinding(element, System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty))?.Path.Path == path;
                 var all = VisualDescendants(content).OfType<FrameworkElement>().ToList();
+                var objects = all.OfType<ComboBox>().SingleOrDefault(c => System.Windows.Data.BindingOperations.GetBinding(c, ComboBox.SelectedItemProperty)?.Path.Path == nameof(vm.SelectedImageObject));
                 var frames = all.OfType<TextBox>().SingleOrDefault(t => boundTo(t, nameof(vm.FramesPerImage)));
                 var tick = all.OfType<CheckBox>().SingleOrDefault(c => boundTo(c, nameof(vm.AddPrivatePayload)));
                 var size = all.OfType<TextBox>().SingleOrDefault(t => boundTo(t, nameof(vm.PrivatePayloadMb)));
                 var examTabs = all.OfType<TabControl>().First(t => t.Items.OfType<TabItem>().Any(i => (string)i.Header == "Exam"));
 
-                check("Exam tab: Frames per image, the payload box and its size are drawn", frames != null && tick != null && size != null && frames.ActualHeight > 0 && tick.ActualHeight > 0 && size.ActualWidth > 0, null);
+                check("Exam tab: Object, Frames per image, the payload box and its size are drawn", objects != null && frames != null && tick != null && size != null
+                    && objects.ActualHeight > 0 && frames.ActualHeight > 0 && tick.ActualHeight > 0 && size.ActualWidth > 0, null);
+                check("Exam tab: the Object list holds the two images of US, the cine loop selected", objects != null && objects.Items.Count == 2
+                    && string.Join(" | ", objects.Items.OfType<object>().Select(o => o.ToString())) == "Ultrasound Image | Ultrasound Multi-frame Image"
+                    && objects.SelectedItem?.ToString() == "Ultrasound Multi-frame Image", objects == null ? null : string.Join(" | ", objects.Items.OfType<object>().Select(o => o.ToString())));
                 Func<FrameworkElement, bool> inside = element =>
                 {
                     var corner = element.TransformToAncestor(examTabs).Transform(new Point(0, 0));
                     return corner.X >= 0 && corner.Y >= 0 && corner.X + element.ActualWidth <= examTabs.ActualWidth && corner.Y + element.ActualHeight <= examTabs.ActualHeight;
                 };
-                check("Exam tab: they fit inside the tab at the smallest window size", frames != null && tick != null && size != null && inside(frames) && inside(tick) && inside(size),
+                check("Exam tab: they fit inside the tab at the smallest window size", objects != null && frames != null && tick != null && size != null && inside(objects) && inside(frames) && inside(tick) && inside(size),
                     examTabs.ActualWidth + " x " + examTabs.ActualHeight);
-                check("Exam tab: Frames is on for a multi-frame modality and shows its 30 frames, and the size is on when the box is ticked", frames != null && frames.IsEnabled && frames.Text == "30" && size != null && size.IsEnabled && size.Text == "100", frames?.Text);
+                check("Exam tab: Frames is on for a multi-frame object and shows its 30 frames, and the size is on when the box is ticked", frames != null && frames.IsEnabled && frames.Text == "30" && size != null && size.IsEnabled && size.Text == "100", frames?.Text);
                 vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
                 vm.AddPrivatePayload = false;
                 await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
                 check("Exam tab: with CT, Frames shows 1 and is off, and so is the size while the box is not ticked", frames != null && !frames.IsEnabled && frames.Text == "1" && size != null && !size.IsEnabled, frames?.Text);
-                var problems = listener.Errors.Where(e => e.Contains("FramesPerImage") || e.Contains("IsMultiFrame") || e.Contains("PrivatePayload") || e.Contains("MixDescription")).ToList();
+                check("Exam tab: the Object list follows the modality", objects != null && objects.Items.Count == 2 && objects.SelectedItem?.ToString() == "CT Image", objects?.SelectedItem?.ToString());
+                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CR");
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+                check("Exam tab: a modality with one object shows that one", objects != null && objects.Items.Count == 1 && objects.SelectedItem?.ToString() == "Computed Radiography Image", objects?.SelectedItem?.ToString());
+                var problems = listener.Errors.Where(e => e.Contains("FramesPerImage") || e.Contains("IsMultiFrame") || e.Contains("PrivatePayload") || e.Contains("MixDescription")
+                    || e.Contains("ImageObject")).ToList();
                 check("Exam tab: every new binding resolves", problems.Count == 0, string.Join("\n", problems));
 
                 if (pngPath != null)
                 {
                     // A cine loop as an ultrasound system sends it, for the picture in the README. Nothing here is saved.
-                    vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.FindForGenerateAndSend("US Multi-frame");
+                    vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
+                    vm.SelectedImageObject = Core.Generation.Modalities.ModalityCatalog.FindObject(vm.SelectedModality, "us-multiframe");
                     vm.SeriesCount = 1;
                     vm.ImagesPerSeries = 1;
                     vm.Rows = 960;
