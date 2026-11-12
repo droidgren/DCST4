@@ -394,10 +394,12 @@
                     </Paragraph>
                     <Paragraph>
                         Under <Bold>Results</Bold> in <Bold>Test settings...</Bold>, the boxes after
-                        <Bold>Each run writes</Bold> choose which of the three files a run writes: JSON, CSV and the HTML
-                        report. All three are ticked from the start. <Bold>Compare runs...</Bold> reads the JSON file, so a
-                        run saved without it cannot be compared later. With no box ticked a run writes nothing, and the
-                        status bar says so. The series files of a Performance test are always written.
+                        <Bold>Each run writes</Bold> choose which files a run writes: JSON, CSV, the HTML report, and the
+                        series files of a Performance test. All four are ticked from the start. <Bold>Compare runs...</Bold>
+                        reads the JSON file, so a run saved without it cannot be compared later. The series files, one row per
+                        second, are written while a Performance test runs, so a crash keeps what was measured, and the
+                        report draws its per-second charts from them. With no box ticked a run writes nothing, and the
+                        status bar says so.
                     </Paragraph>
                     <Paragraph>
                         <Bold>Delete results older than</Bold> makes DCST4 tidy the results folder. After each run it
@@ -600,10 +602,19 @@
                         The <Bold>Performance</Bold> tab measures throughput and latency against the destination above.
                         <Bold>Every image sent is a new object on the PACS, which may not be possible to delete.</Bold> Before a
                         run starts, DCST4 shows how many objects it will store at most, about how much data that is, and the
-                        destination, and starts only when you say yes. <Bold>Max instances</Bold> caps every run. It shows the default of the selected test until you change it: 1000 for Load, 2000 for Ramp and the rate times the duration for Soak. A value you set applies to all three tests, and 0 goes back to the defaults. A fast PACS can
+                        destination, and starts only when you say yes. The test and the <Bold>Mix</Bold> are chosen on the tab,
+                        and everything else in <Bold>Performance settings...</Bold>, where every setting explains itself on hover.
+                        <Bold>Max instances</Bold> caps every run. It shows the default of the selected test until you change it: 1000 for Load, 2000 for Ramp and the rate times the duration for Soak. A value you set applies to all three tests, and 0 goes back to the defaults. A fast PACS can
                         reach it before the duration is over. The run then ends early, and the result and the table say that
                         throughput and latency come from a shorter window. Raise <Bold>Max instances</Bold>, shorten the duration or
                         set a <Bold>Rate</Bold>.
+                    </Paragraph>
+                    <Paragraph>
+                        <Bold>Associations</Bold> is how many associations are open at the same time, each with one C-STORE in
+                        flight: this is what loads the PACS. <Bold>Per association</Bold> is how many images an association
+                        sends before it is released and a new one is opened in its place. It never changes how many are open at
+                        once, only how often they are replaced, and tests association setup under load. With 4 associations and
+                        1000 images, 0 opens 4 associations in all, 50 about 20, and 1 opens one per image.
                     </Paragraph>
                     <Table>
                         <Table.Columns>
@@ -633,7 +644,10 @@
                         The chart shows stored and failed per second and latency p50 and p95, at most once a second. The
                         warm-up is the shaded band marked <Italic>warm-up</Italic>, and ramp steps are marked. The last second
                         of a run is usually cut short, so it is left out of the lines. Hover over the chart to see one second. The progress bar at the bottom of the window follows the run once a second: time against the duration, all steps of a ramp, or images against the count.
-                        The table below it fills in when the run is over.
+                        The table below it fills in when the run is over. A row in red had images that were not stored or
+                        associations that failed, the same red as a FAIL on the Tests tab, and its <Bold>Note</Bold> starts with
+                        how many and their raw status codes. A row in yellow is a ramp step or a soak window to look at.
+                        The rest of the Note says how the run stopped, which is information and never a fault.
                     </Paragraph>
                     <Paragraph>
                         <Bold>p50, p95 and p99</Bold> are percentiles of the latency. p50 is the median: half the C-STOREs

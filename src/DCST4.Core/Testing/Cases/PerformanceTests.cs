@@ -309,7 +309,8 @@ namespace DCST4.Core.Testing.Cases
             // A fast system can use up the ceiling long before the duration, and then the summary covers a short window.
             if (run.Performance.EndedByCeiling)
             {
-                run.Result.Explanation += $" The ceiling of {Fixtures.Int(budget)} instances ended the run before the {Number(duration)} s were up, so throughput and latency come from a shorter window than asked for. Raise the ceiling (Max instances, --load-max-instances), shorten the duration or set a rate.";
+                var stop = run.Performance.DescribeStop();
+                run.Result.Explanation += " Note: " + char.ToLowerInvariant(stop[0]) + stop.Substring(1) + " Raise Max instances (--load-max-instances), shorten the duration or set a rate.";
             }
         }
 

@@ -66,6 +66,12 @@ namespace DCST4.Tests
                 Vm.BurnInText = false;
                 Vm.BurnInTags = BurnedInTagCatalog.DefaultKeywords;
                 Vm.AdditionalTagSettings = new AdditionalTagSetting[0];
+                // The view model starts from the user's real settings, read only. The result files must not depend on them.
+                Vm.WriteResultJson = true;
+                Vm.WriteResultCsv = true;
+                Vm.WriteResultHtml = true;
+                Vm.WriteResultSeries = true;
+                Vm.ResultsKeepDays = 0;
             }
 
             /// <summary>Executes a command and waits until the view model is idle again.</summary>
@@ -140,6 +146,7 @@ namespace DCST4.Tests
                 vm.WriteResultJson = false;
                 vm.WriteResultCsv = false;
                 vm.WriteResultHtml = false;
+                vm.WriteResultSeries = false;
                 vm.ResultsKeepDays = 14;
                 vm.Comparison.ReloadFromSettings();
                 var thresholdBefore = vm.Comparison.ThresholdText;
@@ -165,8 +172,8 @@ namespace DCST4.Tests
                 check("Confirmed: the Performance tab is the defaults", vm.Performance.SelectedMode == vm.Performance.Modes[0] && vm.Performance.Associations == Core.Performance.LoadSettings.DefaultAssociations, vm.Performance.Associations.ToString());
                 check("Confirmed: the exam and File > Settings are the defaults", vm.SelectedModality.Code == "CT" && vm.SeriesCount == 1 && !vm.BurnInText && (string)settings["TestPatientNaming"] == "MarkedTestName" && (int)settings["ResponseTimeoutSeconds"] == 60, (string)settings["TestPatientNaming"]);
                 check("Confirmed: the comparison threshold is the default", thresholdBefore == "25" && vm.Comparison.ThresholdText == "10" && (double)settings["CompareThresholdPercent"] == 10, vm.Comparison.ThresholdText);
-                check("Confirmed: every result file is written again and nothing is deleted", vm.WriteResultJson && vm.WriteResultCsv && vm.WriteResultHtml && vm.ResultsKeepDays == 0
-                    && (bool)settings["WriteResultJson"] && (int)settings["ResultsKeepDays"] == 0, null);
+                check("Confirmed: every result file is written again and nothing is deleted", vm.WriteResultJson && vm.WriteResultCsv && vm.WriteResultHtml && vm.WriteResultSeries && vm.ResultsKeepDays == 0
+                    && (bool)settings["WriteResultJson"] && (bool)settings["WriteResultSeries"] && (int)settings["ResultsKeepDays"] == 0, null);
                 check("Confirmed: the saved destination profiles are kept", (string)settings["ConnectionProfiles"] == "<kept on purpose/>", null);
                 check("Confirmed: saved once, and every binding told", h.Saves == savesBefore + 1 && raised.Contains(string.Empty) && vm.StatusText.Contains("reset"), vm.StatusText);
 
@@ -896,8 +903,9 @@ namespace DCST4.Tests
             {
                 h.Messages.Clear();
                 var copy = new TestSettingsViewModel(vm);
-                check("Test settings: all three files are written and nothing is deleted, by default", copy.WriteJson && copy.WriteCsv && copy.WriteHtml && copy.KeepDays == "0", copy.KeepDays);
+                check("Test settings: all three files are written and nothing is deleted, by default", copy.WriteJson && copy.WriteCsv && copy.WriteHtml && copy.WriteSeries && copy.KeepDays == "0", copy.KeepDays);
                 copy.WriteHtml = false;
+                copy.WriteSeries = false;
                 copy.KeepDays = "a week";
                 var settingsProblem = copy.Apply();
                 check("Test settings: days that are no number are named, and nothing is applied", settingsProblem != null && settingsProblem.Contains("Delete results older than") && vm.WriteResultHtml && vm.ResultsKeepDays == 0, settingsProblem);
@@ -906,7 +914,7 @@ namespace DCST4.Tests
                 check("Test settings: more than 3650 days is refused", settingsProblem != null && settingsProblem.Contains("3650") && vm.ResultsKeepDays == 0, settingsProblem);
                 copy.KeepDays = "30";
                 settingsProblem = copy.Apply();
-                check("Test settings: applied at OK", settingsProblem == null && !vm.WriteResultHtml && vm.WriteResultJson && vm.WriteResultCsv && vm.ResultsKeepDays == 30, settingsProblem);
+                check("Test settings: applied at OK", settingsProblem == null && !vm.WriteResultHtml && !vm.WriteResultSeries && vm.WriteResultJson && vm.WriteResultCsv && vm.ResultsKeepDays == 30, settingsProblem);
 
                 // Planted in the results folder: an old run, an old comparison and a file that is not ours.
                 Func<string, int, string> plant = (name, daysOld) =>
@@ -955,6 +963,7 @@ namespace DCST4.Tests
                 vm.WriteResultJson = true;
                 vm.WriteResultCsv = true;
                 vm.WriteResultHtml = true;
+                vm.WriteResultSeries = true;
                 vm.ResultsKeepDays = 0;
             }
             Scp.Reset();
@@ -991,6 +1000,7 @@ namespace DCST4.Tests
             vm.Confirm = message => { asked = message; return false; };
             await h.Execute(vm.RunPerformanceCommand);
             check("Run asks first, naming the destination, and a No sends nothing", asked != null && asked.Contains("MOCKSCP at 127.0.0.1:" + port) && Scp.StoreCount == 0 && vm.StatusText.Contains("not started"), asked);
+            check("The question ends the line after the destination", asked != null && asked.Contains("MOCKSCP at 127.0.0.1:" + port + ".\n\n"), asked);
 
             vm.Confirm = message => true;
             var chartUpdates = 0;
@@ -998,9 +1008,21 @@ namespace DCST4.Tests
             await h.Execute(vm.RunPerformanceCommand);
             check("Run: the test stored what the plan said", Scp.StoreCount == 6 && h.Messages.Count == 0, Scp.StoreCount + " " + string.Join("; ", h.Messages));
             check("Run: the summary table has the whole run", p.Rows.Count == 1 && p.Rows[0].Stored >= 0 && p.Rows[0].Associations == 2 && p.Verdict.StartsWith("PASS", StringComparison.Ordinal), p.Verdict);
+            check("Run: a run without problems is not red, and its Note says how it stopped", !p.Rows[0].Problem && !p.Rows[0].Marked
+                && (p.Rows[0].Note.StartsWith("Stopped after all ", StringComparison.Ordinal) || p.Rows[0].Note.StartsWith("Ran for the whole duration", StringComparison.Ordinal)), p.Rows[0].Note);
             check("Run: the chart got its seconds, drawn at most once a second", p.Series.Count >= 1 && chartUpdates >= 1 && chartUpdates <= p.Series.Count + 2, p.Series.Count + " seconds, " + chartUpdates + " updates");
             check("Run: the result and series files are named", p.Files != null && p.Files.Contains(".json") && p.Files.Contains("-load-throughput.csv"), p.Files);
             check("Run: idle again, progress at the end", !vm.IsBusy && vm.ProgressValue == vm.ProgressMaximum && vm.ProgressMaximum == MainViewModel.PerformanceProgressSteps, vm.ProgressValue + " of " + vm.ProgressMaximum);
+
+            // Test settings can turn the series files off; the run and its result files are unchanged.
+            var seriesBefore = Directory.GetFiles(vm.TestSuite.ResultsFolder, "*-load-throughput.csv").Length;
+            vm.WriteResultSeries = false;
+            Scp.Reset();
+            await h.Execute(vm.RunPerformanceCommand);
+            check("Series off: the run stores, writes its JSON and no series file",
+                Scp.StoreCount == 6 && p.Files != null && p.Files.Contains(".json") && !p.Files.Contains("-load-throughput.csv")
+                && Directory.GetFiles(vm.TestSuite.ResultsFolder, "*-load-throughput.csv").Length == seriesBefore && p.Verdict.StartsWith("PASS", StringComparison.Ordinal), p.Files);
+            vm.WriteResultSeries = true;
 
             // The progress bar follows a soak while it runs, against its duration.
             p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Soak);
@@ -1040,6 +1062,32 @@ namespace DCST4.Tests
             var restored = new PerformanceViewModel(p.SaveSettings(), "Ramp");
             check("The settings are saved and come back", restored.Associations == 2 && restored.InstanceCount == 6 && restored.RampStepsText == "1,2,4" && restored.IsRamp, restored.RampStepsText);
             check("Saved settings that cannot be read give the defaults", new PerformanceViewModel("{not json", "nonsense").Associations == Core.Performance.LoadSettings.DefaultAssociations, null);
+
+            // The Performance settings dialog: a copy, applied only at OK, after the settings of all three tests are checked.
+            var mixBefore = p.SelectedMix;
+            var saves = 0;
+            p.SettingsChanged += () => saves++;
+            var dialog = new PerformanceSettingsViewModel(p);
+            check("Performance settings: the dialog shows the current values", dialog.Associations == "2" && dialog.RampSteps == "1,2,4" && dialog.SoakDuration == "10m" && dialog.MaxInstances == "0", dialog.Associations + " " + dialog.RampSteps + " " + dialog.SoakDuration);
+            dialog.Associations = "9";
+            check("Performance settings: nothing changes before OK", p.Associations == 2 && saves == 0, p.Associations.ToString());
+            dialog.Associations = "3";
+            dialog.InstancesPerAssociation = "5";
+            dialog.SoakDuration = "2m";
+            var applied = dialog.Apply();
+            check("Performance settings: OK applies and saves, and keeps the test and the mix", applied == null && p.Associations == 3 && p.InstancesPerAssociation == 5 && p.SoakDurationText == "2m"
+                && p.IsRamp && p.SelectedMix == mixBefore && saves > 0 && new PerformanceViewModel(p.SaveSettings(), "Load").InstancesPerAssociation == 5, applied);
+            dialog = new PerformanceSettingsViewModel(p) { Associations = "three" };
+            applied = dialog.Apply();
+            check("Performance settings: a typo is named and nothing changes", applied != null && applied.StartsWith("Associations must be a whole number", StringComparison.Ordinal) && p.Associations == 3, applied);
+            p.SelectedMode = p.Modes.First(m => m.Mode == Core.Performance.LoadMode.Load);
+            dialog = new PerformanceSettingsViewModel(p) { RampSteps = "4,2" };
+            applied = dialog.Apply();
+            check("Performance settings: a ramp problem is refused also with Load selected, and says which test", applied != null && applied.StartsWith("Ramp: ", StringComparison.Ordinal) && p.RampStepsText == "1,2,4", applied);
+            dialog = new PerformanceSettingsViewModel(p) { SoakDuration = "ten minutes" };
+            check("Performance settings: a soak duration that cannot be read is named", dialog.Apply()?.Contains("soak duration") == true, null);
+            dialog = new PerformanceSettingsViewModel(p) { MaxInstances = "0", Associations = "2", InstancesPerAssociation = "0" };
+            check("Performance settings: Max instances 0 is each test's default", dialog.Apply() == null && p.MaxInstances == 1000 && p.Associations == 2, p.MaxInstances.ToString());
 
             // The chart draws off-screen, with lines in it.
             var chart = new DCST4.Controls.LoadChart { Series = p.Series, Version = p.SeriesVersion, Width = 600, Height = 300 };
@@ -1519,7 +1567,8 @@ namespace DCST4.Tests
 
                 // Every setting names its default; the fields that describe one added tag are input, not settings.
                 var tagEditor = new[] { "TagBox", "CreatorBox", "ValueBox" };
-                var noDefault = new[] { (DependencyObject)new SettingsDialog().Content, new TestSettingsDialog(new TestSettingsViewModel(vm)).Content as DependencyObject, new TlsOptionsDialog(false, string.Empty).Content as DependencyObject }
+                var noDefault = new[] { (DependencyObject)new SettingsDialog().Content, new TestSettingsDialog(new TestSettingsViewModel(vm)).Content as DependencyObject, new TlsOptionsDialog(false, string.Empty).Content as DependencyObject,
+                        new PerformanceSettingsDialog(new PerformanceSettingsViewModel(vm.Performance)).Content as DependencyObject }
                     .SelectMany(LogicalDescendants).OfType<Control>()
                     .Where(c => (c is TextBox t && !t.IsReadOnly) || c is ComboBox || c is CheckBox)
                     .Where(c => !tagEditor.Contains(c.Name) && !(ToolTipService.GetToolTip(c) as string ?? string.Empty).Contains("\n\nDefault: "))
@@ -1576,6 +1625,33 @@ namespace DCST4.Tests
                 }
                 check("Test settings: every binding resolves and every box shows its value", dialogProblems.Count == 0 && boxes.Count == 11 && boxes.Where(b => b.Name != "ExpiredCertBox").All(b => b.Text.Length > 0),
                     string.Join("\n", dialogProblems) + " " + boxes.Count);
+                check("Test settings: four boxes for the files a run writes", LogicalDescendants(dialogContent).OfType<CheckBox>().Count() == 4, null);
+
+                var performanceSettings = new PerformanceSettingsDialog(new PerformanceSettingsViewModel(vm.Performance));
+                var performanceContent = (FrameworkElement)performanceSettings.Content;
+                performanceSettings.Content = null;
+                performanceContent.DataContext = performanceSettings.DataContext;
+                performanceContent.Measure(new Size(640, 1200));
+                performanceContent.Arrange(new Rect(0, 0, 640, performanceContent.DesiredSize.Height));
+                performanceContent.UpdateLayout();
+                bare = WithoutToolTip(performanceContent);
+                check("Performance settings: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
+                var performanceBoxes = LogicalDescendants(performanceContent).OfType<TextBox>().ToList();
+                var performanceProblems = listener.Errors.Where(e => e.Contains("PerformanceSettingsViewModel")).ToList();
+                check("Performance settings: every binding resolves and every box shows its value", performanceProblems.Count == 0 && performanceBoxes.Count == 16 && performanceBoxes.All(b => b.Text.Length > 0),
+                    string.Join("\n", performanceProblems) + " " + performanceBoxes.Count);
+                check("Performance tab: no settings boxes left, only the test and the mix", LogicalDescendants(content).OfType<TextBox>().All(t => !(System.Windows.Data.BindingOperations.GetBindingExpression(t, TextBox.TextProperty)?.ParentBinding.Path.Path ?? string.Empty).StartsWith("Performance.", StringComparison.Ordinal)
+                    || t.IsReadOnly), null);
+                if (!string.IsNullOrEmpty(picture))
+                {
+                    var size = performanceContent.DesiredSize;
+                    var performanceBitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height), 96, 96, PixelFormats.Pbgra32);
+                    performanceContent.Arrange(new Rect(size));
+                    performanceBitmap.Render(performanceContent);
+                    var performanceEncoder = new PngBitmapEncoder();
+                    performanceEncoder.Frames.Add(BitmapFrame.Create(performanceBitmap));
+                    using (var stream = File.Create(Path.ChangeExtension(picture, ".performance-settings.png"))) performanceEncoder.Save(stream);
+                }
 
                 // ------------------------------------------------ the Capabilities tab, with a real probe in it
                 Scp.Reset();

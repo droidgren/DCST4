@@ -235,16 +235,17 @@ The same program makes reports and comparisons of saved runs, with `report` and 
 
 Each run writes `DCST4-run-<UTC time>.json` with full detail, a `.csv` with one row per result, and a `.html` report for reading, see [Reports and comparison](#reports-and-comparison). The JSON and CSV files are UTF-8 and independent of the computer's language settings, and they hold a schema version, the tool version, the destination and the start and end time. The client certificate thumbprint is never written to them.
 
-**Which files, and for how long.** These two settings are under Results in **Test settings...** and apply to runs from the program. The command line always writes all three files and never deletes anything.
+**Which files, and for how long.** These two settings are under Results in **Test settings...** and apply to runs from the program. The command line always writes all its files, the series files included, and never deletes anything.
 
 | In Test settings | Default | Meaning |
 | ---------------- | ------- | ------- |
 | Each run writes: JSON | Ticked | The file with full detail, and the capability matrix as JSON. **Compare runs...** reads this file, so a run saved without it cannot be compared later |
 | Each run writes: CSV | Ticked | The file with one row per result, and the capability matrix and the chain as CSV |
 | Each run writes: HTML report | Ticked | The report. Without it, **Open report** makes one from the JSON file when you click it. Without both, the run has no report to open |
+| Each run writes: Performance series (CSV) | Ticked | The files a Performance test writes while it runs, one row per second, and the soak's windows file. Without them the report has no per-second charts, and a crash during a long soak leaves only what the program shows. The chart on the tab, the summary and the soak's windows in the JSON file are not affected |
 | Delete results older than | 0 days | After each run, the result files in the results folder that are older than this many days are deleted. 0 keeps everything |
 
-With no box ticked a run writes nothing, and the status bar says so. The series files that a Performance test writes while it runs are always written, since they are what survives a crash.
+With no box ticked a run writes nothing, and the status bar says so.
 
 **What is deleted** is decided by the name alone: files that lie directly in the results folder, start with `DCST4-run-` or `DCST4-compare-` and end in `.json`, `.csv` or `.html`, which covers the result files, the reports, the comparisons and the series files of the Performance tests. Nothing else in the folder is touched and no subfolder is looked into, since the folder is your own choice and may hold other things. The age is the time the file was last written. It happens only after a run has been saved, never when the program starts or when the setting is changed, and never to the files of the run that was just saved. The status bar says how many files were deleted, and the log has the same. A file that is open in another program is left for the next time.
 
@@ -491,17 +492,17 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 
 `--load-pdu` sets the maximum PDU length that DCST4 announces and sends its data PDUs with, at most what the PACS announces. 0, the default, is fo-dicom's default of 262144, which an ordinary send uses.
 
-| Setting on the Performance tab | Command line                  | Default | Meaning |
+| In Performance settings        | Command line                  | Default | Meaning |
 | ------------------------------ | ----------------------------- | ------- | ------- |
-| Associations                   | `--load-associations`         | 4       | Associations at once, 1 to 256. In the ramp, the steps decide |
+| Associations                   | `--load-associations`         | 4       | Associations open at the same time, each with one C-STORE in flight: what loads the PACS. 1 to 256. In the ramp, the steps decide |
 | Duration                       | `--load-duration`             | 20 s    | How long `load-throughput` runs. `90`, `90s`, `5m` and `1h` all work |
 | Count                          | `--load-count`                | 0       | Send exactly this many instead. 0 runs for the duration |
 | Rate                           | `--load-rate`                 | 0       | Instances per second over all associations. 0 sends as fast as the PACS answers. A late worker sends at once and does not burst to catch up |
-| Per association                | `--load-per-association`      | 0       | Release and open a new association after this many. 0 keeps one association for the whole run |
-| Mix                            | `--load-mix`                  | `ct`    | See above |
+| Per association                | `--load-per-association`      | 0       | How many images an association sends before it is released and a new one is opened in its place. It never changes how many are open at once, and tests association setup under load. With 4 associations and 1000 images, 0 opens 4 in all, 50 about 20, and 1 opens one per image |
+| Mix (on the tab)               | `--load-mix`                  | `ct`    | See above |
 | Max PDU                        | `--load-pdu`                  | 0       | See above |
 | Warm-up                        | `--load-warmup`               | 2 s     | Left out of the summary |
-| Max instances                  | `--load-max-instances`        | 0       | The ceiling of the run. 0 is the default of each test: 1000, 2000 for the ramp, and the rate times the duration for the soak. The tab shows the ceiling of the selected test, the default until you set one. A value you set applies to all three tests |
+| Max instances                  | `--load-max-instances`        | 0       | The ceiling of the run. 0 is the default of each test: 1000, 2000 for the ramp, and the rate times the duration for the soak. A value you set applies to all three tests |
 | Steps                          | `--ramp-steps`                | 1,2,4,8 | Associations per ramp step, rising |
 | Each step                      | `--ramp-step-duration`        | 10 s    | How long each ramp step runs |
 | Duration (soak)                | `--soak-duration`             | 30m     | How long the soak runs |
@@ -509,7 +510,7 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 | Snapshot every                 | `--soak-snapshot`             | 60 s    | How often a window is closed and written |
 | Time-to-available              | `--tta-sample`, `--tta-interval`, `--tta-timeout` | 50, 2 s, 60 s | See above. 0 turns the polling off |
 
-**Planned total.** A count is exact. Otherwise the plan is the ceiling, or the rate times the duration if that is lower, and the size is that times the uncompressed size of the mix, an upper bound for a compressed mix. With the defaults, `load-throughput` stores at most 1000 CT images of 130 KB, 135 MB, `load-ramp` at most 2000, and `load-soak` 3600 in its 30 minutes. A system that takes images faster than the ceiling divided by the duration, 50 per second with the defaults, reaches the ceiling before the duration is over, and the plan says so. The run then ends early: the result has `endedByCeiling`, the explanation says that throughput and latency come from a shorter window than asked for, and the table on the Performance tab marks the row. Raise the ceiling, shorten the duration or set a rate.
+**Planned total.** A count is exact. Otherwise the plan is the ceiling, or the rate times the duration if that is lower, and the size is that times the uncompressed size of the mix, an upper bound for a compressed mix. With the defaults, `load-throughput` stores at most 1000 CT images of 130 KB, 135 MB, `load-ramp` at most 2000, and `load-soak` 3600 in its 30 minutes. A system that stores images faster than the ceiling divided by the duration, 50 per second with the defaults, reaches the ceiling before the duration is over, and the plan says so. The run then ends early: the result has `endedByCeiling`, the explanation says that throughput and latency come from a shorter window than asked for, and the Note in the table on the Performance tab says so. Raise the ceiling, shorten the duration or set a rate.
 
 **Files.** Besides the usual result files, each test writes `DCST4-run-<start>-<test id>.csv` while it runs, with one row per second: stored, failed, bytes, MB/s, latency p50, p95 and maximum, open associations, how busy this computer's processor was, and whether the second is the last of a run or ramp step and so shorter than a second (`partial`). The steps of a ramp follow each other in it without the moment between them when associations are released and opened again. The soak also writes `DCST4-run-<start>-load-soak-windows.csv`, one row per snapshot window, and both files are written through to the disk at each snapshot, so a crash or a power cut keeps what was measured. The command line writes them under `--out`, and the program in the results folder set in Test settings on the Tests tab. The `performance` section of the JSON file holds the settings, the plan, why the run stopped, whether the ceiling ended it early, the summary, the steps and the saturation, the windows and the degradation, the time-to-available, and the state of this computer. The explanation never holds a measured number.
 
@@ -910,6 +911,11 @@ Changed:
 
 - `DCST4.Cli.exe run` prints the path of the report after the JSON and CSV files
 - The plan before a Performance test, on the tab and on the command line, no longer ends with "They may not be possible to delete."
+- The plan says in plainer words what happens when a fast system reaches Max instances before the duration is over: "A system that stores more than 50 objects per second has stored all 1,000 (Max instances) before the 20 s are up, and the run ends early."
+- The settings of the Performance tab, apart from the test and the mix, are in a new **Performance settings...** dialog, in groups: Associations, Load, Ramp, Soak, Every test and Time-to-available. Nothing changes until OK, which checks the settings of all three tests. Every setting has a tooltip, and those of **Associations** and **Per association** explain the difference between them
+- The question before a Performance run puts the destination, the warning about Max instances and the advice on lines of their own
+- A fourth box under Each run writes, **Performance series (CSV)**, turns off the series files a Performance test writes while it runs. It is ticked by default
+- In the summary table on the Performance tab, a row with images that were not stored is red, like a FAIL on the Tests tab, and its Note starts with how many and their raw status codes. A run that reached Max instances early is no longer marked yellow, and the Note, the explanation and the report say so as information, not as a fault. The report's "Stopped by" row is now "Stopped", with a "Problems" row above it when there were any
 
 ### 1.9.1
 

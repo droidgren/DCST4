@@ -122,18 +122,20 @@
                     <Label DockPanel.Dock="Left" Content="Results folder:" Width="200" ToolTip="{Binding ToolTip, ElementName=ResultsFolderBox}"/>
                     <Button DockPanel.Dock="Right" Content="..." Width="26" Margin="4,2,0,2" Click="BrowseButton_Click" ToolTip="Select the folder"/>
                     <TextBox x:Name="ResultsFolderBox" Text="{Binding ResultsFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Where each run writes its JSON, CSV and HTML result files, the comparisons of runs, and the Performance tests their series files. It is made if it is not there.&#x0a;&#x0a;Default: %LocalAppData%\DCST4\TestRuns."/>
+                             ToolTip="Where each run writes its JSON, CSV and HTML result files and the Performance tests their series files, and where the comparisons of runs go. It is made if it is not there.&#x0a;&#x0a;Default: %LocalAppData%\DCST4\TestRuns."/>
                 </DockPanel>
                 <DockPanel>
-                    <Label DockPanel.Dock="Left" Content="Each run writes:" Width="200" ToolTip="Which result files a run on the Tests or Performance tab writes. With none ticked a run leaves no result files. The series files that a Performance test writes while it runs are always written.&#x0a;&#x0a;Default: all three."/>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Label DockPanel.Dock="Left" Content="Each run writes:" Width="200" ToolTip="Which result files a run on the Tests or Performance tab writes. With none ticked a run leaves no files in the results folder. The results are shown in the program either way.&#x0a;&#x0a;Default: all four."/>
+                    <WrapPanel VerticalAlignment="Center">
                         <CheckBox Content="JSON" IsChecked="{Binding WriteJson, Mode=TwoWay}" VerticalAlignment="Center"
                                   ToolTip="The file with full detail, DCST4-run-&lt;time&gt;.json, and the capability matrix as JSON. Compare runs... reads this file, and Open report can make a report from it again. Without it a run cannot be compared later.&#x0a;&#x0a;Default: ticked."/>
                         <CheckBox Content="CSV" IsChecked="{Binding WriteCsv, Mode=TwoWay}" VerticalAlignment="Center" Margin="16,0,0,0"
                                   ToolTip="The file with one row per result, and the capability matrix and the chain as CSV, for a spreadsheet.&#x0a;&#x0a;Default: ticked."/>
                         <CheckBox Content="HTML report" IsChecked="{Binding WriteHtml, Mode=TwoWay}" VerticalAlignment="Center" Margin="16,0,0,0"
                                   ToolTip="The report for reading, one file that is complete in itself, which Open report opens. Without it, Open report makes one from the JSON file when you click it.&#x0a;&#x0a;Default: ticked."/>
-                    </StackPanel>
+                        <CheckBox Content="Performance series (CSV)" IsChecked="{Binding WriteSeries, Mode=TwoWay}" VerticalAlignment="Center" Margin="16,0,0,0"
+                                  ToolTip="The files a Performance test writes while it runs: DCST4-run-&lt;time&gt;-load-throughput.csv, -load-ramp.csv or -load-soak.csv with one row per second, and for a soak -load-soak-windows.csv with one row per snapshot. They are written as the test goes, so a crash during a long soak keeps what was measured. Without them the HTML report has no per-second charts. The chart on the Performance tab, the summary and the soak's windows in the JSON file are not affected.&#x0a;&#x0a;Default: ticked."/>
+                    </WrapPanel>
                 </DockPanel>
                 <DockPanel>
                     <Label DockPanel.Dock="Left" Content="Delete results older than:" Width="200" ToolTip="{Binding ToolTip, ElementName=KeepDaysBox}"/>

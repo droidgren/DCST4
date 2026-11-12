@@ -507,7 +507,9 @@ namespace DCST4.Core.Reporting
                 html.Pair("Maximum PDU length", ReportFormat.Number(p.MaxPdu));
                 html.Pair("Settings", DescribeSettings(p));
                 html.Pair("Planned", $"at most {ReportFormat.Number(p.PlannedInstances)} instances, about {ReportFormat.Decimal(p.PlannedMegabytes)} MB");
-                html.Pair("Stopped by", p.StoppedBy + (p.EndedByCeiling ? ". The instance ceiling ended the run early, so the numbers come from a shorter window than asked for" : string.Empty));
+                var problems = p.Summary?.Errors?.DescribeProblems();
+                if (problems != null) html.Pair("Problems", problems);
+                html.Pair("Stopped", p.DescribeStop());
                 if (r.Details != null && r.Details.TryGetValue("firstProblem", out var firstProblem)) html.Pair("First problem", firstProblem);
                 if (p.Saturation != null) html.Pair("Saturation", p.Saturation.Description);
                 if (p.Degradation != null) html.Pair("Degradation", p.Degradation.Description);

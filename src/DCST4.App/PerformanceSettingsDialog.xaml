@@ -1,0 +1,203 @@
+<Window x:Class="DCST4.PerformanceSettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Performance settings"
+        Width="640"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="Unit">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+            <Setter Property="Foreground" Value="#FF505050"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style TargetType="Label">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="0,4,10,4"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+    </Window.Resources>
+    <StackPanel Margin="15">
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,8" Foreground="#FF505050"
+                   Text="The settings of the three Performance tests. The test and the mix are chosen on the Performance tab. Every image sent is a new object on the destination, and Max instances caps every run."/>
+
+        <GroupBox Header="Associations" Padding="6,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Associations:" ToolTip="{Binding ToolTip, ElementName=AssociationsBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="AssociationsBox" Text="{Binding Associations, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="How many associations are open at the same time, for Load and Soak. Each has its own worker and one C-STORE in flight at a time: it waits for the response before it sends the next image. This is what loads the destination, like that many modalities sending together. With 4, four images are in flight at once. The Ramp uses its steps instead. 1 to 256.&#x0a;&#x0a;Default: 4."/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="at once (Load and Soak; the Ramp uses its steps)"/>
+
+                <Label Grid.Row="1" Content="Per association:" ToolTip="{Binding ToolTip, ElementName=PerAssociationBox}"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="PerAssociationBox" Text="{Binding InstancesPerAssociation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="How many images an association sends before it is released and a new one is opened in its place, in every test. It never changes how many associations are open at once, only how often they are replaced. It tests association setup under load, as with a modality that opens a new association for every study or every image, and the time each setup took is in the Setup p50 ms column.&#x0a;&#x0a;With 4 associations and 1000 images: 0 opens 4 associations in all, 50 about 20, and 1 opens 1000, one per image.&#x0a;&#x0a;Default: 0, each association stays open for the whole run."/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="images, then a new association (0 keeps it for the whole run)"/>
+
+                <Label Grid.Row="2" Content="Max PDU:" ToolTip="{Binding ToolTip, ElementName=MaxPduBox}"/>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="MaxPduBox" Text="{Binding MaxPdu, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="The maximum PDU length DCST4 announces and sends with, at most what the destination announces. 0, or 1024 to 16777216.&#x0a;&#x0a;Default: 0, fo-dicom's default of 262144 bytes."/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="bytes (0 is fo-dicom's default)"/>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Header="Load" Padding="6,4" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Duration:" ToolTip="{Binding ToolTip, ElementName=DurationBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="DurationBox" Text="{Binding DurationSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds the load test runs, when the count is 0. A fast destination can reach Max instances first, and the run then ends early.&#x0a;&#x0a;Default: 20 s."/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+
+                <Label Grid.Row="1" Content="Or count:" ToolTip="{Binding ToolTip, ElementName=CountBox}"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="CountBox" Text="{Binding InstanceCount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Send exactly this many images instead of running for a duration, at most Max instances. 0 runs for the duration.&#x0a;&#x0a;Default: 0, which runs for the duration."/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="images (0 runs for the duration)"/>
+
+                <Label Grid.Row="2" Content="Rate:" ToolTip="{Binding ToolTip, ElementName=RateBox}"/>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="RateBox" Text="{Binding RatePerSecond, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Images per second over all associations together. 0 sends as fast as the destination answers, which measures the highest throughput. A rate gives steady load and measures latency at that load.&#x0a;&#x0a;Default: 0, as fast as the destination answers."/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="per second (0 is as fast as it answers)"/>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Header="Ramp" Padding="6,4" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Steps:" ToolTip="{Binding ToolTip, ElementName=StepsBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="StepsBox" Text="{Binding RampSteps, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Associations at once in each step of the ramp, rising, separated by commas. The ramp runs them one after the other and finds the step where more associations stop helping.&#x0a;&#x0a;Default: 1,2,4,8."/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="associations at once, rising, for example 1,2,4,8"/>
+
+                <Label Grid.Row="1" Content="Each step:" ToolTip="{Binding ToolTip, ElementName=StepSecondsBox}"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="StepSecondsBox" Text="{Binding RampStepSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds each step of the ramp runs. The warm-up must be shorter.&#x0a;&#x0a;Default: 10 s."/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Header="Soak" Padding="6,4" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Duration:" ToolTip="{Binding ToolTip, ElementName=SoakDurationBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="SoakDurationBox" Text="{Binding SoakDuration, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="How long the soak runs, as seconds or with s, m or h, for example 90s, 30m or 8h.&#x0a;&#x0a;Default: 30m."/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="for example 90s, 30m or 8h"/>
+
+                <Label Grid.Row="1" Content="Rate:" ToolTip="{Binding ToolTip, ElementName=SoakRateBox}"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="SoakRateBox" Text="{Binding SoakRatePerSecond, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Images per second over all associations during the soak. A steady rate shows whether the destination gets slower over time. Rate times duration is the soak's default Max instances.&#x0a;&#x0a;Default: 2 per second."/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="per second"/>
+
+                <Label Grid.Row="2" Content="Snapshot every:" ToolTip="{Binding ToolTip, ElementName=SnapshotBox}"/>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="SnapshotBox" Text="{Binding SnapshotSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds in each window of the soak. Each window is compared with the first ones to find degradation, and is written to the windows file at once, so a crash keeps what was measured.&#x0a;&#x0a;Default: 60 s."/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Header="Every test" Padding="6,4" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Max instances:" ToolTip="{Binding ToolTip, ElementName=MaxInstancesBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="MaxInstancesBox" Text="{Binding MaxInstances, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="The most new objects a run stores: the ceiling, so that what a run can leave on the destination is known before it starts. A value you set applies to all three tests. A fast destination can reach it before the duration is over, and the run then ends early. 0 uses each test's own default: 1000 for Load, 2000 for Ramp, and rate x duration for Soak.&#x0a;&#x0a;Default: 0, each test's own default."/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="{Binding MaxInstancesDefaults}"/>
+
+                <Label Grid.Row="1" Content="Warm-up:" ToolTip="{Binding ToolTip, ElementName=WarmUpBox}"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="WarmUpBox" Text="{Binding WarmUpSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds at the start of a run, and of each ramp step, that are in the chart but not in the summary, so that opening associations and a cold cache do not count. Errors are counted from the start.&#x0a;&#x0a;Default: 2 s."/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Header="Time-to-available (Load and Soak)" Padding="6,4" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="70"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Look for 1 in:" ToolTip="{Binding ToolTip, ElementName=SampleEveryBox}"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="SampleEveryBox" Text="{Binding SampleEvery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Asks with C-FIND at IMAGE level, on an association of its own, for the first stored image and then 1 in this many, until each is found, and says how long after its C-STORE response that took. The C-FINDs are not counted in throughput or latency. The Ramp never asks. 0 turns it off.&#x0a;&#x0a;Default: 50."/>
+                <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Unit}" Text="stored images (0 turns it off)"/>
+
+                <Label Grid.Row="1" Content="Ask every:" ToolTip="{Binding ToolTip, ElementName=PollIntervalBox}"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="PollIntervalBox" Text="{Binding PollIntervalSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds between the rounds of C-FINDs that look for the sampled images, at most 10 queries a round. It is also how precise the time-to-available is. At least 0.1 s.&#x0a;&#x0a;Default: 2 s."/>
+                <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="s"/>
+
+                <Label Grid.Row="2" Content="For up to:" ToolTip="{Binding ToolTip, ElementName=PollTimeoutBox}"/>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="PollTimeoutBox" Text="{Binding PollTimeoutSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Seconds to look for a sampled image before it counts as never found. At least the interval.&#x0a;&#x0a;Default: 60 s."/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="s, then it counts as never found"/>
+            </Grid>
+        </GroupBox>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="OK" Click="OkButton_Click" Width="80" Height="25" Margin="0,0,10,0" IsDefault="True"/>
+            <Button Content="Cancel" Width="80" Height="25" IsCancel="True"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

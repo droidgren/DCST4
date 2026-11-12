@@ -283,8 +283,12 @@ namespace DCST4.Tests
             Check("Soak: rate x duration", new LoadSettings { SoakRatePerSecond = 2, SoakSeconds = 1800 }.PlannedInstances(LoadMode.Soak) == 3600);
             Check("An explicit ceiling wins", new LoadSettings { MaxInstances = 50, InstanceCount = 300 }.PlannedInstances(LoadMode.Load) == 50);
             Check("The plan names the size and the destination", new LoadSettings().DescribePlan(LoadMode.Load, "PACS at h:104").Contains("MB, mix ct) on PACS at h:104.") && !new LoadSettings().DescribePlan(LoadMode.Load, "PACS at h:104").Contains("delete"));
-            Check("Without a rate, the plan says from what rate the ceiling ends the run early", new LoadSettings().DescribePlan(LoadMode.Load, "PACS").EndsWith("If the system takes more than 50 per second, the ceiling ends the run before the 20 s are up.", StringComparison.Ordinal)
-                && !new LoadSettings { RatePerSecond = 5 }.DescribePlan(LoadMode.Load, "PACS").Contains("ceiling ends"), new LoadSettings().DescribePlan(LoadMode.Load, "PACS"));
+            Check("Without a rate, the plan says from what rate the ceiling ends the run early", new LoadSettings().DescribePlan(LoadMode.Load, "PACS").EndsWith("A system that stores more than 50 objects per second has stored all 1,000 (Max instances) before the 20 s are up, and the run ends early. Set a rate, or raise Max instances, to measure the whole 20 s.", StringComparison.Ordinal)
+                && !new LoadSettings { RatePerSecond = 5 }.DescribePlan(LoadMode.Load, "PACS").Contains("ends early"), new LoadSettings().DescribePlan(LoadMode.Load, "PACS"));
+            var lines = new LoadSettings().DescribePlan(LoadMode.Load, "PACS at h:104", true).Split('\n');
+            Check("For the question: the destination, a blank line, then one sentence per line", lines.Length == 4 && lines[0].EndsWith("on PACS at h:104.", StringComparison.Ordinal) && lines[1].Length == 0
+                && lines[2].StartsWith("A system that stores", StringComparison.Ordinal) && lines[3].StartsWith("Set a rate", StringComparison.Ordinal)
+                && !new LoadSettings().DescribePlan(LoadMode.Load, "PACS").Contains("\n"), string.Join(" | ", lines));
 
             Check("Defaults are valid in every mode", new LoadSettings().Validate(LoadMode.Load) == null && new LoadSettings().Validate(LoadMode.Ramp) == null && new LoadSettings().Validate(LoadMode.Soak) == null);
             Check("0 associations is refused", new LoadSettings { Associations = 0 }.Validate(LoadMode.Load) != null);
@@ -434,12 +438,15 @@ namespace DCST4.Tests
 
             ResetScp();
             var capped = await One("load-throughput", Settings(s => { s.Associations = 2; s.DurationSeconds = 10; s.MaxInstances = 30; }));
-            Check("A ceiling that ends a duration run early: said in the result and the explanation", capped.Result == TestResultClass.PASS && capped.Performance?.EndedByCeiling == true && capped.Explanation.Contains("The ceiling of 30 instances ended the run before the 10 s were up"), Show(capped));
+            Check("A ceiling that ends a duration run early: said in the result and the explanation", capped.Result == TestResultClass.PASS && capped.Performance?.EndedByCeiling == true && capped.Explanation.Contains("Note: all 30 instances (Max instances) were stored after ")
+                && capped.Explanation.Contains(" s of the 10 s, so throughput and latency come from a shorter window than asked for. Raise Max instances"), Show(capped));
+            Check("A ceiling that ends a run early is not a problem", capped.Performance?.Summary?.Errors?.DescribeProblems() == null, capped.Performance?.Summary?.Errors?.DescribeProblems());
 
             ResetScp();
             Scp.StatusFor = i => i % 4 == 3 ? new DicomStatus("A700", DicomState.Failure, "Out of resources") : null;
             var refused = await One("load-throughput", Settings(s => { s.Associations = 1; s.InstanceCount = 8; }));
             Check("Failure statuses under load: FAIL, counted by raw code", refused.Result == TestResultClass.FAIL && refused.Performance.Summary.Errors.ByCode["0xA700"] == 2 && refused.Performance.Summary.Errors.Failure == 2, Show(refused));
+            Check("Failure statuses under load: described with count and raw code", refused.Performance.Summary.Errors.DescribeProblems() == "2 not stored: 2 with status 0xA700", refused.Performance.Summary.Errors.DescribeProblems());
             refused.Details.TryGetValue("firstProblem", out var first);
             Check("The first problem is in the details, with its status, Error Comment and second", first != null && first.StartsWith("C-STORE status 0xA700 (Refused: Out of Resources), ", StringComparison.Ordinal) && first.Contains("In second 0 of the run."), first);
         }
