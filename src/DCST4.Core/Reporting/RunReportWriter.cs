@@ -695,9 +695,13 @@ namespace DCST4.Core.Reporting
             });
         }
 
-        /// <summary>The per-second series of a load test, from the file it wrote while it ran. Null if the file is not there or cannot be read.</summary>
+        /// <summary>
+        /// The per-second series of a load test: kept in memory when the report follows the run, otherwise from the file it
+        /// wrote while it ran. Null if neither is there or the file cannot be read.
+        /// </summary>
         internal static List<LoadSecond> ReadSeries(PerformanceResult p, RunReportOptions options)
         {
+            if (p.SeriesInMemory != null && p.SeriesInMemory.Count > 0) return p.SeriesInMemory;
             if (string.IsNullOrEmpty(p.SeriesFile)) return null;
             var candidates = new List<string> { p.SeriesFile };
             try

@@ -50,13 +50,13 @@
                     <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
                                Text="When off, Auto values stay until you click New values or restart the program, so the exam is easy to find in PACS. Another run with the same values adds a new series to the same study."/>
 
-                    <Label Margin="0,14,0,0" Padding="0,0,0,4" Content="Patient name in test-suite datasets:"/>
-                    <ComboBox x:Name="TestPatientNaming" SelectedValuePath="Tag" HorizontalAlignment="Left" MinWidth="280" ToolTip="How the objects the tests send name the patient. The Patient ID comes from the test personnummer list either way.&#x0a;&#x0a;Default: Marked test name (DCST4^TEST^number).">
+                    <Label Margin="0,14,0,0" Padding="0,0,0,4" Content="Patient name in generated objects:"/>
+                    <ComboBox x:Name="TestPatientNaming" SelectedValuePath="Tag" HorizontalAlignment="Left" MinWidth="280" ToolTip="How an Auto patient name is made, in Generate &amp; Send and in the objects the tests on the Tests and Performance tabs send. A name typed on the Identifiers tab always wins. The Patient ID comes from the test personnummer list either way.&#x0a;&#x0a;Default: Marked test name (DCST4^TEST^number).">
                         <ComboBoxItem Tag="MarkedTestName" Content="Marked test name (DCST4^TEST^number), the default"/>
                         <ComboBoxItem Tag="RegistrySwedishName" Content="Swedish name"/>
                     </ComboBox>
                     <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#FF505050"
-                               Text="For the objects the tests on the Tests and Performance tabs send. Generate &amp; Send is not affected. The Patient ID comes from the list of test personnummer in both cases."/>
+                               Text="For the Auto patient name in Generate &amp; Send and in the objects the tests on the Tests and Performance tabs send. A name typed on the Identifiers tab always wins. The Patient ID comes from the list of test personnummer in both cases."/>
                 </StackPanel>
             </TabItem>
 
@@ -149,6 +149,38 @@
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Test and Performance Results" x:Name="ResultsTab">
+                <StackPanel Margin="5">
+                    <DockPanel>
+                        <Label DockPanel.Dock="Left" Content="Results folder:" Width="170" ToolTip="{Binding ToolTip, ElementName=ResultsFolderBox}"/>
+                        <Button DockPanel.Dock="Right" Content="..." Width="26" Margin="4,2,0,2" Click="BrowseResultsButton_Click" ToolTip="Select the folder"/>
+                        <TextBox x:Name="ResultsFolderBox" Text="{Binding ResultsFolder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2"
+                                 ToolTip="Where each run on the Tests and Performance tabs writes its result files and the Performance tests their series files, and where the comparisons of runs go. It is made if it is not there.&#x0a;&#x0a;Default: %LocalAppData%\DCST4\TestRuns."/>
+                    </DockPanel>
+                    <DockPanel Margin="0,4,0,0">
+                        <Label DockPanel.Dock="Left" Content="Each run writes:" Width="170" ToolTip="Which result files a run on the Tests or Performance tab writes. With none ticked a run leaves no files in the results folder. The results are shown in the program either way.&#x0a;&#x0a;Default: HTML report only."/>
+                        <WrapPanel VerticalAlignment="Center">
+                            <CheckBox Content="JSON" IsChecked="{Binding WriteJson, Mode=TwoWay}" VerticalAlignment="Center"
+                                      ToolTip="The file with full detail, DCST4-run-&lt;time&gt;.json, and the capability matrix as JSON. Compare runs... reads this file, and Open report can make a report from it again. Without it a run cannot be compared later.&#x0a;&#x0a;Default: not ticked."/>
+                            <CheckBox Content="CSV" IsChecked="{Binding WriteCsv, Mode=TwoWay}" VerticalAlignment="Center" Margin="16,0,0,0"
+                                      ToolTip="The file with one row per result, and the capability matrix and the chain as CSV, for a spreadsheet.&#x0a;&#x0a;Default: not ticked."/>
+                            <CheckBox Content="HTML report" IsChecked="{Binding WriteHtml, Mode=TwoWay}" VerticalAlignment="Center" Margin="16,0,0,0"
+                                      ToolTip="The report for reading, one file that is complete in itself, which Open report opens. Without it, Open report makes one from the JSON file when you click it.&#x0a;&#x0a;Default: ticked."/>
+                            <CheckBox Content="Performance series (CSV)" IsChecked="{Binding WriteSeries, Mode=TwoWay}" VerticalAlignment="Center" Margin="16,0,0,0"
+                                      ToolTip="The files a Performance test writes while it runs: DCST4-run-&lt;time&gt;-load-throughput.csv, -load-ramp.csv or -load-soak.csv with one row per second, and for a soak -load-soak-windows.csv with one row per snapshot. They are written as the test goes, so a crash during a long soak keeps what was measured. The HTML report of the run has its per-second charts either way.&#x0a;&#x0a;Default: not ticked."/>
+                        </WrapPanel>
+                    </DockPanel>
+                    <DockPanel Margin="0,4,0,0">
+                        <Label DockPanel.Dock="Left" Content="Delete results older than:" Width="170" ToolTip="{Binding ToolTip, ElementName=KeepDaysBox}"/>
+                        <TextBox DockPanel.Dock="Left" x:Name="KeepDaysBox" Text="{Binding KeepDays, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center" Margin="0,2"
+                                 ToolTip="After each run, DCST4 deletes the result files in the results folder that are older than this many days: the files whose names start with DCST4-run- or DCST4-compare- and end in .json, .csv or .html. Nothing else in the folder is touched, and nothing is deleted until a run has been saved. 0 keeps everything.&#x0a;&#x0a;Default: 0."/>
+                        <Label Content="days (0 keeps everything)"/>
+                    </DockPanel>
+                    <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#FF505050"
+                               Text="For runs on the Tests and Performance tabs. Compare runs... needs the JSON file of each run it compares. The command line always writes all its files and never deletes anything."/>
+                </StackPanel>
             </TabItem>
 
             <TabItem Header="Logging">

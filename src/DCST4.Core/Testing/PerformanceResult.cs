@@ -44,6 +44,12 @@ namespace DCST4.Core.Testing
         /// <summary>The series file, one row per second, written while the test ran. Null if no folder was given.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string SeriesFile { get; set; }
+        /// <summary>
+        /// The per-second series of this run, kept in memory for the report written right after it, so that the report has
+        /// its charts also when no series file was written. Not in the JSON file: a saved run has its series in the file.
+        /// </summary>
+        [JsonIgnore]
+        public List<LoadSecond> SeriesInMemory { get; set; }
         /// <summary>The soak's windows file. Null for the other tests.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string WindowsFile { get; set; }

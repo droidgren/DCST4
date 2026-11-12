@@ -46,6 +46,12 @@ namespace DCST4
                 if (e.Action == NotifyCollectionChangedAction.Add && LogList.IsVisible) LogList.ScrollIntoView(e.NewItems[0]);
             };
 
+            // The Tests tab follows the newest result as the run goes, as Results on the Generate tab does.
+            ((INotifyCollectionChanged)_viewModel.TestSuite.Rows).CollectionChanged += (s, e) =>
+            {
+                if (e.Action == NotifyCollectionChangedAction.Add) TestResultsGrid.ScrollIntoView(e.NewItems[0]);
+            };
+
             _viewModel.TestSuite.Capabilities.ColumnsChanged += RebuildCapabilityColumns;
         }
 
@@ -130,7 +136,7 @@ namespace DCST4
 
         private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new SettingsDialog { Owner = this };
+            var dialog = new SettingsDialog(new ResultSettingsViewModel(_viewModel)) { Owner = this };
             if (dialog.ShowDialog() == true) _viewModel.ReloadAdditionalTags();
             else if (dialog.ResetRequested) _viewModel.ResetSettings();
         }

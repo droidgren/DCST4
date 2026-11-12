@@ -2,6 +2,7 @@ using DCST4.Core.Generation;
 using DCST4.Core.TestData;
 using DCST4.Models;
 using DCST4.Properties;
+using DCST4.ViewModels;
 using FellowOakDicom;
 using Serilog;
 using System;
@@ -37,10 +38,14 @@ namespace DCST4
         private readonly List<CommonTagChoice> _commonTags;
         private readonly List<BurnInTagChoice> _burnInTags;
         private readonly ObservableCollection<AdditionalTag> _customTags = new ObservableCollection<AdditionalTag>();
+        private readonly ResultSettingsViewModel _results;
 
-        public SettingsDialog()
+        /// <param name="results">The Test and Performance Results tab, a copy of what the main window uses.</param>
+        public SettingsDialog(ResultSettingsViewModel results)
         {
             InitializeComponent();
+            _results = results;
+            ResultsTab.DataContext = results;
             var s = Settings.Default;
             ConnectionTimeoutBox.Text = s.ConnectionTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
             AssociationTimeoutBox.Text = s.AssociationTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
@@ -87,6 +92,13 @@ namespace DCST4
             if (!TryRead(ConnectionTimeoutBox, "Connection timeout", 1, 3600, out var connection)) return;
             if (!TryRead(AssociationTimeoutBox, "Association timeout", 1, 3600, out var association)) return;
             if (!TryRead(ResponseTimeoutBox, "Response timeout", 0, 86400, out var response)) return;
+            var problem = _results.Apply();
+            if (problem != null)
+            {
+                ResultsTab.IsSelected = true;
+                MessageBox.Show(this, problem, "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
 
             var s = Settings.Default;
             s.ConnectionTimeoutSeconds = connection;
@@ -112,6 +124,22 @@ namespace DCST4
         {
             ResetRequested = true;
             DialogResult = false;
+        }
+
+        private void BrowseResultsButton_Click(object sender, RoutedEventArgs e)
+        {
+            using (var dialog = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Select the folder for test results",
+                SelectedPath = ResultsFolderBox.Text,
+            })
+            {
+                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    ResultsFolderBox.Text = dialog.SelectedPath;
+                    ResultsFolderBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+                }
+            }
         }
 
         private void TagBox_TextChanged(object sender, TextChangedEventArgs e)

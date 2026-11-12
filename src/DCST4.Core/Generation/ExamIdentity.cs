@@ -29,6 +29,11 @@ namespace DCST4.Core.Generation
         public IList<AdditionalTagValue> AdditionalTags { get; set; }
         /// <summary>Generated names lose their å, ä and ö, for a character set that cannot hold them. Manual values are not changed.</summary>
         public bool AutoValuesInBasicAscii { get; set; }
+        /// <summary>
+        /// How an Auto patient name is made: an invented Swedish name, or DCST4^TEST^ and a number. Swedish here, so that the
+        /// seeded test datasets, which name their patients themselves, draw exactly as before. Generate &amp; Send passes the setting.
+        /// </summary>
+        public TestPatientNaming PatientNaming { get; set; } = TestPatientNaming.RegistrySwedishName;
     }
 
     /// <summary>The final values of one exam, Auto or manual. Series and SOP Instance UIDs stay null when each series or image gets its own.</summary>
@@ -119,7 +124,9 @@ namespace DCST4.Core.Generation
                 PatientId = patientId,
                 PatientSex = sex,
                 PatientBirthDate = manual.PatientBirthDate ?? number?.BirthDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? string.Empty,
-                PatientName = manual.PatientName ?? AutoText(manual, SwedishNames.Pick(nameRandom, sex)),
+                PatientName = manual.PatientName ?? (manual.PatientNaming == TestPatientNaming.MarkedTestName
+                    ? TestPatientNames.Marked(nameRandom)
+                    : AutoText(manual, SwedishNames.Pick(nameRandom, sex))),
                 AccessionNumber = manual.AccessionNumber ?? IdentifierGenerator.AccessionNumber(accessionRandom, studyDate),
                 StudyId = manual.StudyId ?? IdentifierGenerator.StudyId(studyIdRandom),
                 StudyInstanceUid = manual.StudyInstanceUid ?? _uids.Uid("study"),

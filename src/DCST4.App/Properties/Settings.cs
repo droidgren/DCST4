@@ -107,7 +107,7 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("False")]
         public bool NewValuesAfterRun { get => (bool)this[nameof(NewValuesAfterRun)]; set => this[nameof(NewValuesAfterRun)] = value; }
 
-        /// <summary>How test-suite datasets name the patient: a TestPatientNaming name. Does not affect Generate &amp; Send.</summary>
+        /// <summary>How an Auto patient name is made, in Generate &amp; Send and in test-suite datasets: a TestPatientNaming name.</summary>
         [UserScopedSetting, DefaultSettingValue("MarkedTestName")]
         public string TestPatientNaming { get => (string)this[nameof(TestPatientNaming)]; set => this[nameof(TestPatientNaming)] = value; }
 
@@ -193,11 +193,11 @@ namespace DCST4.Properties
         public string SaveFolder { get => (string)this[nameof(SaveFolder)]; set => this[nameof(SaveFolder)] = value; }
 
         /// <summary>Whether a run writes its JSON file, and the capability matrix as JSON.</summary>
-        [UserScopedSetting, DefaultSettingValue("True")]
+        [UserScopedSetting, DefaultSettingValue("False")]
         public bool WriteResultJson { get => (bool)this[nameof(WriteResultJson)]; set => this[nameof(WriteResultJson)] = value; }
 
         /// <summary>Whether a run writes its CSV file, and the capability matrix and the chain as CSV.</summary>
-        [UserScopedSetting, DefaultSettingValue("True")]
+        [UserScopedSetting, DefaultSettingValue("False")]
         public bool WriteResultCsv { get => (bool)this[nameof(WriteResultCsv)]; set => this[nameof(WriteResultCsv)] = value; }
 
         /// <summary>Whether a run writes its HTML report.</summary>
@@ -205,7 +205,7 @@ namespace DCST4.Properties
         public bool WriteResultHtml { get => (bool)this[nameof(WriteResultHtml)]; set => this[nameof(WriteResultHtml)] = value; }
 
         /// <summary>Whether a Performance test writes its series files, one row per second, and the soak's windows file, while it runs.</summary>
-        [UserScopedSetting, DefaultSettingValue("True")]
+        [UserScopedSetting, DefaultSettingValue("False")]
         public bool WriteResultSeries { get => (bool)this[nameof(WriteResultSeries)]; set => this[nameof(WriteResultSeries)] = value; }
 
         /// <summary>After a run, result files in the results folder older than this many days are deleted. 0 = never.</summary>

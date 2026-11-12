@@ -385,7 +385,7 @@
                                     <RowDefinition Height="4"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
-                                <DataGrid ItemsSource="{Binding TestSuite.Rows}" SelectedItem="{Binding TestSuite.SelectedRow, Mode=TwoWay}" AutoGenerateColumns="False" IsReadOnly="True"
+                                <DataGrid x:Name="TestResultsGrid" ItemsSource="{Binding TestSuite.Rows}" SelectedItem="{Binding TestSuite.SelectedRow, Mode=TwoWay}" AutoGenerateColumns="False" IsReadOnly="True"
                                           HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#FFE0E0E0" SelectionMode="Single"
                                           ClipboardCopyMode="IncludeHeader" Background="White">
                                     <DataGrid.RowStyle>

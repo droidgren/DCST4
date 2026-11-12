@@ -3,10 +3,10 @@ using System.Globalization;
 
 namespace DCST4.Core.TestData
 {
-    /// <summary>How test-suite datasets name the patient. The Patient ID comes from TestPersonnummerRegistry in both. Generate &amp; Send does not use this.</summary>
+    /// <summary>How test-suite datasets, and the Auto name of Generate &amp; Send in the app, name the patient. The Patient ID comes from TestPersonnummerRegistry in both.</summary>
     public enum TestPatientNaming
     {
-        /// <summary>An invented Swedish name, as Generate &amp; Send uses. Not the default since 1.9.0.</summary>
+        /// <summary>An invented Swedish name. Not the default since 1.9.0.</summary>
         RegistrySwedishName,
         /// <summary>DCST4^TEST^&lt;random number&gt;, which is plainly not a person. The default, see <see cref="TestPatientNames.Default"/>.</summary>
         MarkedTestName,

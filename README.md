@@ -38,7 +38,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Everything is automatic, and everything can be overridden:** patient, accession number, study ID, UIDs, date and time. The fields show what the next run will use.
 - **Additional tags:** add common tags with generated values, or any custom tag, including private ones, under **File > Settings**.
 - **Official test patients:** random Patient IDs come only from Skatteverket's list of test personnummer. Birth date and sex follow from the number.
-- **Swedish names:** about 40% contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192. An empty Specific Character Set (Basic ASCII) is also available, and random names then lose their diacritics.
+- **Patient names:** `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name, chosen under **File > Settings**. About 40% of the Swedish names contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192. An empty Specific Character Set (Basic ASCII) is also available, and random names then lose their diacritics.
 - **Optional burned-in text:** turn on a text box in the pixels and choose which tags it shows, so you can compare them with the tags in the viewer. It is off by default.
 - **Configurable images:** number of series and images, matrix from 64 to 4096, and 8 to 16 bits stored as the modality allows.
 - **Estimated size:** the Exam box shows how much data the whole exam will be, and updates as you change the settings.
@@ -47,7 +47,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Save to disk:** instead of, or in addition to, sending, as a DICOM File-set with a DICOMDIR that viewers can open.
 - **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
 - **Reset to defaults:** **File > Settings** puts every setting back to its default in one go, and keeps the saved destination profiles.
-- **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). Each run is saved as JSON and CSV for comparison over time. On the Tests tab the tests are in folded groups, each says in a tooltip what it does, nothing is ticked at the start, and a run that stores objects says how many examinations and how much data it will leave on the destination and asks first. Every setting in the program explains itself on hover, with its default. See [Testing a PACS](#testing-a-pacs).
+- **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). Each run writes an HTML report, and can also write JSON and CSV files for comparison over time. On the Tests tab the tests are in folded groups, each says in a tooltip what it does, nothing is ticked at the start, and a run that stores objects says how many examinations and how much data it will leave on the destination and asks first. Every setting in the program explains itself on hover, with its default. See [Testing a PACS](#testing-a-pacs).
 - **Capability matrix:** finds out from association negotiation alone, with no images sent, which SOP classes and transfer syntaxes a PACS supports, and compares that with what the vendor's Conformance Statement claims. See [What the PACS supports](#what-the-pacs-supports).
 - **Store, query and retrieve:** proves the chain accepted, indexed, retrievable and intact for each object type, with C-STORE, C-FIND, C-GET and C-MOVE. What comes back is compared with what was sent, level by level. See [Store, query and retrieve](#store-query-and-retrieve).
 - **Storage Commitment:** asks the PACS to commit to what it stored, with N-ACTION, and takes its N-EVENT-REPORT either on the same association or on one the PACS opens to this computer. It records which way the PACS used, how long the report took and the Failure Reason of each instance that was not committed. See [Storage Commitment](#storage-commitment).
@@ -189,7 +189,7 @@ The list is grouped: Association, Store, Query, Retrieve & integrity, Storage Co
 
 While a run is going, the status bar shows which test is running, what it is doing or waiting for, and for how many seconds, for example `Test 51 of 51: Limit: connection without an association request (ARTIM). Connected without sending an A-ASSOCIATE-RQ. Waiting up to 60 s for the system to close the connection (23 s)`. The command line prints the same as a line of its own.
 
-Beside the buttons are the local AE title and port that C-MOVE and Storage Commitment reports go to. The other settings are in **Test settings...**: the UID root of the objects the tests send, the transfer syntax of the store tests, the Storage Commitment times, see [Storage Commitment](#storage-commitment), the settings of the Limits tests, see [Limits and faults](#limits-and-faults), and under Results the results folder, which files each run writes and after how many days old results are deleted, see [Result files](#result-files). They change only when you click OK, and a value that cannot be used is named and nothing is changed. **Open results folder** opens the folder in Explorer.
+Beside the buttons are the local AE title and port that C-MOVE and Storage Commitment reports go to. The other settings are in **Test settings...**: the UID root of the objects the tests send, the transfer syntax of the store tests, the Storage Commitment times, see [Storage Commitment](#storage-commitment), and the settings of the Limits tests, see [Limits and faults](#limits-and-faults). They change only when you click OK, and a value that cannot be used is named and nothing is changed. The results folder, which files each run writes and after how many days old results are deleted are under **File > Settings**, on the **Test and Performance Results** tab, see [Result files](#result-files). **Open results folder** opens the folder in Explorer.
 
 ![The Test settings dialog](screenshots/test-settings.png)
 
@@ -233,16 +233,16 @@ The same program makes reports and comparisons of saved runs, with `report` and 
 
 ### Result files
 
-Each run writes `DCST4-run-<UTC time>.json` with full detail, a `.csv` with one row per result, and a `.html` report for reading, see [Reports and comparison](#reports-and-comparison). The JSON and CSV files are UTF-8 and independent of the computer's language settings, and they hold a schema version, the tool version, the destination and the start and end time. The client certificate thumbprint is never written to them.
+Each run can write `DCST4-run-<UTC time>.json` with full detail, a `.csv` with one row per result, and a `.html` report for reading, see [Reports and comparison](#reports-and-comparison). The JSON and CSV files are UTF-8 and independent of the computer's language settings, and they hold a schema version, the tool version, the destination and the start and end time. The client certificate thumbprint is never written to them.
 
-**Which files, and for how long.** These two settings are under Results in **Test settings...** and apply to runs from the program. The command line always writes all its files, the series files included, and never deletes anything.
+**Which files, and for how long.** These settings are under **File > Settings**, on the **Test and Performance Results** tab, and apply to runs on the Tests and Performance tabs. By default a run writes only its HTML report. The command line always writes all its files, the series files included, and never deletes anything.
 
-| In Test settings | Default | Meaning |
+| In Settings, Test and Performance Results | Default | Meaning |
 | ---------------- | ------- | ------- |
-| Each run writes: JSON | Ticked | The file with full detail, and the capability matrix as JSON. **Compare runs...** reads this file, so a run saved without it cannot be compared later |
-| Each run writes: CSV | Ticked | The file with one row per result, and the capability matrix and the chain as CSV |
+| Each run writes: JSON | Not ticked | The file with full detail, and the capability matrix as JSON. **Compare runs...** reads this file, so a run saved without it cannot be compared later |
+| Each run writes: CSV | Not ticked | The file with one row per result, and the capability matrix and the chain as CSV |
 | Each run writes: HTML report | Ticked | The report. Without it, **Open report** makes one from the JSON file when you click it. Without both, the run has no report to open |
-| Each run writes: Performance series (CSV) | Ticked | The files a Performance test writes while it runs, one row per second, and the soak's windows file. Without them the report has no per-second charts, and a crash during a long soak leaves only what the program shows. The chart on the tab, the summary and the soak's windows in the JSON file are not affected |
+| Each run writes: Performance series (CSV) | Not ticked | The files a Performance test writes while it runs, one row per second, and the soak's windows file. Without them a crash during a long soak leaves only what the program shows. The report of the run still has its per-second charts, made from what the program kept in memory, and the chart on the tab, the summary and the soak's windows in the JSON file are not affected |
 | Delete results older than | 0 days | After each run, the result files in the results folder that are older than this many days are deleted. 0 keeps everything |
 
 With no box ticked a run writes nothing, and the status bar says so.
@@ -449,7 +449,7 @@ DCST4.Cli.exe run --profile target.json --tests limit-max-associations,limit-art
 Three tests measure throughput and latency: `load-throughput`, `load-ramp` and `load-soak`, in the `Performance` category. **Every image they send is a new object on the destination, and a PACS may not be able to delete it.** So they are not part of `all`. Name them, or use `--tests Performance`. In the program they have a tab of their own, **Performance**, and are not listed on the Tests tab. Before anything is sent, DCST4 says how many objects the run will store at most and about how much data that is. The program asks for a yes with the destination's AE title, host and port in the question, and the command line prints it:
 
 ```
-Plan for the load test: Stores up to 1,000 new objects (about 135 MB, mix ct) on PACS at pacs.example.org:104.
+Plan for the load test: Stores up to 5,000 new objects (about 675 MB, mix ct) on PACS at pacs.example.org:104. A system that stores more than 250 objects per second has stored all 5,000 (Max instances) before the 20 s are up, and the run ends early. Set a rate, or raise Max instances, to measure the whole 20 s.
 ```
 
 | Test              | What it does                                                                                       | Result |
@@ -502,7 +502,7 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 | Mix (on the tab)               | `--load-mix`                  | `ct`    | See above |
 | Max PDU                        | `--load-pdu`                  | 0       | See above |
 | Warm-up                        | `--load-warmup`               | 2 s     | Left out of the summary |
-| Max instances                  | `--load-max-instances`        | 0       | The ceiling of the run. 0 is the default of each test: 1000, 2000 for the ramp, and the rate times the duration for the soak. A value you set applies to all three tests |
+| Max instances                  | `--load-max-instances`        | 0       | The ceiling of the run. 0 is the default of each test: 5000, 12000 for the ramp, and the rate times the duration for the soak. A value you set applies to all three tests |
 | Steps                          | `--ramp-steps`                | 1,2,4,8 | Associations per ramp step, rising |
 | Each step                      | `--ramp-step-duration`        | 10 s    | How long each ramp step runs |
 | Duration (soak)                | `--soak-duration`             | 30m     | How long the soak runs |
@@ -510,9 +510,9 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 | Snapshot every                 | `--soak-snapshot`             | 60 s    | How often a window is closed and written |
 | Time-to-available              | `--tta-sample`, `--tta-interval`, `--tta-timeout` | 50, 2 s, 60 s | See above. 0 turns the polling off |
 
-**Planned total.** A count is exact. Otherwise the plan is the ceiling, or the rate times the duration if that is lower, and the size is that times the uncompressed size of the mix, an upper bound for a compressed mix. With the defaults, `load-throughput` stores at most 1000 CT images of 130 KB, 135 MB, `load-ramp` at most 2000, and `load-soak` 3600 in its 30 minutes. A system that stores images faster than the ceiling divided by the duration, 50 per second with the defaults, reaches the ceiling before the duration is over, and the plan says so. The run then ends early: the result has `endedByCeiling`, the explanation says that throughput and latency come from a shorter window than asked for, and the Note in the table on the Performance tab says so. Raise the ceiling, shorten the duration or set a rate.
+**Planned total.** A count is exact. Otherwise the plan is the ceiling, or the rate times the duration if that is lower, and the size is that times the uncompressed size of the mix, an upper bound for a compressed mix. With the defaults, `load-throughput` stores at most 5000 CT images of 130 KB, 675 MB, `load-ramp` at most 12000, 1.6 GB, and `load-soak` 3600 in its 30 minutes. A system that stores images faster than the ceiling divided by the duration, 250 per second with the defaults, reaches the ceiling before the duration is over, and the plan says so. The run then ends early: the result has `endedByCeiling`, the explanation says that throughput and latency come from a shorter window than asked for, and the Note in the table on the Performance tab says so. Raise the ceiling, shorten the duration or set a rate.
 
-**Files.** Besides the usual result files, each test writes `DCST4-run-<start>-<test id>.csv` while it runs, with one row per second: stored, failed, bytes, MB/s, latency p50, p95 and maximum, open associations, how busy this computer's processor was, and whether the second is the last of a run or ramp step and so shorter than a second (`partial`). The steps of a ramp follow each other in it without the moment between them when associations are released and opened again. The soak also writes `DCST4-run-<start>-load-soak-windows.csv`, one row per snapshot window, and both files are written through to the disk at each snapshot, so a crash or a power cut keeps what was measured. The command line writes them under `--out`, and the program in the results folder set in Test settings on the Tests tab. The `performance` section of the JSON file holds the settings, the plan, why the run stopped, whether the ceiling ended it early, the summary, the steps and the saturation, the windows and the degradation, the time-to-available, and the state of this computer. The explanation never holds a measured number.
+**Files.** Besides the usual result files, each test writes `DCST4-run-<start>-<test id>.csv` while it runs, with one row per second: stored, failed, bytes, MB/s, latency p50, p95 and maximum, open associations, how busy this computer's processor was, and whether the second is the last of a run or ramp step and so shorter than a second (`partial`). The steps of a ramp follow each other in it without the moment between them when associations are released and opened again. The soak also writes `DCST4-run-<start>-load-soak-windows.csv`, one row per snapshot window, and both files are written through to the disk at each snapshot, so a crash or a power cut keeps what was measured. The command line writes them under `--out`, and the program in the results folder set under **File > Settings**, when **Performance series (CSV)** is ticked there. Without the file, the report made right after the run draws the per-second chart from memory. The `performance` section of the JSON file holds the settings, the plan, why the run stopped, whether the ceiling ended it early, the summary, the steps and the saturation, the windows and the degradation, the time-to-available, and the state of this computer. The explanation never holds a measured number.
 
 **On the Performance tab** the chart shows stored and failed per second above and latency p50 and p95 below. It is drawn by DCST4 itself, as two line charts, and updated at most once a second. The warm-up is shaded and labelled, ramp steps are marked and their lines are not joined, a last second shorter than a second is left out of the lines and of the scale, and hovering shows the values of one second. A soak longer than 600 seconds is drawn in buckets, with the mean of the counts and the highest p95 of each bucket, so a peak is not lost. When the run is over, the table below the chart has one row for the run, one per ramp step with the saturated step marked, or one per soak window.
 
@@ -638,7 +638,7 @@ DCST4.Cli.exe generate --dataset enhanced-ct --out C:\Temp\enhanced --seed 42 --
 
 Assume that a PACS cannot delete what it receives, and keep the volumes small. `tomosynthesis-large`, about 700 MB per object, only runs when asked for by name.
 
-**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name is `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name with `--patient-naming RegistrySwedishName` or on the Identifiers tab of **File > Settings**. That setting does not affect Generate & Send, which always uses Swedish names. It applies to the objects that the store, query, duplicate, limit, fault and Performance tests send.
+**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name is `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name with `--patient-naming RegistrySwedishName` or on the Identifiers tab of **File > Settings**. The same setting gives the Auto patient name of Generate & Send, and it applies to the objects that the store, query, duplicate, limit, fault and Performance tests send.
 
 **What is guaranteed:** the same seed, parameters, personnummer list and reference date give byte-identical files, within one DCST4 version, one fo-dicom and PureCodecs version, and the same Windows GDI+ and Consolas rendering. On another computer the UIDs, names and all non-pixel attributes still match, and the pixels match only if the rendering does. `manifest.json` records these versions. The reference date is fixed, so the same request gives the same result on any day.
 
@@ -698,7 +698,7 @@ src\DCST4.Core\     No WPF reference
   Reporting\        RunFile (reads a result file back), RunReportWriter and ComparisonReportWriter (HTML), HtmlWriter (the one place where text is encoded), SvgChart, VendorFingerprint, RunComparer, ReportFiles, ResultCleaner (deletes old result files)
   Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestGroups, TestResult, ResultFileWriter
     Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category, PerformanceTests.cs the Performance category
-src\DCST4.App\      WPF app. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Test settings dialog is TestSettingsDialog.xaml with ViewModels\TestSettingsViewModel.cs, a copy applied at OK. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs, the Compare runs dialog CompareRunsDialog.xaml with ViewModels\CompareRunsViewModel.cs
+src\DCST4.App\      WPF app. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Test settings dialog is TestSettingsDialog.xaml with ViewModels\TestSettingsViewModel.cs, a copy applied at OK, and the Performance settings dialog PerformanceSettingsDialog.xaml with ViewModels\PerformanceSettingsViewModel.cs. The Test and Performance Results tab of SettingsDialog.xaml is ViewModels\ResultSettingsViewModel.cs, applied at OK in the same way. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs, the Compare runs dialog CompareRunsDialog.xaml with ViewModels\CompareRunsViewModel.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
 tools\              List refresh script
@@ -881,9 +881,9 @@ What this means for a reader: compare a system with itself only over several run
 | ---------------------------------- | -------------------------------------------------------------- |
 | Settings                           | `%LocalAppData%\DCST4\user.config`                             |
 | Log, kept for 7 days               | `%LocalAppData%\DCST4\Logs\`, `Cli-*.log` for the command line |
-| Test results from the program      | `%LocalAppData%\DCST4\TestRuns\`, or the folder in Test settings |
+| Test results from the program      | `%LocalAppData%\DCST4\TestRuns\`, or the folder in Settings, Test and Performance Results |
 | Test results from the command line | The folder given with `--out`                                  |
-| Report of a run                    | Next to its result files, as `DCST4-run-<start>.html`, unless turned off in Test settings |
+| Report of a run                    | Next to its result files, as `DCST4-run-<start>.html`, unless turned off in Settings |
 | Comparison of runs                 | From the program, `DCST4-compare-<time>.html` in the results folder. From the command line, in the folder of the last run or where `--out` says |
 | Capability matrix of a run         | Next to its result files, as `<run>-capability.json` and `.csv` |
 | Chain summary of a run             | In the JSON file, and next to it as `<run>-chain.csv`          |
@@ -904,18 +904,21 @@ New:
 - **Open report** on the Tests tab and the Performance tab opens the report of the last run in the browser
 - **Compare runs...** on the Tests tab chooses saved runs, their order and the threshold, compares them and opens the result. It also opens the report of any saved run
 - The report and the comparison name the program in full, DICOM C-Store Tester 4 (DCST4), and end with a link to the project on GitHub, the only address in the page that leaves it
-- Under Results in **Test settings...**, three boxes choose which files a run from the program writes: JSON, CSV and the HTML report. All three are ticked by default
+- A new tab in **File > Settings**, **Test and Performance Results**, holds the results folder and four boxes that choose which files a run on the Tests and Performance tabs writes: JSON, CSV, the HTML report and the Performance series (CSV). Only the HTML report is ticked by default. Settings you saved with an earlier version are kept. **Test settings...** and **Performance settings...** say where to find it
 - **Delete results older than** in the same place deletes the result files, reports and comparisons in the results folder that are older than a number of days, after each run. It is 0 by default, which keeps everything, and it never touches a file that DCST4 did not name
 
 Changed:
 
 - `DCST4.Cli.exe run` prints the path of the report after the JSON and CSV files
 - The plan before a Performance test, on the tab and on the command line, no longer ends with "They may not be possible to delete."
-- The plan says in plainer words what happens when a fast system reaches Max instances before the duration is over: "A system that stores more than 50 objects per second has stored all 1,000 (Max instances) before the 20 s are up, and the run ends early."
-- The settings of the Performance tab, apart from the test and the mix, are in a new **Performance settings...** dialog, in groups: Associations, Load, Ramp, Soak, Every test and Time-to-available. Nothing changes until OK, which checks the settings of all three tests. Every setting has a tooltip, and those of **Associations** and **Per association** explain the difference between them
+- The plan says in plainer words what happens when a fast system reaches Max instances before the duration is over: "A system that stores more than 250 objects per second has stored all 5,000 (Max instances) before the 20 s are up, and the run ends early."
+- The settings of the Performance tab, apart from the test and the mix, are in a new **Performance settings...** dialog, in groups: Associations, Every test, Load, Ramp, Soak and Time-to-available. Nothing changes until OK, which checks the settings of all three tests. Every setting has a tooltip, and those of **Associations** and **Per association** explain the difference between them
 - The question before a Performance run puts the destination, the warning about Max instances and the advice on lines of their own
-- A fourth box under Each run writes, **Performance series (CSV)**, turns off the series files a Performance test writes while it runs. It is ticked by default
+- **Performance series (CSV)** turns off the series files a Performance test writes while it runs. The report made right after a run then draws the per-second chart from memory
 - In the summary table on the Performance tab, a row with images that were not stored is red, like a FAIL on the Tests tab, and its Note starts with how many and their raw status codes. A run that reached Max instances early is no longer marked yellow, and the Note, the explanation and the report say so as information, not as a fault. The report's "Stopped by" row is now "Stopped", with a "Problems" row above it when there were any
+- The default Max instances is raised from 1,000 to 5,000 for Load and from 2,000 to 12,000 for Ramp, so that a ramp reaches its last step against a fast system. Every one of them is a new object on the destination
+- **Generate & Send** follows the patient name setting under **File > Settings**, on the Identifiers tab, like the tests. With the default, its Auto patient name is now `DCST4^TEST^<number>` in place of a Swedish name. Choose **Swedish name** there to get the Swedish names back. A name typed on the Identifiers tab always wins
+- The results list on the Tests tab scrolls to each new result while a run is going
 
 ### 1.9.1
 
