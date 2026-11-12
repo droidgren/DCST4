@@ -1,5 +1,6 @@
 using DCST4.Core.Performance;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text.Json.Serialization;
 
 namespace DCST4.Core.Testing
@@ -46,5 +47,26 @@ namespace DCST4.Core.Testing
         /// <summary>The soak's windows file. Null for the other tests.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string WindowsFile { get; set; }
+
+        /// <summary>
+        /// How the run stopped, in the words the explanation, the report and the Performance tab share. Says that Max
+        /// instances ran out before the duration as information, never as a fault.
+        /// </summary>
+        public string DescribeStop()
+        {
+            var planned = PlannedInstances.ToString("N0", CultureInfo.InvariantCulture);
+            if (EndedByCeiling)
+            {
+                var duration = (Settings?.DurationSeconds ?? 0).ToString("0.##", CultureInfo.InvariantCulture);
+                var what = (Summary?.Errors?.NotStored ?? 0) > 0 ? "stored or refused" : "stored";
+                return $"All {planned} instances (Max instances) were {what} after {Seconds.ToString(CultureInfo.InvariantCulture)} s of the {duration} s, so throughput and latency come from a shorter window than asked for.";
+            }
+            switch (StoppedBy)
+            {
+                case "duration": return "Ran for the whole duration.";
+                case "count": return $"Stopped after all {planned} instances.";
+                default: return "Stopped by " + StoppedBy + ".";
+            }
+        }
     }
 }

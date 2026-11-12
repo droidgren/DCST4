@@ -31,6 +31,7 @@ namespace DCST4.ViewModels
             WriteJson = main.WriteResultJson;
             WriteCsv = main.WriteResultCsv;
             WriteHtml = main.WriteResultHtml;
+            WriteSeries = main.WriteResultSeries;
             KeepDays = Text(main.ResultsKeepDays);
         }
 
@@ -49,6 +50,8 @@ namespace DCST4.ViewModels
         public bool WriteJson { get; set; }
         public bool WriteCsv { get; set; }
         public bool WriteHtml { get; set; }
+        /// <summary>The series files of the Performance tests, written while they run.</summary>
+        public bool WriteSeries { get; set; }
         /// <summary>Result files older than this many days are deleted after a run. 0 keeps everything.</summary>
         public string KeepDays { get; set; }
 
@@ -102,6 +105,7 @@ namespace DCST4.ViewModels
             _main.WriteResultJson = WriteJson;
             _main.WriteResultCsv = WriteCsv;
             _main.WriteResultHtml = WriteHtml;
+            _main.WriteResultSeries = WriteSeries;
             _main.ResultsKeepDays = keepDays;
             return null;
         }

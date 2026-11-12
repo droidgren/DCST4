@@ -100,6 +100,9 @@ namespace DCST4.ViewModels
         public bool WriteResultJson { get => _writeResultJson; set { _writeResultJson = value; OnPropertyChanged(); Settings.Default.WriteResultJson = value; } }
         public bool WriteResultCsv { get => _writeResultCsv; set { _writeResultCsv = value; OnPropertyChanged(); Settings.Default.WriteResultCsv = value; } }
         public bool WriteResultHtml { get => _writeResultHtml; set { _writeResultHtml = value; OnPropertyChanged(); Settings.Default.WriteResultHtml = value; } }
+        /// <summary>Whether a Performance test writes its series files while it runs. Without them the report has no per-second charts.</summary>
+        public bool WriteResultSeries { get => _writeResultSeries; set { _writeResultSeries = value; OnPropertyChanged(); Settings.Default.WriteResultSeries = value; } }
+        private bool _writeResultSeries = true;
         /// <summary>After a run, result files in the results folder older than this many days are deleted. 0 keeps everything.</summary>
         public int ResultsKeepDays { get => _resultsKeepDays; set { _resultsKeepDays = value; OnPropertyChanged(); Settings.Default.ResultsKeepDays = value; } }
         private bool _writeResultJson = true, _writeResultCsv = true, _writeResultHtml = true;
@@ -517,6 +520,7 @@ namespace DCST4.ViewModels
             _writeResultJson = s.WriteResultJson;
             _writeResultCsv = s.WriteResultCsv;
             _writeResultHtml = s.WriteResultHtml;
+            _writeResultSeries = s.WriteResultSeries;
             _resultsKeepDays = s.ResultsKeepDays;
             _tlsExpiredClientCertThumbprint = s.TlsExpiredClientCertThumbprint ?? string.Empty;
             _useTLS = s.UseTLS;
@@ -1161,7 +1165,7 @@ namespace DCST4.ViewModels
 
             var settings = Performance.Settings;
             var target = $"{profile.Endpoint.CalledAe} at {profile.Endpoint.Host}:{profile.Endpoint.Port}";
-            if (!Confirm(settings.DescribePlan(mode, target) + "\n\nStart the test?"))
+            if (!Confirm(settings.DescribePlan(mode, target, true) + "\n\nStart the test?"))
             {
                 StatusText = "Performance test not started.";
                 return;
@@ -1169,7 +1173,8 @@ namespace DCST4.ViewModels
 
             var folder = TestSuite.ResultsFolder.Trim();
             options.Load = settings;
-            options.MetricsFolder = folder;
+            // Without a folder the test writes no series file. Test settings can turn them off.
+            options.MetricsFolder = WriteResultSeries ? folder : null;
             Performance.Clear();
             Performance.StartRun(settings, mode);
             ProgressValue = 0;

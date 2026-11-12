@@ -123,8 +123,11 @@ namespace DCST4.Core.Performance
             return mix == null ? 0 : PlannedInstances(mode) * (double)mix.EstimatedBytesPerObject / 1000000.0;
         }
 
-        /// <summary>The sentence a front-end shows before the run starts.</summary>
-        public string DescribePlan(LoadMode mode, string target)
+        /// <summary>
+        /// The sentences a front-end shows before the run starts. With <paramref name="lines"/> each sentence is on a line of
+        /// its own, with a blank line after the destination, for a question window that does not wrap.
+        /// </summary>
+        public string DescribePlan(LoadMode mode, string target, bool lines = false)
         {
             var count = PlannedInstances(mode);
             var exact = mode == LoadMode.Load && InstanceCount > 0 && InstanceCount <= ResolvedMaxInstances(mode);
@@ -137,7 +140,10 @@ namespace DCST4.Core.Performance
             if (mode == LoadMode.Load && InstanceCount == 0 && RatePerSecond <= 0 && DurationSeconds > 0)
             {
                 var perSecond = count / DurationSeconds;
-                plan += $" If the system takes more than {perSecond.ToString(perSecond < 10 ? "0.#" : "0", CultureInfo.InvariantCulture)} per second, the ceiling ends the run before the {DurationSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s are up.";
+                var seconds = DurationSeconds.ToString("0.##", CultureInfo.InvariantCulture);
+                plan += (lines ? "\n\n" : " ") + $"A system that stores more than {perSecond.ToString(perSecond < 10 ? "0.#" : "0", CultureInfo.InvariantCulture)} objects per second has stored all " +
+                    $"{count.ToString("N0", CultureInfo.InvariantCulture)} (Max instances) before the {seconds} s are up, and the run ends early." +
+                    (lines ? "\n" : " ") + $"Set a rate, or raise Max instances, to measure the whole {seconds} s.";
             }
             return plan;
         }

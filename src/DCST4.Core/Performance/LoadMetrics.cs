@@ -51,6 +51,33 @@ namespace DCST4.Core.Performance
         [JsonIgnore]
         public long Problems => NotStored + AssociationRejected + ConnectFailed;
 
+        /// <summary>
+        /// The problems in a few words, such as "3 not stored: 3 with status 0xA700", or null if there were none.
+        /// The status codes are the raw ones, failure and cancel only.
+        /// </summary>
+        public string DescribeProblems()
+        {
+            if (Problems == 0) return null;
+            var parts = new List<string>();
+            foreach (var pair in ByCode)
+            {
+                if (!ushort.TryParse(pair.Key.Substring(2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var code)) continue;
+                var state = Network.StoreStatus.Classify(code);
+                if (state != Network.StoreState.Success && state != Network.StoreState.Warning) parts.Add($"{Count(pair.Value)} with status {pair.Key}");
+            }
+            if (NoResponse > 0) parts.Add($"{Count(NoResponse)} without a response");
+            if (AssociationLost > 0) parts.Add($"{Count(AssociationLost)} on a lost association");
+
+            var text = NotStored > 0 ? $"{Count(NotStored)} not stored: {string.Join(", ", parts)}" : string.Empty;
+            var refused = new List<string>();
+            if (AssociationRejected > 0) refused.Add($"{Count(AssociationRejected)} associations rejected");
+            if (ConnectFailed > 0) refused.Add($"{Count(ConnectFailed)} connections failed");
+            if (refused.Count > 0) text += (text.Length > 0 ? "; " : string.Empty) + string.Join(", ", refused);
+            return text;
+        }
+
+        private static string Count(long value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
         public void Add(StatusClassCounts other)
         {
             Success += other.Success;

@@ -44,6 +44,8 @@ namespace DCST4.ViewModels
         public string Note { get; set; }
         /// <summary>The ramp step where saturation was found, or a window that counts as degraded.</summary>
         public bool Marked { get; set; }
+        /// <summary>Objects were not stored, or associations failed: shown in red, like a FAIL on the Tests tab.</summary>
+        public bool Problem { get; set; }
 
         internal static string Ms(double value) => value.ToString(value < 10 ? "0.00" : "0.0", CultureInfo.InvariantCulture);
         internal static string Rate(double value) => value.ToString("0.0", CultureInfo.InvariantCulture);
@@ -204,6 +206,19 @@ namespace DCST4.ViewModels
 
         public LoadSettings Settings => _settings.Clone();
 
+        /// <summary>Takes the settings from the Performance settings dialog, which has checked them. The test and the mix stay as chosen on the tab.</summary>
+        public void ApplySettings(LoadSettings settings)
+        {
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            var mix = _settings.Mix;
+            _settings = settings.Clone();
+            _settings.Mix = mix;
+            _rampStepsText = null;
+            _soakText = null;
+            OnPropertyChanged(string.Empty);
+            SettingsChanged?.Invoke();
+        }
+
         public string SaveSettings() => JsonSerializer.Serialize(_settings);
 
         private static LoadSettings Parse(string json)
@@ -356,10 +371,13 @@ namespace DCST4.ViewModels
         private static LoadSummaryRow Whole(PerformanceResult p, string label)
         {
             var row = LoadSummaryRow.From(label, p.Settings.Associations, p.Summary);
-            row.Note = p.EndedByCeiling ? "ended early by the instance ceiling: a short window, see above"
-                : p.StoppedBy == "count" ? "stopped at the instance count"
-                : "stopped by " + p.StoppedBy;
-            row.Marked = p.EndedByCeiling;
+            // Problems first, and in red: a refused store is what matters. How the run stopped is information.
+            var problems = p.Summary?.Errors?.DescribeProblems();
+            var stop = p.EndedByCeiling
+                ? $"Stopped after all {p.PlannedInstances.ToString("N0", CultureInfo.InvariantCulture)} instances (Max instances), at {p.Seconds.ToString(CultureInfo.InvariantCulture)} s of {(p.Settings?.DurationSeconds ?? 0).ToString("0.##", CultureInfo.InvariantCulture)}: a shorter window than asked for"
+                : p.DescribeStop().TrimEnd('.');
+            row.Note = problems == null ? stop : problems + ". " + stop;
+            row.Problem = problems != null;
             return row;
         }
 

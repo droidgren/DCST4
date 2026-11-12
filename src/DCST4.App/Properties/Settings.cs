@@ -204,6 +204,10 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool WriteResultHtml { get => (bool)this[nameof(WriteResultHtml)]; set => this[nameof(WriteResultHtml)] = value; }
 
+        /// <summary>Whether a Performance test writes its series files, one row per second, and the soak's windows file, while it runs.</summary>
+        [UserScopedSetting, DefaultSettingValue("True")]
+        public bool WriteResultSeries { get => (bool)this[nameof(WriteResultSeries)]; set => this[nameof(WriteResultSeries)] = value; }
+
         /// <summary>After a run, result files in the results folder older than this many days are deleted. 0 = never.</summary>
         [UserScopedSetting, DefaultSettingValue("0")]
         public int ResultsKeepDays { get => (int)this[nameof(ResultsKeepDays)]; set => this[nameof(ResultsKeepDays)] = value; }

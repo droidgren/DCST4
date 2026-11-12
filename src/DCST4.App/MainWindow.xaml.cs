@@ -192,6 +192,11 @@ namespace DCST4
             new TestSettingsDialog(new TestSettingsViewModel(_viewModel)) { Owner = this }.ShowDialog();
         }
 
+        private void PerformanceSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            new PerformanceSettingsDialog(new PerformanceSettingsViewModel(_viewModel.Performance)) { Owner = this }.ShowDialog();
+        }
+
         private async void CompareRunsButton_Click(object sender, RoutedEventArgs e)
         {
             var choices = _viewModel.Comparison;
