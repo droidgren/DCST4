@@ -459,7 +459,9 @@
                         The negotiation probe on the <Bold>Tests</Bold> tab finds out what the destination supports from
                         association negotiation alone. No images are sent. For each SOP class it proposes every transfer
                         syntax in a presentation context of its own, split over several associations since one can hold
-                        at most 128 contexts.
+                        at most 128 contexts. The 30 transfer syntaxes cover uncompressed and Deflated, JPEG, JPEG-LS,
+                        JPEG 2000, RLE, HTJ2K, JPEG XL, MPEG-2, H.264 and HEVC/H.265. They are only proposed, so a syntax
+                        DCST4 cannot encode can still be probed, and the store tests never send in one.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">The Capabilities tab</Paragraph>
                     <Paragraph>

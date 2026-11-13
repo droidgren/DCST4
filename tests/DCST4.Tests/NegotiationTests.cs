@@ -33,6 +33,13 @@ namespace DCST4.Tests
             CapabilityResult.NoReason,
         };
 
+        /// <summary>Syntaxes fo-dicom 5.2.6 knows only as a UID: JPEG XL, Encapsulated Uncompressed and Deflated Image Frame Compression.</summary>
+        private static readonly DicomTransferSyntax[] ProbeOnlyByUid =
+        {
+            DicomTransferSyntax.Parse("1.2.840.10008.1.2.4.110"), DicomTransferSyntax.Parse("1.2.840.10008.1.2.4.111"), DicomTransferSyntax.Parse("1.2.840.10008.1.2.4.112"),
+            DicomTransferSyntax.Parse("1.2.840.10008.1.2.1.98"), DicomTransferSyntax.Parse("1.2.840.10008.1.2.8.1"),
+        };
+
         private static TargetProfile Profile(int port) => TestSuiteTests.MockProfile(port);
 
         private static ProbeOptions MatrixOnly(IReadOnlyList<DicomUID> sopClasses = null, IReadOnlyList<DicomTransferSyntax> syntaxes = null, int limit = ProbeOptions.ContextLimit) =>
@@ -150,8 +157,16 @@ namespace DCST4.Tests
                 DicomTransferSyntax.JPEGProcess1, DicomTransferSyntax.JPEGProcess14SV1, DicomTransferSyntax.JPEGLSLossless, DicomTransferSyntax.JPEGLSNearLossless,
                 DicomTransferSyntax.JPEG2000Lossless, DicomTransferSyntax.JPEG2000Lossy, DicomTransferSyntax.RLELossless, DicomTransferSyntax.HTJ2KLossless, DicomTransferSyntax.HTJ2KLosslessRPCL, DicomTransferSyntax.HTJ2K,
                 DicomTransferSyntax.MPEG4AVCH264HighProfileLevel41, DicomTransferSyntax.MPEG4AVCH264BDCompatibleHighProfileLevel41, DicomTransferSyntax.MPEG4AVCH264HighProfileLevel42For2DVideo,
-            };
-            check("Every required transfer syntax is in the plan", required.All(s => CapabilityCatalog.TransferSyntaxes.Any(p => p.Syntax == s)), null);
+                DicomTransferSyntax.MPEG4AVCH264HighProfileLevel42For3DVideo, DicomTransferSyntax.MPEG4AVCH264StereoHighProfileLevel42,
+                DicomTransferSyntax.JPEGProcess2_4, DicomTransferSyntax.JPEGProcess14, DicomTransferSyntax.MPEG2, DicomTransferSyntax.MPEG2MainProfileHighLevel,
+                DicomTransferSyntax.HEVCH265MainProfileLevel51, DicomTransferSyntax.HEVCH265Main10ProfileLevel51,
+            }.Concat(ProbeOnlyByUid).ToList();
+            check("Every required transfer syntax is in the plan", required.All(s => CapabilityCatalog.TransferSyntaxes.Any(p => p.Syntax == s)), string.Join(", ", required.Where(s => CapabilityCatalog.TransferSyntaxes.All(p => p.Syntax != s)).Select(s => s.UID.UID)));
+            check("JPEG XL is proposed in all three variants", new[] { "1.2.840.10008.1.2.4.110", "1.2.840.10008.1.2.4.111", "1.2.840.10008.1.2.4.112" }.All(uid => CapabilityCatalog.TransferSyntaxes.Any(p => p.Syntax.UID.UID == uid)), null);
+            check("Every proposed syntax has its dictionary name", CapabilityCatalog.TransferSyntaxes.All(s => CapabilityMatrix.DisplayName(s.Syntax.UID.UID) != s.Syntax.UID.UID), string.Join(", ", CapabilityCatalog.TransferSyntaxes.Where(s => CapabilityMatrix.DisplayName(s.Syntax.UID.UID) == s.Syntax.UID.UID).Select(s => s.Syntax.UID.UID)));
+            check("A syntax looked up by UID equals a fresh lookup", ProbeOnlyByUid.All(s => s == DicomTransferSyntax.Parse(s.UID.UID) && s.IsExplicitVR && s.IsEncapsulated), null);
+            var probeOnly = ProbeOnlyByUid.Concat(new[] { DicomTransferSyntax.MPEG2, DicomTransferSyntax.MPEG2MainProfileHighLevel, DicomTransferSyntax.HEVCH265MainProfileLevel51, DicomTransferSyntax.HEVCH265Main10ProfileLevel51 }).ToList();
+            check("Probe-only syntaxes can not be chosen to generate or send in", probeOnly.All(s => CompressionCatalog.All.All(c => c.Syntax != s) && CompressionCatalog.Find(s.UID.UID) == null), null);
             check("Column labels are short and unique", CapabilityCatalog.TransferSyntaxes.All(s => s.ShortName.Length <= 11) && CapabilityCatalog.TransferSyntaxes.Select(s => s.ShortName).Distinct().Count() == CapabilityCatalog.TransferSyntaxes.Count, null);
 
             var plan = ProbePlan.Create(null);
@@ -179,7 +194,9 @@ namespace DCST4.Tests
 
             var smallOptions = MatrixOnly(new[] { DicomUID.CTImageStorage, DicomUID.MRImageStorage, DicomUID.Verification }, new[] { DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.ExplicitVRLittleEndian, DicomTransferSyntax.JPEG2000Lossless });
             await CheckScripted("Small plan", smallOptions, 1, port, check);
-            await CheckScripted("Default SOP classes and syntaxes", MatrixOnly(), 5, port, check);
+            // 127 contexts per association besides the C-ECHO's, which also answers its own cell: 8 with 31 SOP classes and 30 syntaxes.
+            var defaultContexts = CapabilityCatalog.SopClasses.Count * CapabilityCatalog.TransferSyntaxes.Count - 1;
+            await CheckScripted("Default SOP classes and syntaxes", MatrixOnly(), (defaultContexts + ProbeOptions.ContextLimit - 2) / (ProbeOptions.ContextLimit - 1), port, check);
             await CheckScripted("A low limit, many associations", MatrixOnly(CapabilityCatalog.StorageSopClasses.Take(4).ToList(), CapabilityCatalog.TransferSyntaxes.Take(6).Select(s => s.Syntax).ToList(), 5), 6, port, check);
 
             // ------------------------------------------------ with the extras, as the test case runs it
