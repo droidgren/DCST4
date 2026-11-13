@@ -20,7 +20,6 @@ namespace DCST4
     public partial class MainWindow : Window
     {
         public static readonly RoutedUICommand HelpRoutedCommand = new RoutedUICommand("Help", "Help", typeof(MainWindow));
-        public static readonly RoutedUICommand SearchHelpRoutedCommand = new RoutedUICommand("Search help", "SearchHelp", typeof(MainWindow));
 
         private readonly MainViewModel _viewModel;
         private readonly CancellationTokenSource _closing = new CancellationTokenSource();
@@ -33,8 +32,6 @@ namespace DCST4
 
             CommandBindings.Add(new CommandBinding(HelpRoutedCommand, (s, e) => ShowHelp()));
             InputBindings.Add(new KeyBinding(HelpRoutedCommand, Key.F1, ModifierKeys.None));
-            CommandBindings.Add(new CommandBinding(SearchHelpRoutedCommand, (s, e) => ShowHelp(focusSearch: true)));
-            InputBindings.Add(new KeyBinding(SearchHelpRoutedCommand, Key.F1, ModifierKeys.Control));
 
             Title = $"{AppInfo.DisplayName} v{AppInfo.CurrentVersion}";
             ContentRendered += ShowUpdateWindowIfNewVersion;
@@ -151,13 +148,9 @@ namespace DCST4
 
         private void HelpMenuItem_Click(object sender, RoutedEventArgs e) => ShowHelp();
 
-        private void SearchHelpMenuItem_Click(object sender, RoutedEventArgs e) => ShowHelp(focusSearch: true);
-
-        private void ShowHelp(bool focusSearch = false)
+        private void ShowHelp()
         {
-            var help = new HelpWindow { Owner = this };
-            help.Show();
-            if (focusSearch) help.FocusSearch();
+            new HelpWindow { Owner = this }.Show();
         }
 
         private void ExitMenuItem_Click(object sender, RoutedEventArgs e) => Close();

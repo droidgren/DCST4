@@ -691,7 +691,7 @@ namespace DCST4.Tests
             check("Delete saved to disk at once", h.Saves == 3, h.Saves.ToString());
         }
 
-        /// <summary>1.10.1: the Object list, Frames per image, JPEG Baseline, the private payload and the custom mix.</summary>
+        /// <summary>1.11.0: the Object list, Frames per image, JPEG Baseline, the private payload and the custom mix.</summary>
         private static async Task RunMultiFrame(int port, Action<string, bool, string> check)
         {
             Console.WriteLine("\nExam tab: multi-frame images, private payload and the custom mix");
@@ -711,7 +711,7 @@ namespace DCST4.Tests
                 while (vm.EstimatedSizeText == "calculating..." && sw.Elapsed < TimeSpan.FromSeconds(30)) await Task.Delay(20);
             };
 
-            check("The Modality list is the ten modalities, as before", string.Join(",", vm.Modalities.Select(m => m.Code)) == "CT,MR,CR,DX,US,XA,RF,MG,PT,NM", string.Join(",", vm.Modalities.Select(m => m.Code)));
+            check("The Modality list is the ten modalities as before, then OT, DOC and SR", string.Join(",", vm.Modalities.Select(m => m.Code)) == "CT,MR,CR,DX,US,XA,RF,MG,PT,NM,OT,DOC,SR", string.Join(",", vm.Modalities.Select(m => m.Code)));
             check("CT: its two objects, the single-frame image selected", objectList() == "Single frame | Enhanced CT" && vm.SelectedImageObject.DatasetProfileId == "ct" && !vm.IsMultiFrame, objectList());
             check("The Transfer syntax list has the 15 syntaxes, H.264 last", vm.TransferSyntaxes.Last() == TransferSyntaxOption.H264HighProfile && vm.TransferSyntaxes.Count == 15, vm.TransferSyntaxes.Count.ToString());
             var shownGroups = vm.TransferSyntaxView.Groups.Cast<System.Windows.Data.CollectionViewGroup>().ToList();
@@ -734,7 +734,7 @@ namespace DCST4.Tests
             var notified = new List<string>();
             vm.PropertyChanged += (s, e) => notified.Add(e.PropertyName);
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
-            check("US: its two objects, and the single-frame image to begin with", objectList() == "Single frame | Multi-frame (cine loop)" && vm.SelectedImageObject.DatasetProfileId == "us"
+            check("US: its three objects, and the single-frame image to begin with", objectList() == "Single frame | Multi-frame (cine loop) | Enhanced US Volume" && vm.SelectedImageObject.DatasetProfileId == "us"
                 && !vm.IsMultiFrame && vm.FramesPerImage == 1 && vm.ImagesPerSeries == vm.SelectedPreset.DefaultImages, objectList() + " " + vm.SelectedImageObject);
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CR");
             check("CR: one object, the single-frame image", objectList() == "Single frame" && !vm.IsMultiFrame, objectList());
@@ -757,6 +757,28 @@ namespace DCST4.Tests
             check("A multi-frame object starts with one image per series, whatever the exam type says for single images", vm.ImagesPerSeries == 1 && vm.SelectedPreset.DefaultImages == 8, vm.ImagesPerSeries.ToString());
             check("The exam type is kept when the object changes", vm.SelectedPreset.Name == "Abdomen", vm.SelectedPreset.Name);
             check("Estimated size counts the frames and the three samples", vm.EstimatedSizeText == "about " + ExamSizeEstimator.Format(ExamSizeEstimator.HeaderBytes + 600L * 800 * 3 * 30), vm.EstimatedSizeText);
+
+            vm.SelectedImageObject = vm.ImageObjects[2];
+            check("Enhanced US Volume: 8 frames at 8 bits, the matrix of the modality kept, and its own exam type", vm.IsMultiFrame && vm.FramesPerImage == 8 && vm.Rows == 600 && vm.Columns == 800 && vm.BitsStored == 8
+                && vm.SelectedPreset.Name == "Obstetric" && vm.SelectedImageObject.DatasetProfileId == "enhanced-us-volume", vm.FramesPerImage + " " + vm.Rows + "x" + vm.Columns + " " + vm.SelectedPreset.Name);
+            check("Enhanced US Volume: estimated size has one sample, it is grayscale", vm.EstimatedSizeText == "about " + ExamSizeEstimator.Format(ExamSizeEstimator.HeaderBytes + 600L * 800 * 8), vm.EstimatedSizeText);
+            vm.SelectedImageObject = vm.ImageObjects[1];
+
+            check("OT, DOC and SR are the last entries of the Modality list", vm.Modalities.Count == 13 && string.Join(",", vm.Modalities.Skip(10)) == "OT,DOC,SR", string.Join(",", vm.Modalities));
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("OT");
+            check("OT: Secondary Capture, with pixels, at its defaults", objectList() == "Secondary Capture"
+                && vm.SelectedImageObject.DatasetProfileId == "secondary-capture" && vm.HasPixelData && vm.Rows == 512 && vm.BitsStored == 8, objectList());
+            notified.Clear();
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("DOC");
+            check("DOC: Encapsulated PDF, with no pixels, so the matrix, bits, frames and payload are off", objectList() == "Encapsulated PDF" && !vm.HasPixelData && !vm.IsMultiFrame
+                && notified.Contains(nameof(vm.HasPixelData)) && vm.SelectedPreset.Name == "Document", objectList() + " " + vm.SelectedPreset?.Name);
+            check("DOC: the estimate is the header and the document", vm.EstimatedSizeText == "about " + ExamSizeEstimator.Format(ExamSizeEstimator.HeaderBytes + new Core.Generation.Objects.EncapsulatedPdfProfile().EstimatedContentBytes), vm.EstimatedSizeText);
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("SR");
+            check("SR: Basic Text SR and Enhanced SR, the first selected", objectList() == "Basic Text SR | Enhanced SR" && vm.SelectedImageObject.DatasetProfileId == "basic-text-sr" && !vm.HasPixelData, objectList());
+            vm.SelectedImageObject = vm.ImageObjects[1];
+            check("Enhanced SR: no pixels either, with the Report exam type", !vm.HasPixelData && vm.SelectedPreset.Name == "Report", vm.SelectedPreset?.Name);
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
+            vm.SelectedImageObject = vm.ImageObjects[1];
 
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
             check("Another modality starts at its ordinary image again", !vm.IsMultiFrame && vm.FramesPerImage == 1 && vm.SelectedImageObject.DatasetProfileId == "ct" && vm.Rows == 512 && vm.BitsStored == 16,
@@ -799,7 +821,7 @@ namespace DCST4.Tests
                 && restarted.PrivatePayloadMb == 1 && !restarted.AddPrivatePayload && restarted.SelectedTransferSyntax == TransferSyntaxOption.JpegBaseline,
                 restarted.SelectedModality + " " + restarted.SelectedImageObject + " " + restarted.FramesPerImage + " " + restarted.AddPrivatePayload);
 
-            // A settings file from before 1.10.1 holds the modality code and no object, which the catalog answers with
+            // A settings file from before 1.11.0 holds the modality code and no object, which the catalog answers with
             // nothing and the view model with the modality's ordinary image, as selecting that one does.
             var us = Core.Generation.Modalities.ModalityCatalog.Find("US");
             check("An object that is not named, or not of the modality, is found by nothing",
@@ -1656,7 +1678,7 @@ namespace DCST4.Tests
         }
 
         /// <summary>
-        /// The Exam tab with a multi-frame modality, laid out at the window's smallest size: the row added in 1.10.1 must fit
+        /// The Exam tab with a multi-frame modality, laid out at the window's smallest size: the row added in 1.11.0 must fit
         /// and its bindings must resolve. With a path it is also drawn to a PNG, for a look by hand.
         /// </summary>
         internal static async Task CheckExamTabLayout(int port, Action<string, bool, string> check, string pngPath)
@@ -1706,8 +1728,8 @@ namespace DCST4.Tests
 
                 check("Exam tab: Object, Frames per image, the payload box and its size are drawn", objects != null && frames != null && tick != null && size != null
                     && objects.ActualHeight > 0 && frames.ActualHeight > 0 && tick.ActualHeight > 0 && size.ActualWidth > 0, null);
-                check("Exam tab: the Object list holds the two images of US, the cine loop selected", objects != null && objects.Items.Count == 2
-                    && string.Join(" | ", objects.Items.OfType<object>().Select(o => o.ToString())) == "Single frame | Multi-frame (cine loop)"
+                check("Exam tab: the Object list holds the three images of US, the cine loop selected", objects != null && objects.Items.Count == 3
+                    && string.Join(" | ", objects.Items.OfType<object>().Select(o => o.ToString())) == "Single frame | Multi-frame (cine loop) | Enhanced US Volume"
                     && objects.SelectedItem?.ToString() == "Multi-frame (cine loop)", objects == null ? null : string.Join(" | ", objects.Items.OfType<object>().Select(o => o.ToString())));
                 Func<FrameworkElement, bool> inside = element =>
                 {

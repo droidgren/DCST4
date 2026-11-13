@@ -27,7 +27,6 @@
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_Help" InputGestureText="F1" Click="HelpMenuItem_Click"/>
-                <MenuItem Header="_Search help..." InputGestureText="Ctrl+F1" Click="SearchHelpMenuItem_Click"/>
                 <Separator/>
                 <MenuItem Header="_About" Click="AboutMenuItem_Click"/>
             </MenuItem>
@@ -190,7 +189,7 @@
                             </Grid.RowDefinitions>
 
                             <Label Content="Modality:"/>
-                            <ComboBox Grid.Column="1" ItemsSource="{Binding Modalities}" SelectedItem="{Binding SelectedModality, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2" ToolTip="The kind of images to generate. Changing it sets the matrix, bits stored and exam type to that modality's defaults.&#x0a;&#x0a;Default: CT."/>
+                            <ComboBox Grid.Column="1" ItemsSource="{Binding Modalities}" SelectedItem="{Binding SelectedModality, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2" ToolTip="The kind of images to generate. OT is Secondary Capture, DOC an Encapsulated PDF and SR a Basic Text or Enhanced SR report. Changing it sets the matrix, bits stored and exam type to that modality's defaults.&#x0a;&#x0a;Default: CT."/>
                             <Label Grid.Column="3" Content="Exam type:"/>
                             <ComboBox Grid.Column="4" ItemsSource="{Binding Presets}" SelectedItem="{Binding SelectedPreset, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="Sets the descriptions, body part and modality-specific tags.&#x0a;&#x0a;Default: the first exam type of the modality, Head for CT."/>
@@ -205,7 +204,7 @@
                             </DockPanel>
 
                             <Label Grid.Row="2" Content="Rows x Columns:"/>
-                            <Grid Grid.Row="2" Grid.Column="1" Margin="0,2">
+                            <Grid Grid.Row="2" Grid.Column="1" Margin="0,2" IsEnabled="{Binding HasPixelData}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -216,7 +215,7 @@
                                 <TextBox Grid.Column="2" Text="{Binding Columns, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" ToolTip="64 to 4096.&#x0a;&#x0a;Default: the modality's own, 512 for most."/>
                             </Grid>
                             <Label Grid.Row="2" Grid.Column="3" Content="Bits stored:"/>
-                            <ComboBox Grid.Row="2" Grid.Column="4" ItemsSource="{Binding BitDepths}" SelectedItem="{Binding BitsStored, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
+                            <ComboBox Grid.Row="2" Grid.Column="4" ItemsSource="{Binding BitDepths}" SelectedItem="{Binding BitsStored, Mode=TwoWay}" IsEnabled="{Binding HasPixelData}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="The list shows what the selected modality's IOD allows.&#x0a;&#x0a;Default: the modality's own, 16 for CT."/>
 
                             <Label Grid.Row="3" Content="Character set:"/>
@@ -240,11 +239,11 @@
 
                             <Label Grid.Row="5" Content="Object:"/>
                             <ComboBox Grid.Row="5" Grid.Column="1" ItemsSource="{Binding ImageObjects}" SelectedItem="{Binding SelectedImageObject, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
-                                      ToolTip="Which image of the modality to generate, named after its IOD. US, CT, MR and MG also have a multi-frame image: Ultrasound Multi-frame Image, Enhanced CT Image, Enhanced MR Image and Breast Tomosynthesis Image.&#x0a;&#x0a;Default: the modality's ordinary image."/>
+                                      ToolTip="Which image of the modality to generate, named after its IOD. US, XA, RF, CT, MR and MG also have multi-frame images. OT is Secondary Capture, DOC an Encapsulated PDF, and SR a Basic Text SR or Enhanced SR report. DOC and SR have no pixels, so the matrix, bits, frames and private payload do not apply to them.&#x0a;&#x0a;Default: the modality's ordinary image."/>
                             <Label Grid.Row="5" Grid.Column="3" Content="Frames per image:"/>
                             <TextBox Grid.Row="5" Grid.Column="4" Text="{Binding FramesPerImage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsMultiFrame}" VerticalAlignment="Center" Margin="0,2"
                                      ToolTip="How many frames each image has, 1 to 10000. Only for a multi-frame object: Ultrasound Multi-frame, Enhanced CT, Enhanced MR and Breast Tomosynthesis. An ultrasound cine loop has 30 frames per second.&#x0a;&#x0a;Without compression an image holds less than 4 GB of pixels. A long cine loop needs JPEG Baseline or JPEG Lossless, and its frames are then encoded before the image is sent.&#x0a;&#x0a;Default: 30 for a cine loop, 8 for the others." ToolTipService.ShowOnDisabled="True"/>
-                            <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="5" Orientation="Horizontal" Margin="5,6,0,0">
+                            <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="5" Orientation="Horizontal" Margin="5,6,0,0" IsEnabled="{Binding HasPixelData}">
                                 <CheckBox Content="Add private payload of" IsChecked="{Binding AddPrivatePayload, Mode=TwoWay}" VerticalAlignment="Center"
                                           ToolTip="Adds a private sequence with one large binary value to every image, as some ultrasound systems do with their raw data. The value is random bytes under the private creator DCST4 TEST, in (0099,1020). Use it to find out whether a PACS takes images with large private data.&#x0a;&#x0a;It is off every time DCST4 starts. The size is remembered.&#x0a;&#x0a;Default: off."/>
                                 <TextBox Text="{Binding PrivatePayloadMb, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding AddPrivatePayload}" Width="50" Margin="6,0,4,0" VerticalAlignment="Center"

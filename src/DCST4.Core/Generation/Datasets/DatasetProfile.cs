@@ -69,10 +69,12 @@ namespace DCST4.Core.Generation.Datasets
             profiles.Add(DatasetProfile.ForImage("enhanced-mr", new EnhancedMrProfile(), DefaultCineFrames));
             profiles.Add(DatasetProfile.ForImage("enhanced-xa", new EnhancedXaProfile(), DefaultCineFrames));
             profiles.Add(DatasetProfile.ForImage("enhanced-rf", new EnhancedRfProfile(), DefaultCineFrames));
+            profiles.Add(DatasetProfile.ForImage("enhanced-us-volume", new EnhancedUsVolumeProfile(), DefaultCineFrames));
             profiles.Add(DatasetProfile.ForImage("tomosynthesis-large", new BreastTomosynthesisProfile(), BreastTomosynthesisProfile.LargeFrames, includedByDefault: false));
             profiles.Add(DatasetProfile.ForObject("basic-text-sr", new BasicTextSrProfile()));
             profiles.Add(DatasetProfile.ForObject("key-object-selection", new KeyObjectProfile()));
             profiles.Add(DatasetProfile.ForObject("grayscale-presentation-state", new PresentationStateProfile()));
+            profiles.Add(DatasetProfile.ForObject("enhanced-sr", new EnhancedSrProfile()));
             profiles.Add(DatasetProfile.ForObject("encapsulated-pdf", new EncapsulatedPdfProfile()));
             profiles.Add(DatasetProfile.ForImage("segmentation", new SegmentationProfile(), DefaultSegmentationFrames));
             profiles.Add(DatasetProfile.ForObject("rt-structure-set", new RtStructureSetProfile()));

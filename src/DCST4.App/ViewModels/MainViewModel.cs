@@ -156,7 +156,7 @@ namespace DCST4.ViewModels
         #endregion
 
         #region Properties - Exam
-        public IReadOnlyList<ModalityProfile> Modalities => ModalityCatalog.All;
+        public IReadOnlyList<ModalityProfile> Modalities => ModalityCatalog.Choices;
         /// <summary>The images the selected modality can generate, its multi-frame one included where DCST4 has one.</summary>
         public ObservableCollection<ImageObject> ImageObjects { get; } = new ObservableCollection<ImageObject>();
         public IReadOnlyList<string> CharacterSets { get; } = new[] { DicomCharacterSets.Latin1, DicomCharacterSets.Utf8, DicomCharacterSets.EmptyDisplayName };
@@ -201,6 +201,7 @@ namespace DCST4.ViewModels
                 _selectedImageObject = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsMultiFrame));
+                OnPropertyChanged(nameof(HasPixelData));
                 Settings.Default.ImageObject = value.DatasetProfileId;
                 FillImageLists();
                 // Emptying the list of bit depths clears the box, which has to be told to show the value again.
@@ -220,6 +221,9 @@ namespace DCST4.ViewModels
 
         /// <summary>The selected object has more than one frame.</summary>
         public bool IsMultiFrame => _selectedImageObject != null && _selectedImageObject.IsMultiFrame;
+
+        /// <summary>False for a document or report of Other, which has no matrix, bits, frames or private payload.</summary>
+        public bool HasPixelData => _selectedImageObject == null || _selectedImageObject.HasPixelData;
 
         private int _framesPerImage = 1;
         /// <summary>Frames in each image. Always 1 for a single-frame modality.</summary>
@@ -250,7 +254,7 @@ namespace DCST4.ViewModels
         public const int DefaultPrivatePayloadMb = 100;
 
         /// <summary>The payload of the request: 0 when it is off, and the entered size as it is when on, so that the validator names a bad one.</summary>
-        private long PrivatePayloadBytes => _addPrivatePayload ? _privatePayloadMb * PrivatePayload.BytesPerMegabyte : 0;
+        private long PrivatePayloadBytes => _addPrivatePayload && HasPixelData ? _privatePayloadMb * PrivatePayload.BytesPerMegabyte : 0;
 
         private ExamPreset _selectedPreset;
         public ExamPreset SelectedPreset
@@ -606,7 +610,7 @@ namespace DCST4.ViewModels
             // Read before the modality is selected, since selecting one writes the object it starts with.
             var savedObject = s.ImageObject;
             SelectedModality = ModalityCatalog.Find(s.Modality) ?? ModalityCatalog.All[0];
-            // A settings file from before 1.10.1 names no object, which gives the modality's ordinary image.
+            // A settings file from before 1.11.0 names no object, which gives the modality's ordinary image.
             SelectedImageObject = ModalityCatalog.FindObject(_selectedModality, savedObject) ?? ImageObjects[0];
             SelectedPreset = Generating.Presets.FirstOrDefault(p => p.Name == s.ExamType) ?? Generating.Presets[0];
             _framesPerImage = !IsMultiFrame ? 1 : s.FramesPerImage > 0 ? s.FramesPerImage : Generating.DefaultFrames;
@@ -1126,7 +1130,7 @@ namespace DCST4.ViewModels
             if (_selectedImageObject == null || _selectedTransferSyntax == null) return null;
             // The display name, not the Object list's label: a mix described as "Single frame ..." would say nothing.
             return DataMix.Custom(_selectedImageObject.DatasetProfileId, Generating.DisplayName, _rows, _columns, _bitsStored, IsMultiFrame ? _framesPerImage : 1,
-                Generating.SamplesPerPixel, _selectedTransferSyntax.Syntax, _selectedTransferSyntax.Name, PrivatePayloadBytes);
+                Generating.SamplesPerPixel, _selectedTransferSyntax.Syntax, _selectedTransferSyntax.Name, PrivatePayloadBytes, HasPixelData);
         }
 
         private StoreRunOptions BuildRunOptions() => new StoreRunOptions

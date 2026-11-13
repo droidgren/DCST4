@@ -39,6 +39,21 @@ namespace DCST4.Core.Generation
             var modality = request.Modality;
             var preset = request.Preset;
 
+            // A document or report from the Object list: its own content after the shared header, and no pixels.
+            if (modality is Objects.DocumentProfile document)
+            {
+                var built = document.Document.Build(new Objects.ObjectContext
+                {
+                    Request = request,
+                    Series = series,
+                    InstanceIndex = imageIndex,
+                    ContentTime = contentTime,
+                    TextSuffix = string.Empty,
+                });
+                foreach (var additional in id.AdditionalTags) AdditionalTagWriter.Write(built, additional);
+                return built;
+            }
+
             var dataset = BuildHeader(request, series, modality.SopClass, modality.Code, imageIndex, contentTime);
 
             dataset.Add(DicomTag.BodyPartExamined, preset.BodyPart ?? string.Empty);

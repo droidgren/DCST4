@@ -262,7 +262,9 @@ namespace DCST4.Tests
             // The Enhanced XA and XRF IODs have no Frame of Reference, no dimensions and no Pixel Presentation.
             { "enhanced-xa", EnhancedXrayRequired },
             { "enhanced-rf", EnhancedXrayRequired },
+            { "enhanced-us-volume", new[] { DicomTag.NumberOfFrames, DicomTag.SharedFunctionalGroupsSequence, DicomTag.PerFrameFunctionalGroupsSequence, DicomTag.DimensionOrganizationSequence, DicomTag.DimensionIndexSequence, DicomTag.DimensionOrganizationType, DicomTag.FrameOfReferenceUID, DicomTag.VolumeFrameOfReferenceUID, DicomTag.UltrasoundAcquisitionGeometry, DicomTag.ApexPosition, DicomTag.VolumeToTransducerMappingMatrix, DicomTag.SynchronizationFrameOfReferenceUID, DicomTag.AcquisitionDuration, DicomTag.TransducerScanPatternCodeSequence, DicomTag.ViewCodeSequence, DicomTag.AnatomicRegionSequence, DicomTag.RescaleSlope, DicomTag.AcquisitionContextSequence } },
             { "segmentation", new[] { DicomTag.NumberOfFrames, DicomTag.SharedFunctionalGroupsSequence, DicomTag.PerFrameFunctionalGroupsSequence, DicomTag.DimensionOrganizationSequence, DicomTag.DimensionIndexSequence, DicomTag.SegmentationType, DicomTag.ContentLabel, DicomTag.ContentDescription, DicomTag.ContentCreatorName, DicomTag.SegmentSequence, DicomTag.ReferencedSeriesSequence, DicomTag.FrameOfReferenceUID } },
+            { "enhanced-sr", new[] { DicomTag.CompletionFlag, DicomTag.VerificationFlag, DicomTag.ValueType, DicomTag.ConceptNameCodeSequence, DicomTag.ContinuityOfContent, DicomTag.ContentSequence, DicomTag.PerformedProcedureCodeSequence, DicomTag.ReferencedPerformedProcedureStepSequence } },
             { "basic-text-sr", new[] { DicomTag.CompletionFlag, DicomTag.VerificationFlag, DicomTag.ValueType, DicomTag.ConceptNameCodeSequence, DicomTag.ContinuityOfContent, DicomTag.ContentSequence, DicomTag.PerformedProcedureCodeSequence, DicomTag.ReferencedPerformedProcedureStepSequence } },
             { "key-object-selection", new[] { DicomTag.ValueType, DicomTag.ConceptNameCodeSequence, DicomTag.ContinuityOfContent, DicomTag.ContentTemplateSequence, DicomTag.ContentSequence, DicomTag.CurrentRequestedProcedureEvidenceSequence, DicomTag.ReferencedPerformedProcedureStepSequence } },
             { "grayscale-presentation-state", new[] { DicomTag.PresentationCreationDate, DicomTag.PresentationCreationTime, DicomTag.ContentLabel, DicomTag.ContentDescription, DicomTag.ContentCreatorName, DicomTag.ReferencedSeriesSequence, DicomTag.DisplayedAreaSelectionSequence, DicomTag.GraphicLayerSequence, DicomTag.GraphicAnnotationSequence, DicomTag.PresentationLUTShape } },
@@ -347,12 +349,15 @@ namespace DCST4.Tests
             var shared = dataset.GetSequence(DicomTag.SharedFunctionalGroupsSequence).Items[0];
             check($"{profile.Id}: one item per frame", perFrame.Count == frames, perFrame.Count.ToString());
             check($"{profile.Id}: frame content per frame", perFrame.All(i => i.Contains(DicomTag.FrameContentSequence)), null);
-            // The Enhanced XA and XRF IODs have none of the slice geometry macros, so they are the exception here.
-            var stack = !(profile.Image is EnhancedXrayProfile);
-            check($"{profile.Id}: frame position per frame, where the IOD has it", perFrame.All(i => i.Contains(DicomTag.PlanePositionSequence) == stack), null);
+            // The Enhanced XA and XRF IODs have none of the slice geometry macros, so they are the exception here. The Enhanced
+            // US Volume places its frames in the volume's coordinates, with the (Volume) plane macros in place of the patient ones.
+            var volume = profile.Image is EnhancedUsVolumeProfile;
+            var stack = !(profile.Image is EnhancedXrayProfile) && !volume;
+            check($"{profile.Id}: frame position per frame, where the IOD has it", perFrame.All(i => i.Contains(DicomTag.PlanePositionSequence) == stack && i.Contains(DicomTag.PlanePositionVolumeSequence) == volume), null);
             check($"{profile.Id}: pixel measures and orientation shared, where the IOD has them",
-                shared.Contains(DicomTag.PixelMeasuresSequence) == stack && shared.Contains(DicomTag.PlaneOrientationSequence) == stack, null);
-            check($"{profile.Id}: no window at the top level", !dataset.Contains(DicomTag.WindowCenter) && !dataset.Contains(DicomTag.RescaleIntercept), null);
+                shared.Contains(DicomTag.PixelMeasuresSequence) == (stack || volume) && shared.Contains(DicomTag.PlaneOrientationSequence) == stack && shared.Contains(DicomTag.PlaneOrientationVolumeSequence) == volume, null);
+            // Enhanced US Image has Rescale Slope and Intercept as Type 1 at the top level.
+            check($"{profile.Id}: no window at the top level", !dataset.Contains(DicomTag.WindowCenter) && dataset.Contains(DicomTag.RescaleIntercept) == volume, null);
             check($"{profile.Id}: no acquisition date without a time zone rule", !dataset.Contains(DicomTag.AcquisitionDate), null);
 
             if (profile.Image.IsBinaryMask)
@@ -362,7 +367,8 @@ namespace DCST4.Tests
             }
 
             check($"{profile.Id}: window in the shared groups", shared.Contains(DicomTag.FrameVOILUTSequence), null);
-            check($"{profile.Id}: frame anatomy in the shared groups", shared.Contains(DicomTag.FrameAnatomySequence), null);
+            // The Enhanced US Volume IOD has its anatomy at the top level, and no Frame Anatomy macro.
+            check($"{profile.Id}: frame anatomy in the shared groups, or at the top level for US Volume", volume ? dataset.Contains(DicomTag.AnatomicRegionSequence) && !shared.Contains(DicomTag.FrameAnatomySequence) : shared.Contains(DicomTag.FrameAnatomySequence), null);
         }
 
         // ---------------------------------------------------------------- naming and character sets

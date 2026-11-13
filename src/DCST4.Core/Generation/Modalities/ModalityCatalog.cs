@@ -1,3 +1,4 @@
+using DCST4.Core.Generation.Objects;
 using FellowOakDicom;
 using System;
 using System.Collections.Generic;
@@ -14,8 +15,25 @@ namespace DCST4.Core.Generation.Modalities
             new XaProfile(), new RfProfile(), new MgProfile(), new PtProfile(), new NmProfile(),
         };
 
+        /// <summary>
+        /// The Modality list of Generate &amp; Send: the ten imaging modalities and the <see cref="Groups"/>. Those are not in
+        /// <see cref="All"/>, which the dataset profiles and the store tests are made from, since its objects are there already.
+        /// </summary>
+        private static readonly SecondaryCaptureProfile Capture = new SecondaryCaptureProfile();
+        private static readonly DocumentProfile Pdf = new DocumentProfile(new EncapsulatedPdfProfile());
+        private static readonly DocumentProfile BasicTextSr = new DocumentProfile(new BasicTextSrProfile());
+        private static readonly DocumentProfile EnhancedSr = new DocumentProfile(new EnhancedSrProfile());
+
+        /// <summary>OT, DOC and SR: what a PACS stores besides the images of a modality, named after their Modality values.</summary>
+        public static IReadOnlyList<ModalityProfile> Groups { get; } = new ModalityProfile[]
+        {
+            new ObjectGroupProfile("OT", Capture), new ObjectGroupProfile("DOC", Pdf), new ObjectGroupProfile("SR", BasicTextSr),
+        };
+
+        public static IReadOnlyList<ModalityProfile> Choices { get; } = All.Concat(Groups).ToList();
+
         public static ModalityProfile Find(string code) =>
-            All.FirstOrDefault(m => string.Equals(m.Code, code, StringComparison.OrdinalIgnoreCase));
+            Choices.FirstOrDefault(m => string.Equals(m.Code, code, StringComparison.OrdinalIgnoreCase));
 
         /// <summary>
         /// The images a modality can generate in Generate &amp; Send: its ordinary single-frame one first, then the
@@ -30,7 +48,7 @@ namespace DCST4.Core.Generation.Modalities
 
         /// <summary>The image with that dataset profile id, whatever its modality. Null if no modality generates it.</summary>
         public static ImageObject FindObject(string datasetProfileId) =>
-            All.SelectMany(ObjectsOf).FirstOrDefault(o => string.Equals(o.DatasetProfileId, datasetProfileId?.Trim(), StringComparison.OrdinalIgnoreCase));
+            Choices.SelectMany(ObjectsOf).FirstOrDefault(o => string.Equals(o.DatasetProfileId, datasetProfileId?.Trim(), StringComparison.OrdinalIgnoreCase));
 
         private static readonly IReadOnlyList<ImageObject> NoObjects = new ImageObject[0];
 
@@ -42,7 +60,7 @@ namespace DCST4.Core.Generation.Modalities
             // A cine XA or RF is the same SOP class as the single-frame image, with the Multi-frame and Cine modules.
             var multiFrame = new Dictionary<string, ImageObject[]>(StringComparer.OrdinalIgnoreCase)
             {
-                { "US", new[] { new ImageObject(new UsMultiFrameProfile(), "us-multiframe") } },
+                { "US", new[] { new ImageObject(new UsMultiFrameProfile(), "us-multiframe"), new ImageObject(new EnhancedUsVolumeProfile(), "enhanced-us-volume") } },
                 { "CT", new[] { new ImageObject(new EnhancedCtProfile(), "enhanced-ct") } },
                 { "MR", new[] { new ImageObject(new EnhancedMrProfile(), "enhanced-mr") } },
                 { "MG", new[] { new ImageObject(new BreastTomosynthesisProfile(), "tomosynthesis-large") } },
@@ -57,6 +75,11 @@ namespace DCST4.Core.Generation.Modalities
                 if (multiFrame.TryGetValue(modality.Code, out var more)) list.AddRange(more);
                 objects[modality.Code] = list;
             }
+
+            // OT, DOC and SR: a Secondary Capture image, and the objects without pixels that a PACS also stores.
+            objects["OT"] = new[] { new ImageObject(Capture, "secondary-capture") };
+            objects["DOC"] = new[] { new ImageObject(Pdf, "encapsulated-pdf") };
+            objects["SR"] = new[] { new ImageObject(BasicTextSr, "basic-text-sr"), new ImageObject(EnhancedSr, "enhanced-sr") };
             return objects;
         }
     }
@@ -76,6 +99,8 @@ namespace DCST4.Core.Generation.Modalities
         public string DatasetProfileId { get; }
         public string Name => Image.ObjectName;
         public bool IsMultiFrame => Image.IsMultiFrame;
+        /// <summary>False for a document or report, which has no matrix, bits or frames.</summary>
+        public bool HasPixelData => Image.HasPixelData;
         public override string ToString() => Name;
     }
 

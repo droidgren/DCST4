@@ -2,7 +2,9 @@ using DCST4.Core.Generation.Modalities;
 using FellowOakDicom;
 using FellowOakDicom.IO.Buffer;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 
 namespace DCST4.Core.Generation.Objects
@@ -29,6 +31,9 @@ namespace DCST4.Core.Generation.Objects
         public abstract ExamPreset Preset { get; }
         /// <summary>Refers to an image, so that one is generated first.</summary>
         public virtual bool NeedsSourceImage => false;
+
+        /// <summary>About how many bytes the content adds to the shared header, for the size estimate of Generate &amp; Send.</summary>
+        public virtual long EstimatedContentBytes => 600;
 
         public abstract void AddContent(DicomDataset dataset, ObjectContext context);
 
@@ -70,13 +75,43 @@ namespace DCST4.Core.Generation.Objects
         protected static string Int(int value) => value.ToString(CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Basic Text SR IOD: a title with text items in nested containers.</summary>
-    public sealed class BasicTextSrProfile : ObjectProfile
+    /// <summary>
+    /// An object without Pixel Data in the Object list of Generate &amp; Send. It stands in for a modality profile there, so
+    /// the request, the view model and the settings need no second path; <see cref="DicomImageBuilder"/> hands it to the object.
+    /// </summary>
+    public sealed class DocumentProfile : ModalityProfile
     {
-        public override string Code => "SR";
-        public override string DisplayName => "Basic Text SR";
-        public override DicomUID SopClass => DicomUID.BasicTextSRStorage;
+        private static readonly int[] NoBitDepths = { 8 };
+
+        public DocumentProfile(ObjectProfile document)
+        {
+            Document = document ?? throw new ArgumentNullException(nameof(document));
+            Presets = new[] { document.Preset };
+        }
+
+        public ObjectProfile Document { get; }
+
+        public override string Code => Document.Code;
+        public override string DisplayName => Document.DisplayName;
+        public override string ObjectName => Document.DisplayName;
+        public override DicomUID SopClass => Document.SopClass;
+        public override bool HasPixelData => false;
+        public override IReadOnlyList<int> BitDepths => NoBitDepths;
+        public override int DefaultBitDepth => 8;
+        public override IReadOnlyList<ExamPreset> Presets { get; }
+        public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(1);
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context) =>
+            throw new InvalidOperationException(DisplayName + " has no image to add modality tags to.");
+    }
+
+    /// <summary>The report that Basic Text SR and Enhanced SR share: a title, and a Findings section with a text finding.</summary>
+    public abstract class TextReportProfile : ObjectProfile
+    {
         public override ExamPreset Preset { get; } = new ExamPreset { Name = "Report", StudyDescription = "Test report", SeriesDescription = "Report", ProtocolName = "Report", BodyPart = string.Empty };
+
+        /// <summary>More items of the Findings section, after the text finding.</summary>
+        protected virtual DicomDataset[] MoreFindings(ObjectContext context) => new DicomDataset[0];
 
         public override void AddContent(DicomDataset dataset, ObjectContext context)
         {
@@ -103,10 +138,44 @@ namespace DCST4.Core.Generation.Objects
                 { DicomTag.ValueType, "CONTAINER" },
                 ConceptName("DCM", "121070", "Findings"),
                 { DicomTag.ContinuityOfContent, "SEPARATE" },
-                new DicomSequence(DicomTag.ContentSequence, findings),
+                new DicomSequence(DicomTag.ContentSequence, new[] { findings }.Concat(MoreFindings(context)).ToArray()),
             };
             dataset.AddOrUpdate(new DicomSequence(DicomTag.ContentSequence, section));
         }
+    }
+
+    /// <summary>Basic Text SR IOD: a title with text items in nested containers.</summary>
+    public sealed class BasicTextSrProfile : TextReportProfile
+    {
+        public override string Code => "SR";
+        public override string DisplayName => "Basic Text SR";
+        public override DicomUID SopClass => DicomUID.BasicTextSRStorage;
+    }
+
+    /// <summary>
+    /// Enhanced SR IOD: the same report, with a measurement. A NUM content item is what Enhanced SR allows and Basic Text
+    /// SR does not, so a system that takes one but not the other shows here.
+    /// </summary>
+    public sealed class EnhancedSrProfile : TextReportProfile
+    {
+        public override string Code => "SR";
+        public override string DisplayName => "Enhanced SR";
+        public override DicomUID SopClass => DicomUID.EnhancedSRStorage;
+
+        protected override DicomDataset[] MoreFindings(ObjectContext context) => new[]
+        {
+            new DicomDataset
+            {
+                { DicomTag.RelationshipType, "CONTAINS" },
+                { DicomTag.ValueType, "NUM" },
+                ConceptName("DCM", "121206", "Distance"),
+                new DicomSequence(DicomTag.MeasuredValueSequence, new DicomDataset
+                {
+                    new DicomSequence(DicomTag.MeasurementUnitsCodeSequence, CodeItem("UCUM", "mm", "millimeter")),
+                    { DicomTag.NumericValue, "42" },
+                }),
+            },
+        };
     }
 
     /// <summary>Key Object Selection Document IOD: template 2010, pointing at the source image.</summary>
@@ -222,6 +291,9 @@ namespace DCST4.Core.Generation.Objects
         public override string DisplayName => "Encapsulated PDF";
         public override DicomUID SopClass => DicomUID.EncapsulatedPDFStorage;
         public override ExamPreset Preset { get; } = new ExamPreset { Name = "Document", StudyDescription = "Test document", SeriesDescription = "Document", ProtocolName = "Document", BodyPart = string.Empty };
+
+        /// <summary>The PDF, and the document attributes around it.</summary>
+        public override long EstimatedContentBytes => BuildPdf(1).Length + 200;
 
         public override void AddContent(DicomDataset dataset, ObjectContext context)
         {

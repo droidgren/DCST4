@@ -72,10 +72,14 @@ namespace DCST4.Core.Performance
         /// A mix of one object type. Its description says everything that decides what is sent, since two custom mixes
         /// have the same id. A large object gets fewer variants in the pool, down to one.
         /// </summary>
-        public static DataMix Custom(string profileId, string name, int rows, int columns, int bitsStored, int frames, int samplesPerPixel, DicomTransferSyntax syntax, string syntaxName, long privatePayloadBytes)
+        public static DataMix Custom(string profileId, string name, int rows, int columns, int bitsStored, int frames, int samplesPerPixel, DicomTransferSyntax syntax, string syntaxName, long privatePayloadBytes, bool hasPixelData = true)
         {
-            var entry = new DataMixEntry(profileId, rows, columns, bitsStored, frames, samplesPerPixel, privatePayloadBytes);
-            var description = string.Format(CultureInfo.InvariantCulture, "{0} {1} x {2}, {3} bits", name, rows, columns, bitsStored)
+            // A document or report has no pixels, so it is only the attributes and its content.
+            var entry = hasPixelData
+                ? new DataMixEntry(profileId, rows, columns, bitsStored, frames, samplesPerPixel, privatePayloadBytes)
+                : new DataMixEntry(profileId, 0, 0, 8);
+            // A document or report has no matrix or bits to describe.
+            var description = !hasPixelData ? name : string.Format(CultureInfo.InvariantCulture, "{0} {1} x {2}, {3} bits", name, rows, columns, bitsStored)
                 + (frames > 1 ? string.Format(CultureInfo.InvariantCulture, ", {0} frames", frames) : string.Empty)
                 + ", " + syntaxName
                 + (privatePayloadBytes > 0 ? string.Format(CultureInfo.InvariantCulture, ", {0:0.#} MB private payload", privatePayloadBytes / (1024.0 * 1024)) : string.Empty);

@@ -111,6 +111,8 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "OT";
         public override string DisplayName => "Secondary Capture";
+        /// <summary>In the Object list of OT, where "Single frame" would say nothing.</summary>
+        public override string ObjectName => DisplayName;
         public override DicomUID SopClass => DicomUID.SecondaryCaptureImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8 };
         public override int DefaultBitDepth => 8;
@@ -129,6 +131,34 @@ namespace DCST4.Core.Generation.Modalities
             dataset.AddOrUpdate(DicomTag.ConversionType, "WSD");
             dataset.AddOrUpdate(DicomTag.PatientOrientation, new string[0]);
         }
+    }
+
+    /// <summary>
+    /// An entry of the Modality list in Generate &amp; Send for objects that are not of an imaging modality: OT (Secondary
+    /// Capture), DOC (Encapsulated PDF) and SR (the reports), named after the Modality value the objects carry. It is no IOD
+    /// itself, and takes its defaults from its first object, so choosing it sets the fields as choosing a modality does.
+    /// </summary>
+    public sealed class ObjectGroupProfile : ModalityProfile
+    {
+        private readonly ModalityProfile _first;
+
+        public ObjectGroupProfile(string code, ModalityProfile first)
+        {
+            Code = code;
+            _first = first ?? throw new ArgumentNullException(nameof(first));
+        }
+
+        public override string Code { get; }
+        public override string DisplayName => Code;
+        public override DicomUID SopClass => _first.SopClass;
+        public override bool HasPixelData => _first.HasPixelData;
+        public override IReadOnlyList<int> BitDepths => _first.BitDepths;
+        public override int DefaultBitDepth => _first.DefaultBitDepth;
+        public override int SamplesPerPixel => _first.SamplesPerPixel;
+        public override IReadOnlyList<ExamPreset> Presets => _first.Presets;
+        public override TimeSpan InstanceInterval => _first.InstanceInterval;
+        public override string[] ImageType(ExamPreset preset) => _first.ImageType(preset);
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context) => _first.AddModalityTags(dataset, preset, context);
     }
 
     /// <summary>
@@ -488,6 +518,129 @@ namespace DCST4.Core.Generation.Modalities
         {
             new ExamPreset { Name = "Upper GI", StudyDescription = "RF Upper GI", SeriesDescription = "Upper GI Enhanced", ProtocolName = "Upper GI", BodyPart = "STOMACH", FieldOfViewMm = 400, RadiationSetting = "SC", Kvp = 90, TubeCurrentMa = 400, ExposureTimeMs = 100 },
         };
+    }
+
+    /// <summary>
+    /// Enhanced US Volume IOD (PS3.3 A.59): a 3D ultrasound volume as a stack of 8-bit grayscale frames. The frames are placed
+    /// in the volume's own coordinate system, with the transducer apex at its origin (Ultrasound Acquisition Geometry APEX),
+    /// so the patient-based plane macros, the Patient Frame of Reference Source and the table attributes are not required.
+    /// Image Type value 1 is ORIGINAL, as a scanner writes it: DERIVED would require a Source Image Sequence. Each frame
+    /// therefore has its acquisition time and duration.
+    /// </summary>
+    public sealed class EnhancedUsVolumeProfile : FunctionalGroupProfile
+    {
+        public override string Code => "US";
+        public override string DisplayName => "Enhanced US Volume";
+        public override DicomUID SopClass => DicomUID.EnhancedUSVolumeStorage;
+        public override IReadOnlyList<int> BitDepths { get; } = new[] { 8 };
+        public override int DefaultBitDepth => 8;
+        public override int DefaultRows => 256;
+        public override int DefaultColumns => 256;
+        public override int DefaultFrames => EnhancedFrames;
+        public override bool RendersFramesOnDemand => true;
+        public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(15);
+
+        // The planes are in the volume's coordinate system, not the patient's.
+        protected override bool UsesSliceGeometry => false;
+
+        public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
+        {
+            new ExamPreset { Name = "Obstetric", StudyDescription = "US Obstetric", SeriesDescription = "Obstetric Volume", ProtocolName = "OB 3D", BodyPart = "UTERUS", UsApplication = "OB", TransducerData = "RAB6-D", TransducerType = "CURVED LINEAR", ScanDepthCm = 14, FieldOfViewMm = 140, SliceThicknessMm = 1 },
+        };
+
+        public override string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY", "VOLUME", "NONE" };
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            var key = context.SeriesIndex.ToString(CultureInfo.InvariantCulture) + "/" + context.ImageIndex.ToString(CultureInfo.InvariantCulture);
+
+            // Frame of Reference, Ultrasound Frame of Reference and Synchronization.
+            dataset.AddOrUpdate(DicomTag.PositionReferenceIndicator, string.Empty);
+            dataset.AddOrUpdate(DicomTag.VolumeFrameOfReferenceUID, context.Uids.Uid("volume-frame-of-reference/" + key));
+            dataset.AddOrUpdate(DicomTag.UltrasoundAcquisitionGeometry, "APEX");
+            dataset.AddOrUpdate(DicomTag.ApexPosition, 0.0, 0.0, 0.0);
+            dataset.AddOrUpdate(DicomTag.VolumeToTransducerRelationship, "FIXED");
+            dataset.AddOrUpdate(DicomTag.VolumeToTransducerMappingMatrix, Identity4x4);
+            dataset.AddOrUpdate(DicomTag.SynchronizationFrameOfReferenceUID, context.Uids.Uid("synchronization/" + key));
+            dataset.AddOrUpdate(DicomTag.SynchronizationTrigger, "NO TRIGGER");
+            dataset.AddOrUpdate(DicomTag.AcquisitionTimeSynchronized, "N");
+
+            // General Image and General Anatomy: no patient orientation, since the frames lie in the volume's coordinates.
+            dataset.AddOrUpdate(DicomTag.PatientOrientation, new string[0]);
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.AnatomicRegionSequence, CodeItem("SCT", "35039007", "Uterus")));
+
+            // Enhanced US Image.
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.ViewCodeSequence, CodeItem("SCT", "81654009", "Coronal")));
+            dataset.AddOrUpdate(DicomTag.DimensionOrganizationType, "3D");
+            dataset.AddOrUpdate(DicomTag.AcquisitionDateTime, DicomImageBuilder.Dt(context.ContentTime));
+            dataset.AddOrUpdate(DicomTag.AcquisitionDuration, VolumeSweepSeconds);
+            dataset.AddOrUpdate(DicomTag.PresentationLUTShape, "IDENTITY");
+            // Type 1 at the top level in the Enhanced US Image module, unlike in the other enhanced IODs.
+            dataset.AddOrUpdate(DicomTag.RescaleSlope, "1");
+            dataset.AddOrUpdate(DicomTag.RescaleIntercept, "0");
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.TransducerScanPatternCodeSequence, CodeItem("DCM", "125242", "Volume scan pattern")));
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.TransducerGeometryCodeSequence, CodeItem("DCM", "125253", "Curved Linear Ultrasound Transducer Geometry")));
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.TransducerBeamSteeringCodeSequence, CodeItem("DCM", "125257", "Fixed Beam Direction")));
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.TransducerApplicationCodeSequence, CodeItem("DCM", "125261", "External Transducer")));
+            dataset.AddOrUpdate(DicomTag.TransducerData, preset.TransducerData);
+            dataset.AddOrUpdate(DicomTag.ProcessingFunction, "B-MODE");
+            dataset.AddOrUpdate(DicomTag.MechanicalIndex, "1.1");
+            dataset.AddOrUpdate(DicomTag.BoneThermalIndex, "0.5");
+            dataset.AddOrUpdate(DicomTag.CranialThermalIndex, "0.3");
+            dataset.AddOrUpdate(DicomTag.SoftTissueThermalIndex, "0.4");
+            dataset.AddOrUpdate(DicomTag.DepthsOfFocus, preset.ScanDepthCm * 10 / 2);
+            dataset.AddOrUpdate(DicomTag.DepthOfScanField, ((int)(preset.ScanDepthCm * 10)).ToString(CultureInfo.InvariantCulture));
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.AcquisitionContextSequence));
+
+            base.AddModalityTags(dataset, preset, context);
+
+            // What needs the matrix, which only the context knows: the pixel size, and where each frame lies in the volume.
+            var spacing = preset.FieldOfViewMm / Math.Max(context.Rows, context.Columns);
+            var shared = dataset.GetSequence(DicomTag.SharedFunctionalGroupsSequence).Items[0];
+            shared.AddOrUpdate(new DicomSequence(DicomTag.PixelMeasuresSequence, new DicomDataset
+            {
+                { DicomTag.PixelSpacing, Ds(spacing), Ds(spacing) },
+                { DicomTag.SliceThickness, Ds(preset.SliceThicknessMm) },
+            }));
+            shared.AddOrUpdate(new DicomSequence(DicomTag.PlaneOrientationVolumeSequence, new DicomDataset
+            {
+                { DicomTag.ImageOrientationVolume, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0 },
+            }));
+
+            var perFrame = dataset.GetSequence(DicomTag.PerFrameFunctionalGroupsSequence).Items;
+            for (var frame = 0; frame < perFrame.Count; frame++)
+            {
+                // One sweep of the transducer, with the frames spread evenly over it.
+                var frameTime = context.ContentTime.AddSeconds(frame * VolumeSweepSeconds / perFrame.Count);
+                var frameContent = perFrame[frame].GetSequence(DicomTag.FrameContentSequence).Items[0];
+                frameContent.AddOrUpdate(DicomTag.FrameAcquisitionDateTime, DicomImageBuilder.Dt(frameTime));
+                frameContent.AddOrUpdate(DicomTag.FrameReferenceDateTime, DicomImageBuilder.Dt(frameTime));
+                frameContent.AddOrUpdate(DicomTag.FrameAcquisitionDuration, VolumeSweepSeconds * 1000 / perFrame.Count);
+                perFrame[frame].AddOrUpdate(new DicomSequence(DicomTag.PlanePositionVolumeSequence, new DicomDataset
+                {
+                    { DicomTag.ImagePositionVolume, -context.Columns * spacing / 2, 0.0, frame * preset.SliceThicknessMm },
+                }));
+            }
+        }
+
+        protected override void AddSharedGroups(DicomDataset shared, ExamPreset preset)
+        {
+            shared.Add(new DicomSequence(DicomTag.USImageDescriptionSequence, new DicomDataset
+            {
+                { DicomTag.FrameType, ImageType(preset) },
+                { DicomTag.VolumetricProperties, "VOLUME" },
+                { DicomTag.VolumeBasedCalculationTechnique, "NONE" },
+            }));
+            shared.Add(new DicomSequence(DicomTag.ImageDataTypeSequence, new DicomDataset
+            {
+                { DicomTag.DataType, "TISSUE_INTENSITY" },
+                { DicomTag.AliasedDataType, "NO" },
+            }));
+        }
+
+        private const double VolumeSweepSeconds = 2.0;
+
+        private static readonly double[] Identity4x4 = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
     }
 
     /// <summary>Segmentation IOD: one binary segment, with every frame derived from the source image. Rows and Columns must be multiples of 8.</summary>

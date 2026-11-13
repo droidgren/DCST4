@@ -141,6 +141,9 @@ namespace DCST4.Core.Generation.Modalities
         /// <summary>Window and rescale go in the functional groups instead of at the top level.</summary>
         public virtual bool UsesFunctionalGroups => false;
 
+        /// <summary>False for a document or report, which has no Pixel Data, so matrix, bits and compression do not apply.</summary>
+        public virtual bool HasPixelData => true;
+
         /// <summary>One bit per pixel, as in a binary segmentation.</summary>
         public virtual bool IsBinaryMask => false;
 

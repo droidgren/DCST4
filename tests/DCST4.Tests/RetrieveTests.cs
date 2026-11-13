@@ -35,6 +35,7 @@ namespace DCST4.Tests
             await TestRoundTrip();
             await TestTomosynthesis();
             await TestXrayObjects();
+            await TestUsVolume();
             await TestModifications();
             await TestMoveDiagnosis(closedPort);
             await TestStoreMapping(closedPort);
@@ -92,7 +93,7 @@ namespace DCST4.Tests
         }
 
         /// <summary>
-        /// Breast Tomosynthesis was the one image type without a store test until 1.10.1, since its dataset is 700 MB by
+        /// Breast Tomosynthesis was the one image type without a store test until 1.11.0, since its dataset is 700 MB by
         /// default. The test sends it at 128 x 128 with 8 frames.
         /// </summary>
         private static async Task TestTomosynthesis()
@@ -165,6 +166,32 @@ namespace DCST4.Tests
             var refused = await Execute("store-enhanced-xa,store-xa-cine");
             _check("A system without Enhanced XA: NOT_SUPPORTED for it, and the cine run still goes",
                 Result(refused, "store-enhanced-xa").Result == TestResultClass.NOT_SUPPORTED && Result(refused, "store-xa-cine").Result == TestResultClass.PASS && Scp.StoreCount == 1, Show(refused));
+        }
+
+        private static async Task TestUsVolume()
+        {
+            Console.WriteLine("\nChain: Enhanced US Volume");
+            var test = TestCatalog.All.SingleOrDefault(t => t.Id == "store-enhanced-us-volume");
+            _check("The store test exists, is in 'all' and is named after its object", test != null && test.Storage != null && test.Storage.Objects == 1
+                && test.Name == "C-STORE: Enhanced US Volume" && TestCatalog.Select("all", out _).Any(t => t.Id == test.Id), test?.Name);
+
+            Fresh();
+            var report = await Execute("store-enhanced-us-volume,query-index,retrieve-cget,verify-integrity");
+            _check("Stored, found, retrieved and intact", report.Results.All(r => r.Result == TestResultClass.PASS), Show(report));
+            var stored = Scp.Archive.Single().Dataset;
+            _check("The mock got an Enhanced US Volume with its volume geometry", stored.GetSingleValue<DicomUID>(DicomTag.SOPClassUID) == DicomUID.EnhancedUSVolumeStorage
+                && stored.GetSingleValue<int>(DicomTag.NumberOfFrames) == 8 && stored.GetString(DicomTag.UltrasoundAcquisitionGeometry) == "APEX"
+                && stored.GetSequence(DicomTag.PerFrameFunctionalGroupsSequence).Items.All(i => i.Contains(DicomTag.PlanePositionVolumeSequence)), null);
+            var instance = Set(report, "enhanced-us-volume", "C-GET").Instances.Single();
+            _check("Enhanced US Volume: what came back is byte-identical, and every frame matches the manifest",
+                instance.Pixel == PixelVerdict.ByteIdentical && instance.FramesMatchManifest == true && instance.NormalizedHashMatchesManifest, instance.Pixel.ToString());
+
+            Fresh();
+            Scp.ContextTable = new ScpContextTable();
+            Scp.ContextTable.Set(DicomUID.EnhancedUSVolumeStorage, ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported));
+            var refused = await Execute("store-enhanced-us-volume,store-us-multiframe");
+            _check("A system without Enhanced US Volume: NOT_SUPPORTED for it, and the cine loop still goes",
+                Result(refused, "store-enhanced-us-volume").Result == TestResultClass.NOT_SUPPORTED && Result(refused, "store-us-multiframe").Result == TestResultClass.PASS && Scp.StoreCount == 1, Show(refused));
         }
 
         // ---------------------------------------------------------------- acceptance: the round trip
