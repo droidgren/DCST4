@@ -111,8 +111,8 @@
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Searching the help</Paragraph>
                     <Paragraph>
-                        Type in the box above the topics, or press <Bold>Ctrl+F</Bold> to get there. <Bold>Help &gt; Search help...</Bold>
-                        (Ctrl+F1) opens this window with the box ready. The list then shows only the topics that contain
+                        Type in the box above the topics, or press <Bold>Ctrl+F</Bold> to get there.
+                        The list then shows only the topics that contain
                         the text, with the number of matches, and the first match is highlighted. <Bold>Enter</Bold> or <Bold>F3</Bold>
                         goes to the next match and <Bold>Shift+Enter</Bold> or <Bold>Shift+F3</Bold> to the one before. A click on a
                         topic opens it at its first match. <Bold>Esc</Bold> ends the search.
@@ -175,7 +175,7 @@
                         </Table.Columns>
                         <TableRowGroup>
                             <TableRow><TableCell><Paragraph><Bold>Modality</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>CT, MR, CR, DX, US, XA, RF, MG, PT or NM. Choosing one sets its usual matrix, bit depth and exam type, and Single frame under Object.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>CT, MR, CR, DX, US, XA, RF, MG, PT or NM, or OT, DOC or SR for what a PACS stores besides images, see Object. Choosing one sets its usual matrix, bit depth and exam type, and its first object under Object.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Exam type</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Sets the descriptions, body part, modality-specific tags and usual number of images.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Series</Bold></Paragraph></TableCell>
@@ -193,7 +193,7 @@
                             <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How much data the whole exam will be. It updates as you change the other fields.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Object</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>Which image of the modality to generate: Single frame, or a multi-frame one where DCST4 has it. US has a cine loop, XA a cine run and Enhanced XA, RF a fluoro loop and Enhanced XRF, CT and MR their enhanced image and MG Breast Tomosynthesis. CR, DX, PT and NM have one image each.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>Which image of the modality to generate: Single frame, or a multi-frame one where DCST4 has it. US has a cine loop and Enhanced US Volume, XA a cine run and Enhanced XA, RF a fluoro loop and Enhanced XRF, CT and MR their enhanced image and MG Breast Tomosynthesis. CR, DX, PT and NM have one image each. OT is Secondary Capture, DOC an Encapsulated PDF, and SR a Basic Text SR or Enhanced SR report. DOC and SR have no pixels, so the matrix, bits, frames and private payload are greyed out, and only Implicit VR, Explicit VR and Deflated can be chosen as transfer syntax.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Frames per image</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>For a multi-frame object: how many frames each image has, 1 to 10,000. 30 for a cine loop or a cine run, 16 for a fluoro loop and 8 for the enhanced objects when the object is selected.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Add private payload</Bold></Paragraph></TableCell>
@@ -215,9 +215,10 @@
                         second as an ultrasound system sends; <Bold>Multi-frame (cine run)</Bold> for XA and
                         <Bold>Multi-frame (fluoro loop)</Bold> for RF, which are the same SOP class as the single-frame
                         image with the Cine and Multi-frame modules added, as a cath lab and a fluoroscopy room send them;
-                        and <Bold>Enhanced CT</Bold>, <Bold>Enhanced MR</Bold>, <Bold>Enhanced XA</Bold>,
+                        and <Bold>Enhanced US Volume</Bold>, <Bold>Enhanced CT</Bold>, <Bold>Enhanced MR</Bold>, <Bold>Enhanced XA</Bold>,
                         <Bold>Enhanced XRF</Bold> and <Bold>Breast Tomosynthesis</Bold>, which are IODs of their own with
-                        functional groups for each frame. The frames are drawn as they are written and are never all in
+                        functional groups for each frame. Enhanced US Volume is a 3D ultrasound volume: 8-bit grayscale
+                        frames of one sweep, placed in the volume's own coordinates. The frames are drawn as they are written and are never all in
                         memory, so an object can be larger than the computer's memory.
                     </Paragraph>
                     <List>
@@ -543,7 +544,7 @@
                     </Paragraph>
                     <Paragraph>
                         There is a store test for each kind of object, the multi-frame ones included: the ultrasound cine
-                        loop, the XA cine run, the RF fluoro loop, Enhanced CT, Enhanced MR, Enhanced XA, Enhanced XRF and
+                        loop, Enhanced US Volume, the XA cine run, the RF fluoro loop, Enhanced CT, Enhanced MR, Enhanced XA, Enhanced XRF and
                         Breast Tomosynthesis are sent with 8 frames of 128 by 128.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Test settings</Paragraph>

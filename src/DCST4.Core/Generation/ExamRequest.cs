@@ -73,7 +73,7 @@ namespace DCST4.Core.Generation
         {
             get
             {
-                if (Modality == null) return 0;
+                if (Modality == null || !Modality.HasPixelData) return 0;
                 var pixels = (long)Rows * Columns * FramesPerImage;
                 return Modality.IsBinaryMask ? (pixels + 7) / 8 : pixels * Modality.SamplesPerPixel * BitsAllocated / 8;
             }
@@ -105,11 +105,19 @@ namespace DCST4.Core.Generation
             if (request.FramesPerImage > MaxFrames) errors.Add($"Frames per image must be at most {MaxFrames}.");
             if (request.Modality != null && request.FramesPerImage > 1 && !request.Modality.IsMultiFrame) errors.Add($"{request.Modality.DisplayName} images have one frame.");
             if (request.PrivatePayloadBytes < 0 || request.PrivatePayloadBytes > PrivatePayload.MaxBytes) errors.Add($"The private payload can be at most {PrivatePayload.MaxMegabytes} MB.");
-            if (request.Rows < ExamRequest.MinMatrix || request.Rows > ExamRequest.MaxMatrix) errors.Add($"Rows must be between {ExamRequest.MinMatrix} and {ExamRequest.MaxMatrix}.");
-            if (request.Columns < ExamRequest.MinMatrix || request.Columns > ExamRequest.MaxMatrix) errors.Add($"Columns must be between {ExamRequest.MinMatrix} and {ExamRequest.MaxMatrix}.");
-            if (request.Modality != null && !request.Modality.BitDepths.Contains(request.BitsStored))
+            if (request.Modality != null && !request.Modality.HasPixelData)
             {
-                errors.Add($"{request.Modality.Code} does not allow {request.BitsStored} bits stored. Allowed: {string.Join(", ", request.Modality.BitDepths)}.");
+                // A document or report: the matrix and bits on the Exam tab do not apply to it.
+                if (request.PrivatePayloadBytes > 0) errors.Add($"{request.Modality.DisplayName} is not an image, and only images get a private payload.");
+            }
+            else
+            {
+                if (request.Rows < ExamRequest.MinMatrix || request.Rows > ExamRequest.MaxMatrix) errors.Add($"Rows must be between {ExamRequest.MinMatrix} and {ExamRequest.MaxMatrix}.");
+                if (request.Columns < ExamRequest.MinMatrix || request.Columns > ExamRequest.MaxMatrix) errors.Add($"Columns must be between {ExamRequest.MinMatrix} and {ExamRequest.MaxMatrix}.");
+                if (request.Modality != null && !request.Modality.BitDepths.Contains(request.BitsStored))
+                {
+                    errors.Add($"{request.Modality.Code} does not allow {request.BitsStored} bits stored. Allowed: {string.Join(", ", request.Modality.BitDepths)}.");
+                }
             }
 
             if (request.CharacterSet != DicomCharacterSets.Latin1 && request.CharacterSet != DicomCharacterSets.Utf8 && request.CharacterSet != DicomCharacterSets.Empty)
@@ -162,6 +170,12 @@ namespace DCST4.Core.Generation
         {
             var problems = new List<string>();
             if (request.Modality == null || syntax == null) return problems;
+
+            if (!request.Modality.HasPixelData)
+            {
+                if (syntax.IsEncapsulated) problems.Add($"{request.Modality.DisplayName} has no pixel data, so {syntax.UID.Name} does not apply. Select Implicit VR, Explicit VR or Deflated Explicit VR Little Endian.");
+                return problems;
+            }
 
             if (!syntax.IsEncapsulated)
             {

@@ -25,6 +25,9 @@ namespace DCST4.Core.Pipeline
         {
             if (!CanEstimate(request)) return null;
 
+            // A document or report: the header and its content, which is known before it is generated.
+            if (request.Modality is Generation.Objects.DocumentProfile document) return HeaderBytes + document.Document.EstimatedContentBytes;
+
             var pixelBytes = request.UncompressedPixelBytes;
 
             // Pixel Data always has even length.
@@ -97,7 +100,10 @@ namespace DCST4.Core.Pipeline
 
         private static bool CanEstimate(ExamRequest request)
         {
-            if (request.Modality == null || !request.Modality.BitDepths.Contains(request.BitsStored)) return false;
+            if (request.Modality == null) return false;
+            if (request.SeriesCount < 1 || request.ImagesPerSeries < 1) return false;
+            if (!request.Modality.HasPixelData) return (long)request.SeriesCount * request.ImagesPerSeries <= ExamValidator.MaxTotalImages;
+            if (!request.Modality.BitDepths.Contains(request.BitsStored)) return false;
             if (request.Rows < ExamRequest.MinMatrix || request.Rows > ExamRequest.MaxMatrix) return false;
             if (request.Columns < ExamRequest.MinMatrix || request.Columns > ExamRequest.MaxMatrix) return false;
             if (request.SeriesCount < 1 || request.ImagesPerSeries < 1 || request.FramesPerImage < 1) return false;

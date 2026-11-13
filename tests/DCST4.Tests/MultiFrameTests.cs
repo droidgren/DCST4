@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 namespace DCST4.Tests
 {
     /// <summary>
-    /// 1.10.1: multi-frame images in Generate &amp; Send, whose frames are drawn and encoded one at a time, JPEG Baseline,
+    /// 1.11.0: multi-frame images in Generate &amp; Send, whose frames are drawn and encoded one at a time, JPEG Baseline,
     /// and the private payload.
     /// </summary>
     internal static class MultiFrameTests
@@ -42,6 +42,7 @@ namespace DCST4.Tests
             TestRules();
             TestSizeEstimate();
             await TestSending();
+            await TestObjectGroups();
         }
 
         private static void Check(string name, bool ok, string detail = null) => _check(name, ok, detail);
@@ -93,7 +94,7 @@ namespace DCST4.Tests
             return Enumerable.Range(0, pixels.NumberOfFrames).Select(f => pixels.GetFrame(f).Data.Take(size).ToArray()).ToList();
         }
 
-        /// <summary>The same object with every frame held in memory, as all multi-frame images were before 1.10.1.</summary>
+        /// <summary>The same object with every frame held in memory, as all multi-frame images were before 1.11.0.</summary>
         private static DicomFile InMemoryCopy(DicomFile file)
         {
             var frames = FramesOf(file.Dataset);
@@ -113,7 +114,7 @@ namespace DCST4.Tests
 
             Func<string, IReadOnlyList<ImageObject>> objectsOf = code => ModalityCatalog.ObjectsOf(ModalityCatalog.Find(code));
             Func<string, string> listOf = code => string.Join(" | ", objectsOf(code).Select(o => o.Name + " (" + o.DatasetProfileId + ")"));
-            Check("US: the single-frame image and the cine loop, in that order", listOf("US") == "Single frame (us) | Multi-frame (cine loop) (us-multiframe)", listOf("US"));
+            Check("US: the single-frame image, the cine loop and the volume, in that order", listOf("US") == "Single frame (us) | Multi-frame (cine loop) (us-multiframe) | Enhanced US Volume (enhanced-us-volume)", listOf("US"));
             Check("CT, MR and MG: the single-frame image and the enhanced one", listOf("CT") == "Single frame (ct) | Enhanced CT (enhanced-ct)" && listOf("MR") == "Single frame (mr) | Enhanced MR (enhanced-mr)"
                 && listOf("MG") == "Single frame (mg) | Breast Tomosynthesis (tomosynthesis-large)", listOf("CT") + " / " + listOf("MR") + " / " + listOf("MG"));
             Check("XA and RF: the single-frame image, the cine one and the enhanced IOD", listOf("XA") == "Single frame (xa) | Multi-frame (cine run) (xa-cine) | Enhanced XA (enhanced-xa)"
@@ -125,9 +126,11 @@ namespace DCST4.Tests
             Check("A cine XA or RF is the SOP class of its single-frame image", Named("xa-cine").SopClass == DicomUID.XRayAngiographicImageStorage
                 && Named("rf-cine").SopClass == DicomUID.XRayRadiofluoroscopicImageStorage && Named("enhanced-xa").SopClass == DicomUID.EnhancedXAImageStorage
                 && Named("enhanced-rf").SopClass == DicomUID.EnhancedXRFImageStorage);
+            Check("The US volume is Enhanced US Volume Storage, 8-bit grayscale", Named("enhanced-us-volume").SopClass == DicomUID.EnhancedUSVolumeStorage
+                && Named("enhanced-us-volume").SamplesPerPixel == 1 && Named("enhanced-us-volume").BitDepths.SequenceEqual(new[] { 8 }));
 
             var all = ModalityCatalog.All.SelectMany(ModalityCatalog.ObjectsOf).ToList();
-            Check("Eighteen objects in all, named once within their modality", all.Count == 18
+            Check("Nineteen objects in all, named once within their modality", all.Count == 19
                 && ModalityCatalog.All.All(m => ModalityCatalog.ObjectsOf(m).Select(o => o.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == ModalityCatalog.ObjectsOf(m).Count),
                 string.Join(", ", all.Select(o => o.Name)));
             Check("The same instances every time, so a selection stays selected", ModalityCatalog.ObjectsOf(ModalityCatalog.Find("US")).SequenceEqual(objectsOf("US")));
@@ -142,7 +145,7 @@ namespace DCST4.Tests
             Check("Default frames: 30 for a cine loop or run, 16 for a fluoro loop, 8 for the enhanced images, 1 otherwise",
                 Named("us-multiframe").DefaultFrames == 30 && Named("xa-cine").DefaultFrames == 30 && Named("rf-cine").DefaultFrames == 16
                 && Named("enhanced-ct").DefaultFrames == 8 && Named("enhanced-mr").DefaultFrames == 8 && Named("tomosynthesis-large").DefaultFrames == 8
-                && Named("enhanced-xa").DefaultFrames == 8 && Named("enhanced-rf").DefaultFrames == 8 && Named("ct").DefaultFrames == 1);
+                && Named("enhanced-xa").DefaultFrames == 8 && Named("enhanced-rf").DefaultFrames == 8 && Named("enhanced-us-volume").DefaultFrames == 8 && Named("ct").DefaultFrames == 1);
             Check("A modality's objects keep its exam types, so the selection survives the change", new[] { "xa-cine", "rf-cine", "us-multiframe" }.All(id =>
             {
                 var image = ModalityCatalog.FindObject(id).Image;
@@ -564,6 +567,79 @@ namespace DCST4.Tests
             var both = Scp.Received.ToList();
             Check("Enhanced CT uncompressed and Breast Tomosynthesis in JPEG Lossless are stored", enhanced.Success == 1 && tomo.Success == 1 && both.Count == 2
                 && both.All(r => r.Dataset.GetSingleValue<int>(DicomTag.NumberOfFrames) == Frames) && both[1].Syntax == DicomTransferSyntax.JPEGProcess14SV1, enhanced + " / " + tomo);
+            Scp.Reset();
+        }
+
+        // ---------------------------------------------------------------- OT, DOC and SR: Secondary Capture and objects without pixels
+
+        private static async Task TestObjectGroups()
+        {
+            Console.WriteLine("\nOT, DOC and SR: Secondary Capture, Encapsulated PDF, Basic Text SR and Enhanced SR in Generate & Send");
+            var groups = new[] { "OT", "DOC", "SR" }.Select(ModalityCatalog.Find).ToList();
+            Check("OT, DOC and SR come after the ten in the Modality list, named by their codes, and are not imaging modalities",
+                groups.All(g => g != null && g.DisplayName == g.Code) && ModalityCatalog.Choices.Count == 13 && ModalityCatalog.Choices.Skip(10).SequenceEqual(groups)
+                && ModalityCatalog.All.Count == 10 && !groups.Any(ModalityCatalog.All.Contains), string.Join(",", ModalityCatalog.Choices));
+            Func<int, string> listOf = i => string.Join(" | ", ModalityCatalog.ObjectsOf(groups[i]).Select(o => o.Name + " (" + o.DatasetProfileId + ")"));
+            Check("OT is Secondary Capture, DOC the PDF, SR the two reports", listOf(0) == "Secondary Capture (secondary-capture)" && listOf(1) == "Encapsulated PDF (encapsulated-pdf)"
+                && listOf(2) == "Basic Text SR (basic-text-sr) | Enhanced SR (enhanced-sr)", listOf(0) + " / " + listOf(1) + " / " + listOf(2));
+            Check("Only OT has pixels, as an entry and in its object", groups[0].HasPixelData && !groups[1].HasPixelData && !groups[2].HasPixelData);
+            var objects = groups.SelectMany(ModalityCatalog.ObjectsOf).ToList();
+            Check("Their objects in order: Secondary Capture first, then the PDF and the two reports",
+                string.Join(" | ", objects.Select(o => o.Name + " (" + o.DatasetProfileId + ")")) == "Secondary Capture (secondary-capture) | Encapsulated PDF (encapsulated-pdf) | Basic Text SR (basic-text-sr) | Enhanced SR (enhanced-sr)",
+                string.Join(" | ", objects.Select(o => o.Name)));
+            Check("Their SOP classes", objects.Select(o => o.Image.SopClass).SequenceEqual(new[] { DicomUID.SecondaryCaptureImageStorage, DicomUID.EncapsulatedPDFStorage, DicomUID.BasicTextSRStorage, DicomUID.EnhancedSRStorage }));
+            Check("Only Secondary Capture has pixels, and none is multi-frame", objects[0].HasPixelData && objects.Skip(1).All(o => !o.HasPixelData) && objects.All(o => !o.IsMultiFrame));
+            Check("Each is found by its dataset id, and each id is a dataset profile", objects.All(o => ReferenceEquals(ModalityCatalog.FindObject(o.DatasetProfileId), o) && DatasetProfileCatalog.Find(o.DatasetProfileId) != null));
+            Check("OT starts at the defaults of Secondary Capture", groups[0].DefaultRows == 512 && groups[0].DefaultBitDepth == 8 && groups[0].SamplesPerPixel == 3, null);
+            Check("SR starts at the Report exam type of Basic Text SR", groups[2].Presets.Single().Name == "Report", null);
+
+            foreach (var item in objects)
+            {
+                var request = Request(item.Image);
+                request.Identity.PatientName = "DCST4^TEST^12345678";
+                request.ImagesPerSeries = 2;
+                var files = new ExamGenerator(request).GetImages(CancellationToken.None).Select(i => Reopened(i.File).Dataset).ToList();
+                var name = item.Name;
+                Check($"{name}: two objects of its SOP class, with the patient and study",
+                    files.Count == 2 && files.All(d => d.GetSingleValue<DicomUID>(DicomTag.SOPClassUID) == item.Image.SopClass && d.GetString(DicomTag.PatientName) == "DCST4^TEST^12345678"
+                        && d.GetString(DicomTag.StudyInstanceUID) == request.Identity.StudyInstanceUid && d.GetString(DicomTag.Manufacturer) == "DCST4"),
+                    files.Count.ToString());
+                Check($"{name}: each has its own SOP Instance UID", files.Select(d => d.GetString(DicomTag.SOPInstanceUID)).Distinct().Count() == 2);
+                Check($"{name}: pixels only where it is an image", files.All(d => d.Contains(DicomTag.PixelData) == item.HasPixelData));
+                Check($"{name}: Explicit and Implicit VR can be chosen", ExamValidator.Validate(request).Count == 0
+                    && ExamValidator.SyntaxProblems(request, DicomTransferSyntax.ExplicitVRLittleEndian).Count == 0 && ExamValidator.SyntaxProblems(request, DicomTransferSyntax.ImplicitVRLittleEndian).Count == 0,
+                    string.Join(" ", ExamValidator.Validate(request)));
+            }
+
+            var pdf = Request(objects[1].Image);
+            var pdfFile = First(pdf).Dataset;
+            var document = pdfFile.GetDicomItem<DicomElement>(DicomTag.EncapsulatedDocument).Buffer.Data;
+            Check("The PDF holds a PDF", System.Text.Encoding.ASCII.GetString(document, 0, 5) == "%PDF-" && pdfFile.GetString(DicomTag.MIMETypeOfEncapsulatedDocument) == "application/pdf");
+            Check("A PDF cannot be compressed: the syntax is refused by name", ExamValidator.SyntaxProblems(pdf, DicomTransferSyntax.JPEGProcess14SV1).Any(p => p.Contains("no pixel data")),
+                string.Join(" ", ExamValidator.SyntaxProblems(pdf, DicomTransferSyntax.JPEGProcess14SV1)));
+            pdf.PrivatePayloadBytes = 1024;
+            Check("A PDF gets no private payload", ExamValidator.Validate(pdf).Any(p => p.Contains("not an image")), string.Join(" ", ExamValidator.Validate(pdf)));
+            pdf.PrivatePayloadBytes = 0;
+            pdf.Rows = 1;
+            pdf.BitsStored = 16;
+            Check("The matrix and bits on the Exam tab do not apply to a PDF", ExamValidator.Validate(pdf).Count == 0, string.Join(" ", ExamValidator.Validate(pdf)));
+            Check("The size of a PDF is its header and the document", ExamSizeEstimator.UncompressedImageBytes(pdf) == ExamSizeEstimator.HeaderBytes + new Core.Generation.Objects.EncapsulatedPdfProfile().EstimatedContentBytes
+                && ExamSizeEstimator.UncompressedImageBytes(pdf) < 4000, ExamSizeEstimator.UncompressedImageBytes(pdf)?.ToString());
+
+            var enhancedSr = First(Request(objects[3].Image)).Dataset;
+            var findings = enhancedSr.GetSequence(DicomTag.ContentSequence).Items[0].GetSequence(DicomTag.ContentSequence).Items;
+            Check("Enhanced SR: the text finding and a measurement in mm", findings.Count == 2 && findings[0].GetString(DicomTag.ValueType) == "TEXT" && findings[1].GetString(DicomTag.ValueType) == "NUM"
+                && findings[1].GetSequence(DicomTag.MeasuredValueSequence).Items[0].GetSequence(DicomTag.MeasurementUnitsCodeSequence).Items[0].GetString(DicomTag.CodeValue) == "mm", findings.Count.ToString());
+            var basicSr = First(Request(objects[2].Image)).Dataset;
+            Check("Basic Text SR: the text finding only", basicSr.GetSequence(DicomTag.ContentSequence).Items[0].GetSequence(DicomTag.ContentSequence).Items.Count == 1);
+
+            Scp.Reset();
+            var stored = new List<RunSummary>();
+            foreach (var item in objects) stored.Add(await new StoreRun(new ExamGenerator(Request(item.Image)), SendOptions(DicomTransferSyntax.ExplicitVRLittleEndian)).ExecuteAsync(CancellationToken.None));
+            var received = Scp.Received.ToList();
+            Check("All four are sent and stored", stored.All(r => r.Success == 1 && r.FatalError == null) && received.Count == 4
+                && received.Select(r => r.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID)).SequenceEqual(objects.Select(o => o.Image.SopClass)),
+                string.Join(", ", stored.Select(r => r + " " + r.FatalError)));
             Scp.Reset();
         }
     }

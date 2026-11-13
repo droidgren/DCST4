@@ -21,7 +21,7 @@ using System.Threading.Tasks;
 namespace DCST4.Tests
 {
     /// <summary>
-    /// 1.10.1: the Transfer syntax list by codec family, Deflated, DCST4's own JPEG XL encoder and H.264 through the encoder
+    /// 1.11.0: the Transfer syntax list by codec family, Deflated, DCST4's own JPEG XL encoder and H.264 through the encoder
     /// of Windows.
     /// </summary>
     internal static class TransferSyntaxTests
