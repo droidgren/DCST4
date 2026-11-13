@@ -30,7 +30,8 @@ namespace DCST4.Core.Generation
         /// <summary>Generated names lose their å, ä and ö, for a character set that cannot hold them. Manual values are not changed.</summary>
         public bool AutoValuesInBasicAscii { get; set; }
         /// <summary>
-        /// How an Auto patient name is made: an invented Swedish name, or DCST4^TEST^ and a number. Swedish here, so that the
+        /// How an Auto patient name is made: an invented Swedish name, or DCST4^TEST^ and a number. The Auto Referring Physician
+        /// Name follows it, as a Swedish name or DCST4^REFERRING^ and a number. Swedish here, so that the
         /// seeded test datasets, which name their patients themselves, draw exactly as before. Generate &amp; Send passes the setting.
         /// </summary>
         public TestPatientNaming PatientNaming { get; set; } = TestPatientNaming.RegistrySwedishName;
@@ -134,7 +135,9 @@ namespace DCST4.Core.Generation
                 SopInstanceUid = manual.SopInstanceUid,
                 StudyDateTime = studyDate,
                 StudyDateTimeIsAuto = manual.StudyDateTime == null,
-                ReferringPhysicianName = manual.ReferringPhysicianName ?? AutoText(manual, SwedishNames.Pick(referringRandom, null)),
+                ReferringPhysicianName = manual.ReferringPhysicianName ?? (manual.PatientNaming == TestPatientNaming.MarkedTestName
+                    ? TestPatientNames.MarkedReferring(referringRandom)
+                    : AutoText(manual, SwedishNames.Pick(referringRandom, null))),
                 StudyDescription = manual.StudyDescription ?? preset.StudyDescription,
                 SeriesDescription = manual.SeriesDescription ?? preset.SeriesDescription,
                 InstitutionName = manual.InstitutionName ?? DefaultInstitution,

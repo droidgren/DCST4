@@ -14,26 +14,69 @@ using System.Threading.Tasks;
 
 namespace DCST4.Core.Pipeline
 {
+    /// <summary>The codec families the transfer syntax lists are grouped by, in the order they are shown.</summary>
+    public static class TransferSyntaxFamily
+    {
+        public const string Uncompressed = "Uncompressed";
+        public const string Rle = "RLE";
+        public const string Jpeg = "JPEG";
+        public const string JpegLs = "JPEG-LS";
+        public const string Jpeg2000 = "JPEG 2000";
+        public const string Htj2k = "HTJ2K";
+        public const string JpegXl = "JPEG XL";
+        public const string Video = "Video";
+
+        public static IReadOnlyList<string> All { get; } = new[] { Uncompressed, Rle, Jpeg, JpegLs, Jpeg2000, Htj2k, JpegXl, Video };
+    }
+
     /// <summary>Transfer syntaxes a run can use, with the names shown to the user.</summary>
     public sealed class TransferSyntaxOption
     {
-        private TransferSyntaxOption(string name, DicomTransferSyntax syntax)
+        private TransferSyntaxOption(string family, string name, DicomTransferSyntax syntax)
         {
+            Family = family;
             Name = name;
             Syntax = syntax;
         }
 
+        /// <summary>The group the list shows the option in, one of <see cref="TransferSyntaxFamily"/>.</summary>
+        public string Family { get; }
         public string Name { get; }
         public DicomTransferSyntax Syntax { get; }
         public override string ToString() => Name;
 
-        public static readonly TransferSyntaxOption ImplicitVrLe = new TransferSyntaxOption("Implicit VR Little Endian", DicomTransferSyntax.ImplicitVRLittleEndian);
-        public static readonly TransferSyntaxOption ExplicitVrLe = new TransferSyntaxOption("Explicit VR Little Endian", DicomTransferSyntax.ExplicitVRLittleEndian);
-        public static readonly TransferSyntaxOption JpegLossless = new TransferSyntaxOption("JPEG Lossless (Process 14 SV1)", DicomTransferSyntax.JPEGProcess14SV1);
+        public static readonly TransferSyntaxOption ImplicitVrLe = new TransferSyntaxOption(TransferSyntaxFamily.Uncompressed, "Implicit VR Little Endian", DicomTransferSyntax.ImplicitVRLittleEndian);
+        public static readonly TransferSyntaxOption ExplicitVrLe = new TransferSyntaxOption(TransferSyntaxFamily.Uncompressed, "Explicit VR Little Endian", DicomTransferSyntax.ExplicitVRLittleEndian);
+        public static readonly TransferSyntaxOption DeflatedExplicitVrLe = new TransferSyntaxOption(TransferSyntaxFamily.Uncompressed, "Deflated Explicit VR Little Endian (lossless)", DicomTransferSyntax.DeflatedExplicitVRLittleEndian);
+        public static readonly TransferSyntaxOption RleLossless = new TransferSyntaxOption(TransferSyntaxFamily.Rle, "RLE Lossless", DicomTransferSyntax.RLELossless);
         /// <summary>Lossy, and for 8 bits stored only. What ultrasound systems send their cine loops in.</summary>
-        public static readonly TransferSyntaxOption JpegBaseline = new TransferSyntaxOption("JPEG Baseline (Process 1, lossy)", DicomTransferSyntax.JPEGProcess1);
+        public static readonly TransferSyntaxOption JpegBaseline = new TransferSyntaxOption(TransferSyntaxFamily.Jpeg, "JPEG Baseline (Process 1, lossy)", DicomTransferSyntax.JPEGProcess1);
+        /// <summary>Lossy, at most 12 bits stored.</summary>
+        public static readonly TransferSyntaxOption JpegExtended = new TransferSyntaxOption(TransferSyntaxFamily.Jpeg, "JPEG Extended (Process 2 & 4, lossy)", DicomTransferSyntax.JPEGProcess2_4);
+        public static readonly TransferSyntaxOption JpegLossless = new TransferSyntaxOption(TransferSyntaxFamily.Jpeg, "JPEG Lossless (Process 14 SV1)", DicomTransferSyntax.JPEGProcess14SV1);
+        public static readonly TransferSyntaxOption JpegLsLossless = new TransferSyntaxOption(TransferSyntaxFamily.JpegLs, "JPEG-LS Lossless", DicomTransferSyntax.JPEGLSLossless);
+        public static readonly TransferSyntaxOption Jpeg2000Lossless = new TransferSyntaxOption(TransferSyntaxFamily.Jpeg2000, "JPEG 2000 Lossless", DicomTransferSyntax.JPEG2000Lossless);
+        public static readonly TransferSyntaxOption Jpeg2000 = new TransferSyntaxOption(TransferSyntaxFamily.Jpeg2000, "JPEG 2000 (lossy)", DicomTransferSyntax.JPEG2000Lossy);
+        public static readonly TransferSyntaxOption Htj2kLossless = new TransferSyntaxOption(TransferSyntaxFamily.Htj2k, "HTJ2K Lossless", DicomTransferSyntax.HTJ2KLossless);
+        public static readonly TransferSyntaxOption Htj2k = new TransferSyntaxOption(TransferSyntaxFamily.Htj2k, "HTJ2K (lossy)", DicomTransferSyntax.HTJ2K);
+        public static readonly TransferSyntaxOption JpegXlLossless = new TransferSyntaxOption(TransferSyntaxFamily.JpegXl, "JPEG XL Lossless", DicomTransferSyntax.Lookup(DicomUID.JPEGXLLossless));
+        /// <summary>The syntax allows lossy and lossless. DCST4's encoder writes a lossless codestream.</summary>
+        public static readonly TransferSyntaxOption JpegXl = new TransferSyntaxOption(TransferSyntaxFamily.JpegXl, "JPEG XL (written lossless)", DicomTransferSyntax.Lookup(DicomUID.JPEGXL));
+        /// <summary>Lossy colour video, for a multi-frame RGB object such as an ultrasound cine loop.</summary>
+        public static readonly TransferSyntaxOption H264HighProfile = new TransferSyntaxOption(TransferSyntaxFamily.Video, "H.264 High Profile / Level 4.1 (lossy)", DicomTransferSyntax.MPEG4AVCH264HighProfileLevel41);
 
-        public static IReadOnlyList<TransferSyntaxOption> All { get; } = new[] { ImplicitVrLe, ExplicitVrLe, JpegLossless, JpegBaseline };
+        /// <summary>In <see cref="TransferSyntaxFamily"/> order, which is the order of the list.</summary>
+        public static IReadOnlyList<TransferSyntaxOption> All { get; } = new[]
+        {
+            ImplicitVrLe, ExplicitVrLe, DeflatedExplicitVrLe,
+            RleLossless,
+            JpegBaseline, JpegExtended, JpegLossless,
+            JpegLsLossless,
+            Jpeg2000Lossless, Jpeg2000,
+            Htj2kLossless, Htj2k,
+            JpegXlLossless, JpegXl,
+            H264HighProfile,
+        };
     }
 
     public sealed class StoreRunOptions
@@ -248,19 +291,8 @@ namespace DCST4.Core.Pipeline
             }
         }
 
-        private static long PixelDataSize(DicomDataset dataset)
-        {
-            // A report or a document has no pixels to count.
-            if (!dataset.Contains(DicomTag.PixelData)) return 0;
-
-            var pixelData = DicomPixelData.Create(dataset);
-            long size = 0;
-            for (var frame = 0; frame < pixelData.NumberOfFrames; frame++)
-            {
-                size += pixelData.GetFrame(frame).Size;
-            }
-            return size;
-        }
+        /// <summary>A report or a document has no pixels to count, and a video stream is counted as a whole.</summary>
+        private static long PixelDataSize(DicomDataset dataset) => TransferSyntaxConverter.PixelBytes(dataset);
 
         private RunSummary Summarize(StoreSendOutcome send, TimeSpan elapsed)
         {

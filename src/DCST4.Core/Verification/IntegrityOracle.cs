@@ -526,6 +526,12 @@ namespace DCST4.Core.Verification
 
         private static void CompareFrames(DicomFile original, DicomFile retrieved, ManifestInstance manifest, InstanceIntegrity result)
         {
+            if (global::DCST4.Core.Codecs.OwnCodecs.IsVideo(original.Dataset.InternalTransferSyntax) || global::DCST4.Core.Codecs.OwnCodecs.IsVideo(retrieved.Dataset.InternalTransferSyntax))
+            {
+                CompareVideo(original, retrieved, manifest, result);
+                return;
+            }
+
             var sentFrames = DicomPixelData.Create(original.Dataset);
             var backFrames = DicomPixelData.Create(retrieved.Dataset);
             if (sentFrames.NumberOfFrames != backFrames.NumberOfFrames)
@@ -576,6 +582,38 @@ namespace DCST4.Core.Verification
             result.MaxAbsoluteDifference = diff.Max;
             result.MeanAbsoluteDifference = diff.Mean;
             result.PixelDetail = string.Format(CultureInfo.InvariantCulture, "The largest absolute difference is {0}, and the mean {1:0.###}.", diff.Max, diff.Mean);
+        }
+
+        /// <summary>A video stream holds all frames at once, so it is compared as a whole. DCST4 cannot decode it to compare the pictures.</summary>
+        private static void CompareVideo(DicomFile original, DicomFile retrieved, ManifestInstance manifest, InstanceIntegrity result)
+        {
+            var sentCount = original.Dataset.GetSingleValueOrDefault(DicomTag.NumberOfFrames, 1);
+            var backCount = retrieved.Dataset.GetSingleValueOrDefault(DicomTag.NumberOfFrames, 1);
+            if (sentCount != backCount)
+            {
+                Corrupt(result, $"{Int(sentCount)} frames were sent and {Int(backCount)} came back.");
+                return;
+            }
+
+            var sameSyntax = original.Dataset.InternalTransferSyntax == retrieved.Dataset.InternalTransferSyntax;
+            if (sameSyntax && Fragments(original).SequenceEqual(Fragments(retrieved)))
+            {
+                result.Pixel = PixelVerdict.ByteIdentical;
+                result.FramesMatchManifest = MatchesManifest(retrieved, manifest);
+                return;
+            }
+
+            result.Pixel = PixelVerdict.NotCompared;
+            var undecodable = global::DCST4.Core.Codecs.OwnCodecs.IsVideo(retrieved.Dataset.InternalTransferSyntax) ? retrieved : original;
+            result.PixelDetail = "No decoder for " + undecodable.Dataset.InternalTransferSyntax.UID.Name + ", and the stream is not the one that was sent.";
+        }
+
+        /// <summary>The encapsulated stream as one array, whatever fragments it was split into.</summary>
+        private static byte[] Fragments(DicomFile file)
+        {
+            var sequence = file.Dataset.GetDicomItem<DicomItem>(DicomTag.PixelData) as DicomFragmentSequence;
+            if (sequence == null) return new byte[0];
+            return sequence.Fragments.SelectMany(f => f.Data).ToArray();
         }
 
         private static readonly FellowOakDicom.PureCodecs.PureTranscoderManager Codecs = new FellowOakDicom.PureCodecs.PureTranscoderManager();

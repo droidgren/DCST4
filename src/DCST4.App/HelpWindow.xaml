@@ -48,18 +48,45 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <ListBox x:Name="TopicList" Grid.Column="0" BorderThickness="0" Background="#FFF5F7FA" Padding="0,8"
-                 SelectionChanged="TopicList_SelectionChanged">
-            <ListBox.ItemContainerStyle>
-                <Style TargetType="ListBoxItem">
-                    <Setter Property="Padding" Value="12,6"/>
-                </Style>
-            </ListBox.ItemContainerStyle>
-        </ListBox>
+        <DockPanel Grid.Column="0" Background="#FFF5F7FA">
+            <Grid DockPanel.Dock="Top" Margin="8,8,8,0">
+                <TextBox x:Name="SearchBox" Padding="2,3" VerticalContentAlignment="Center"
+                         TextChanged="SearchBox_TextChanged" PreviewKeyDown="SearchBox_PreviewKeyDown"
+                         ToolTip="Search the whole help. Enter or F3 goes to the next match, Shift+Enter or Shift+F3 to the one before. Esc clears the search."/>
+                <TextBlock Text="Search help (Ctrl+F)" Foreground="#FF8A8A8A" Margin="6,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+            <TextBlock x:Name="SearchStatus" DockPanel.Dock="Top" Margin="10,3,8,0" Foreground="#FF505050" FontSize="11" Visibility="Collapsed"/>
+
+            <ListBox x:Name="TopicList" BorderThickness="0" Background="Transparent" Padding="0,8"
+                     SelectionChanged="TopicList_SelectionChanged">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="12,6"/>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding DisplayTitle}"/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
 
         <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="#FFE1E6EC"/>
 
         <FlowDocumentScrollViewer x:Name="Viewer" Grid.Column="2" IsToolBarVisible="False"
+                                  IsInactiveSelectionHighlightEnabled="True" SelectionBrush="#FFFFC83D" SelectionOpacity="0.6"
                                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <FlowDocument x:Name="HelpDocument" FontFamily="Segoe UI" FontSize="13" PagePadding="24,8,24,24"
                           TextAlignment="Left" LineHeight="20">
@@ -82,6 +109,14 @@
                         Assume that images cannot be deleted from a PACS once they are stored. Check the destination,
                         and keep the number of images small.
                     </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Searching the help</Paragraph>
+                    <Paragraph>
+                        Type in the box above the topics, or press <Bold>Ctrl+F</Bold> to get there. <Bold>Help &gt; Search help...</Bold>
+                        (Ctrl+F1) opens this window with the box ready. The list then shows only the topics that contain
+                        the text, with the number of matches, and the first match is highlighted. <Bold>Enter</Bold> or <Bold>F3</Bold>
+                        goes to the next match and <Bold>Shift+Enter</Bold> or <Bold>Shift+F3</Bold> to the one before. A click on a
+                        topic opens it at its first match. <Bold>Esc</Bold> ends the search.
+                    </Paragraph>
                 </Section>
 
                 <!-- ===================================================================== -->
@@ -93,8 +128,10 @@
                             <TableColumn/>
                         </Table.Columns>
                         <TableRowGroup>
-                            <TableRow><TableCell><Paragraph><Bold>Calling AET</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>The AE title of this program. Many servers only accept AE titles they have been configured for.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Calling AET (SCU)</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The AE title of this program when it opens an association as SCU: C-STORE, C-ECHO, C-FIND and C-MOVE requests. Many servers only accept AE titles they have been configured for.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Listen AET (SCP)</Bold> and <Bold>Port</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The AE title and port of this program as SCP, when the PACS connects back: the objects of a C-MOVE and Storage Commitment reports. Only the tests on the <Bold>Tests</Bold> and <Bold>Chain</Bold> tabs listen. The PACS must know the AE title with this computer's address and the port, and Windows Defender Firewall must allow incoming TCP on the port. Not part of a profile.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>AET</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>The called AE title of the server.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>IP/Hostname</Bold></Paragraph></TableCell>
@@ -152,7 +189,7 @@
                             <TableRow><TableCell><Paragraph><Bold>Character set</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Specific Character Set. See <Italic>Character sets</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Transfer syntax</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>Implicit VR, Explicit VR, JPEG Lossless or, for 8 bits stored, JPEG Baseline, which is lossy. See <Italic>Transfer syntax and fallback</Italic>.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>15 syntaxes under a heading for each codec family: Uncompressed, RLE, JPEG, JPEG-LS, JPEG 2000, HTJ2K, JPEG XL and Video. Lossy ones say so in their name. See <Italic>Transfer syntax and fallback</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How much data the whole exam will be. It updates as you change the other fields.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Object</Bold></Paragraph></TableCell>
@@ -166,7 +203,7 @@
                     <Paragraph Style="{StaticResource H2}">Estimated size</Paragraph>
                     <List>
                         <ListItem><Paragraph>Implicit and Explicit VR: calculated from the matrix, bit depth and number of images.</Paragraph></ListItem>
-                        <ListItem><Paragraph>JPEG Lossless and JPEG Baseline: one sample image is compressed in the background and the result is multiplied by the number of images, since the size depends on the picture. <Italic>calculating...</Italic> is shown meanwhile. The test images compress far better than real ones.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Every other syntax, Deflated included: one sample image is compressed in the background and the result is multiplied by the number of images, since the size depends on the picture. <Italic>calculating...</Italic> is shown meanwhile. The test images compress far better than real ones.</Paragraph></ListItem>
                         <ListItem><Paragraph><Italic>at most</Italic> means that no sample could be made, so the uncompressed size is shown as the upper limit.</Paragraph></ListItem>
                         <ListItem><Paragraph><Bold>-</Bold> means that a value is outside its allowed range.</Paragraph></ListItem>
                     </List>
@@ -184,8 +221,8 @@
                         memory, so an object can be larger than the computer's memory.
                     </Paragraph>
                     <List>
-                        <ListItem><Paragraph>With JPEG Lossless or JPEG Baseline the frames are encoded before the image is sent, a few at a time. The status bar counts them, and <Bold>Cancel</Bold> works meanwhile. JPEG Baseline is the slow one: a cine loop of 1,667 frames of 960 x 1280 takes a few minutes.</Paragraph></ListItem>
-                        <ListItem><Paragraph>Without compression the pixels of one image must be less than 4 GB, which is what a DICOM element can hold. A long cine loop needs JPEG Baseline or JPEG Lossless, and the run stops with a message otherwise.</Paragraph></ListItem>
+                        <ListItem><Paragraph>With a compressed syntax the frames are encoded before the image is sent, a few at a time, and with H.264 one after the other as one stream. The status bar counts them, and <Bold>Cancel</Bold> works meanwhile. JPEG Baseline is the slow one: a cine loop of 1,667 frames of 960 x 1280 takes a few minutes.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Without compression the pixels of one image must be less than 4 GB, which is what a DICOM element can hold. A long cine loop needs an encapsulated syntax such as JPEG Baseline or JPEG Lossless, and the run stops with a message otherwise.</Paragraph></ListItem>
                         <ListItem><Paragraph>JPEG Baseline holds 8 bits, so it can be chosen for both US images, and for CR, DX, XA, RF and NM at 8 bits stored. The image is marked as lossy and as DERIVED, and a colour image is stored as YBR_FULL_422.</Paragraph></ListItem>
                     </List>
                     <Paragraph Style="{StaticResource H2}">Private payload</Paragraph>
@@ -321,8 +358,17 @@
                     <Paragraph>
                         Tick <Bold>Allow fallback to Implicit VR</Bold> to send as Implicit VR instead, as a real modality
                         would. The run then finishes with a warning, and the <Bold>Syntax used</Bold> column shows what
-                        was really sent.
+                        was really sent. JPEG XL and H.264 cannot fall back, since DCST4 has no decoder for them, so the
+                        box is off for them.
                     </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">The syntaxes</Paragraph>
+                    <List>
+                        <ListItem><Paragraph><Bold>Uncompressed:</Bold> Implicit VR, Explicit VR and Deflated Explicit VR Little Endian. Deflated compresses the whole dataset with deflate as it is written, and leaves the pixels as they are.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>RLE, JPEG, JPEG-LS, JPEG 2000 and HTJ2K</Bold> are encoded with PureCodecs. JPEG Baseline holds 8 bits and JPEG Extended at most 12. JPEG Baseline, JPEG Extended, JPEG 2000 and HTJ2K without "Lossless" are lossy.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>JPEG XL</Bold> is encoded by DCST4 itself, lossless in both syntaxes, one codestream per frame. It compresses less than other JPEG XL encoders.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>H.264 High Profile / Level 4.1</Bold> uses the H.264 encoder that comes with Windows. Windows N needs the Media Feature Pack for it. It is for <Bold>US</Bold> with <Bold>Multi-frame (cine loop)</Bold> only, since H.264 must be YBR_PARTIAL_420 and the XA and RF images must be MONOCHROME2. The whole loop is one stream in an MP4 container, at most 1080 rows of 1920, with an even number of each.</Paragraph></ListItem>
+                        <ListItem><Paragraph>A lossy syntax marks the image as lossy, with the ratio and the method, and as DERIVED.</Paragraph></ListItem>
+                    </List>
                 </Section>
 
                 <!-- ===================================================================== -->
@@ -388,8 +434,8 @@
                         test to see what it does, what it needs, what it stores and its id for the command line.
                     </Paragraph>
                     <Paragraph>
-                        Beside the buttons are the <Bold>Local SCP AET</Bold> and <Bold>Port</Bold> that C-MOVE and Storage
-                        Commitment reports go to. The other settings of the tests are in <Bold>Test settings...</Bold>: the UID
+                        C-MOVE and Storage Commitment reports go to <Bold>Listen AET (SCP)</Bold> and <Bold>Port</Bold> under
+                        <Bold>Local</Bold>, at the top left. The other settings of the tests are in <Bold>Test settings...</Bold>: the UID
                         root, the transfer syntax of the store tests, the Storage Commitment times, the settings of the limit,
                         fault and TLS tests. They change only when you click <Bold>OK</Bold>, and a
                         value that cannot be used is named and nothing is changed. Hover over a setting to see what it does and its default.
@@ -505,7 +551,9 @@
                         In <Bold>Test settings...</Bold> on the Tests tab, <Bold>UID root</Bold> is what the UIDs of the objects the tests send start with. <Bold>Store tests send
                         in</Bold> chooses the transfer syntax. Its first choice takes it from the capability matrix for each
                         object type, from the negotiation probe in the same run or on the <Bold>Capabilities</Bold> tab, and
-                        otherwise uses Explicit VR. A syntax you choose is used wherever the object type allows it.
+                        otherwise uses Explicit VR. A syntax you choose is used wherever the object type allows it, and the
+                        others go by the matrix: H.264 only fits the ultrasound cine loop. The list is grouped by codec
+                        family, as the Transfer syntax list on the Exam tab is.
                     </Paragraph>
                     <Paragraph>
                         <Bold>Run tests</Bold> draws new data each time, so that a second run is not a set of duplicates of
@@ -521,7 +569,7 @@
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Before C-MOVE works</Paragraph>
                     <Paragraph>
-                        C-MOVE makes the PACS connect back to this computer. On the <Bold>Tests</Bold> tab, <Bold>Local SCP AET</Bold>
+                        C-MOVE makes the PACS connect back to this computer. Under <Bold>Local</Bold>, <Bold>Listen AET (SCP)</Bold>
                         and <Bold>Port</Bold> say how. Add that AE title on the PACS with this computer's address and the port,
                         and allow incoming TCP on the port. On Windows, Windows Defender Firewall is a common reason why
                         nothing arrives, and the test <Bold>C-MOVE: can the system reach this computer?</Bold> says what it
@@ -580,7 +628,7 @@
                         listens after that, so that the explanation can say whether the report came late or not at all.
                     </Paragraph>
                     <Paragraph>
-                        A report on a new association goes to <Bold>Local SCP AET</Bold> and <Bold>Port</Bold>, as C-MOVE does.
+                        A report on a new association goes to <Bold>Listen AET (SCP)</Bold> and <Bold>Port</Bold> under <Bold>Local</Bold>, as C-MOVE does.
                         The PACS must know that AE title with this computer's address and port, and Windows Defender Firewall
                         must allow incoming TCP on the port. A report for a transaction DCST4 did not start is refused with
                         0x0110 and counted in the result.

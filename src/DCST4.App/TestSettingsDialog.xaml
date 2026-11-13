@@ -21,6 +21,14 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,2"/>
         </Style>
+        <!-- The store syntax list shows each codec family under a heading of its own, as the Transfer syntax list does. -->
+        <GroupStyle x:Key="SyntaxFamilyGroupStyle">
+            <GroupStyle.HeaderTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="#FF404040" Margin="3,4,0,1"/>
+                </DataTemplate>
+            </GroupStyle.HeaderTemplate>
+        </GroupStyle>
     </Window.Resources>
     <StackPanel Margin="15">
         <GroupBox Header="Objects the tests send" Padding="6,4">
@@ -40,8 +48,12 @@
                          ToolTip="Every UID of the objects the tests send starts with this root, so they can be told from real ones on the PACS. 2.25 is the default and needs no registration. Use your organisation's own root if it has one.&#x0a;&#x0a;Default: 2.25."/>
 
                 <Label Grid.Row="1" Content="Store tests send in:" ToolTip="{Binding ToolTip, ElementName=StoreSyntaxBox}"/>
-                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="StoreSyntaxBox" ItemsSource="{Binding StoreSyntaxChoices}" SelectedItem="{Binding StoreSyntax, Mode=TwoWay}" Margin="0,2"
-                          ToolTip="The transfer syntax of the objects the store tests send. Per object type takes, for each type, a syntax the capability matrix says the destination accepts, from the negotiation probe in the same run or an earlier one. Another choice sends every type that allows it in that syntax.&#x0a;&#x0a;Default: Per object type (capability matrix)."/>
+                <ComboBox Grid.Row="1" Grid.Column="1" x:Name="StoreSyntaxBox" ItemsSource="{Binding StoreSyntaxView}" IsSynchronizedWithCurrentItem="False" SelectedItem="{Binding StoreSyntax, Mode=TwoWay}" Margin="0,2"
+                          ToolTip="The transfer syntax of the objects the store tests send. Per object type takes, for each type, a syntax the capability matrix says the destination accepts, from the negotiation probe in the same run or an earlier one. Another choice sends every type that allows it in that syntax, and the others as the matrix says. H.264 fits only US Multi-frame.&#x0a;&#x0a;Default: Per object type (capability matrix).">
+                    <ComboBox.GroupStyle>
+                        <StaticResource ResourceKey="SyntaxFamilyGroupStyle"/>
+                    </ComboBox.GroupStyle>
+                </ComboBox>
             </Grid>
         </GroupBox>
 

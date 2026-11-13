@@ -96,12 +96,18 @@ namespace DCST4.ViewModels
     /// <summary>One entry in the list of what the store tests send in.</summary>
     public sealed class StoreSyntaxChoice
     {
-        public StoreSyntaxChoice(string name, FellowOakDicom.DicomTransferSyntax syntax)
+        /// <summary>The group of the choice that leaves it to the capability matrix, before the codec families.</summary>
+        public const string MatrixFamily = "Automatic";
+
+        public StoreSyntaxChoice(string family, string name, FellowOakDicom.DicomTransferSyntax syntax)
         {
+            Family = family;
             Name = name;
             Syntax = syntax;
         }
 
+        /// <summary>The heading the list shows the choice under.</summary>
+        public string Family { get; }
         public string Name { get; }
         /// <summary>Null chooses per object type.</summary>
         public FellowOakDicom.DicomTransferSyntax Syntax { get; }
@@ -208,8 +214,8 @@ namespace DCST4.ViewModels
 
         /// <summary>What the store tests send in. The first choice leaves it to the capability matrix, per object type.</summary>
         public IReadOnlyList<StoreSyntaxChoice> StoreSyntaxChoices { get; } =
-            new[] { new StoreSyntaxChoice("Per object type (capability matrix)", null) }
-                .Concat(DCST4.Core.Pipeline.TransferSyntaxOption.All.Select(o => new StoreSyntaxChoice(o.Name, o.Syntax))).ToList();
+            new[] { new StoreSyntaxChoice(StoreSyntaxChoice.MatrixFamily, "Per object type (capability matrix)", null) }
+                .Concat(DCST4.Core.Pipeline.TransferSyntaxOption.All.Select(o => new StoreSyntaxChoice(o.Family, o.Name, o.Syntax))).ToList();
 
         private StoreSyntaxChoice _selectedStoreSyntax;
         public StoreSyntaxChoice SelectedStoreSyntax

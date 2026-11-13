@@ -100,7 +100,15 @@ namespace DCST4.Core.Network
                     var problem = FindUnacceptedSyntax(pending.Values.Select(p => p.Image), acceptedBySopClass);
                     if (problem != null) outcome.FailureKind = ConnectivityFailure.ContextNotAccepted;
                     if (problem == null) return;
-                    if (allowFallback)
+                    // Falling back means fo-dicom transcodes the image, which it cannot do from a syntax it cannot decode.
+                    var undecodable = UnacceptedWithoutDecoder(pending.Values.Select(p => p.Image), acceptedBySopClass);
+                    if (undecodable != null)
+                    {
+                        var error = problem + $" DCST4 has no decoder for {undecodable.UID.Name}, so it cannot fall back to another syntax. Nothing was sent. Select another transfer syntax.";
+                        Logger.Error("{error}", error);
+                        responseWatch.Abort(error);
+                    }
+                    else if (allowFallback)
                     {
                         outcome.FailureKind = ConnectivityFailure.None;
                         outcome.FallbackWarning = problem + " Using the syntax the SCP accepted, as fallback is allowed.";
@@ -304,6 +312,17 @@ namespace DCST4.Core.Network
                 var sopClass = image.File.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID).Name;
                 var alternatives = accepted == null || accepted.Length == 0 ? "nothing" : string.Join(", ", accepted.Select(t => t.UID.Name));
                 return $"The SCP did not accept {syntax.UID.Name} for {sopClass}. It accepted: {alternatives}.";
+            }
+            return null;
+        }
+
+        private static DicomTransferSyntax UnacceptedWithoutDecoder(IEnumerable<SourceImage> images, ConcurrentDictionary<string, DicomTransferSyntax[]> acceptedBySopClass)
+        {
+            foreach (var image in images)
+            {
+                var syntax = image.File.Dataset.InternalTransferSyntax;
+                acceptedBySopClass.TryGetValue(image.SopClassUid, out var accepted);
+                if ((accepted == null || !accepted.Contains(syntax)) && !Codecs.OwnCodecs.CanDecode(syntax)) return syntax;
             }
             return null;
         }

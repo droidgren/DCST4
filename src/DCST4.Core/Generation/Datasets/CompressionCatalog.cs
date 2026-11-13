@@ -1,3 +1,4 @@
+using DCST4.Core.Codecs.Video;
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Pipeline;
 using DCST4.Core.TestData;
@@ -13,17 +14,20 @@ namespace DCST4.Core.Generation.Datasets
     /// <summary>A transfer syntax a dataset can be generated in, with the name used on the command line.</summary>
     public sealed class SyntaxChoice
     {
-        internal SyntaxChoice(string id, DicomTransferSyntax syntax, int maxBits = 16)
+        internal SyntaxChoice(string id, DicomTransferSyntax syntax, int maxBits = 16, bool isVideo = false)
         {
             Id = id;
             Syntax = syntax;
             MaxBits = maxBits;
+            IsVideo = isVideo;
         }
 
         public string Id { get; }
         public DicomTransferSyntax Syntax { get; }
         /// <summary>The most bits per sample the syntax can hold at all.</summary>
         public int MaxBits { get; }
+        /// <summary>One stream for all frames, in colour, so only for a multi-frame RGB object.</summary>
+        public bool IsVideo { get; }
     }
 
     /// <summary>One combination that was tried.</summary>
@@ -50,6 +54,7 @@ namespace DCST4.Core.Generation.Datasets
         {
             new SyntaxChoice("explicit", DicomTransferSyntax.ExplicitVRLittleEndian),
             new SyntaxChoice("implicit", DicomTransferSyntax.ImplicitVRLittleEndian),
+            new SyntaxChoice("deflated", DicomTransferSyntax.DeflatedExplicitVRLittleEndian),
         };
 
         public static readonly IReadOnlyList<SyntaxChoice> Compressed = new[]
@@ -65,9 +70,30 @@ namespace DCST4.Core.Generation.Datasets
             new SyntaxChoice("htj2k-rpcl", DicomTransferSyntax.HTJ2KLosslessRPCL),
             new SyntaxChoice("htj2k-lossy", DicomTransferSyntax.HTJ2K),
             new SyntaxChoice("rle", DicomTransferSyntax.RLELossless),
+            // DCST4's own encoder, lossless in both.
+            new SyntaxChoice("jpeg-xl", TransferSyntaxOption.JpegXlLossless.Syntax),
+            new SyntaxChoice("jpeg-xl-lossy", TransferSyntaxOption.JpegXl.Syntax),
+            // The H.264 encoder of Windows.
+            new SyntaxChoice("h264", DicomTransferSyntax.MPEG4AVCH264HighProfileLevel41, 8, true),
         };
 
         public static IEnumerable<SyntaxChoice> All => Uncompressed.Concat(Compressed);
+
+        /// <summary>
+        /// Why an object of this kind cannot be put in the syntax at all, whatever this computer's encoders can do. Null if
+        /// it can. H.264 is colour video (PS3.5 8.2.7 requires YBR_PARTIAL_420), which the XA and RF IODs do not allow, since
+        /// they require MONOCHROME2.
+        /// </summary>
+        public static string FitProblem(SyntaxChoice choice, ModalityProfile image, int rows, int columns)
+        {
+            if (choice == null || image == null || !choice.IsVideo) return null;
+            if (!image.IsMultiFrame || image.SamplesPerPixel != 3)
+            {
+                return $"{choice.Syntax.UID.Name} is colour video, for a multi-frame RGB object such as an ultrasound cine loop. {image.DisplayName} is not one" +
+                    (image.SamplesPerPixel == 1 ? ", and its IOD requires MONOCHROME2." : ".");
+            }
+            return H264Encoder.LimitProblem(columns, rows, image.FramesPerSecond);
+        }
 
         /// <summary>By the name above or by Transfer Syntax UID. Null if it is neither.</summary>
         public static SyntaxChoice Find(string text) =>
@@ -109,13 +135,26 @@ namespace DCST4.Core.Generation.Datasets
                 result.Reason = $"{choice.Syntax.UID.Name} holds at most {choice.MaxBits} bits.";
                 return result;
             }
+            if (choice.IsVideo && samplesPerPixel != 3)
+            {
+                result.Reason = $"{choice.Syntax.UID.Name} is colour video, and its frames are RGB.";
+                return result;
+            }
 
             try
             {
-                var file = new DicomFile(ProbeImage(bitsStored, samplesPerPixel));
+                var file = new DicomFile(ProbeImage(bitsStored, samplesPerPixel, choice.IsVideo));
                 var encoded = TransferSyntaxConverter.Convert(file, choice.Syntax);
-                var pixelData = DicomPixelData.Create(encoded.Dataset);
-                if (pixelData.NumberOfFrames != 1 || pixelData.GetFrame(0).Size == 0) result.Reason = "The encoder produced no frame.";
+                if (choice.IsVideo)
+                {
+                    // One stream for both frames, which fo-dicom cannot split.
+                    if (TransferSyntaxConverter.PixelBytes(encoded.Dataset) == 0) result.Reason = "The encoder produced no stream.";
+                }
+                else
+                {
+                    var pixelData = DicomPixelData.Create(encoded.Dataset);
+                    if (pixelData.NumberOfFrames != 1 || pixelData.GetFrame(0).Size == 0) result.Reason = "The encoder produced no frame.";
+                }
             }
             catch (Exception ex) when (!(ex is OutOfMemoryException))
             {
@@ -125,9 +164,11 @@ namespace DCST4.Core.Generation.Datasets
             return result;
         }
 
-        private static DicomDataset ProbeImage(int bitsStored, int samplesPerPixel)
+        /// <summary>A small image, or for video a cine loop of two frames.</summary>
+        private static DicomDataset ProbeImage(int bitsStored, int samplesPerPixel, bool video = false)
         {
-            var modality = samplesPerPixel > 1 ? (ModalityProfile)new SecondaryCaptureProfile()
+            var modality = video ? new UsMultiFrameProfile()
+                : samplesPerPixel > 1 ? (ModalityProfile)new SecondaryCaptureProfile()
                 : bitsStored <= 8 ? ModalityCatalog.Find("CR") : ModalityCatalog.Find("MG");
             var uids = new DeterministicUidSource(null, "codec-probe");
             var request = new ExamRequest
@@ -138,6 +179,7 @@ namespace DCST4.Core.Generation.Datasets
                 Rows = ProbeMatrix,
                 Columns = ProbeMatrix,
                 BitsStored = bitsStored,
+                FramesPerImage = video ? 2 : 1,
                 Uids = uids,
             };
             var series = new SeriesContext

@@ -8,6 +8,14 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <infra:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <!-- The Transfer syntax list shows each codec family under a heading of its own. -->
+        <GroupStyle x:Key="SyntaxFamilyGroupStyle">
+            <GroupStyle.HeaderTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="#FF404040" Margin="3,4,0,1"/>
+                </DataTemplate>
+            </GroupStyle.HeaderTemplate>
+        </GroupStyle>
     </Window.Resources>
     <DockPanel>
         <Menu DockPanel.Dock="Top" Background="White">
@@ -19,6 +27,7 @@
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_Help" InputGestureText="F1" Click="HelpMenuItem_Click"/>
+                <MenuItem Header="_Search help..." InputGestureText="Ctrl+F1" Click="SearchHelpMenuItem_Click"/>
                 <Separator/>
                 <MenuItem Header="_About" Click="AboutMenuItem_Click"/>
             </MenuItem>
@@ -59,18 +68,34 @@
                 <GroupBox Header="Local" DockPanel.Dock="Top" Margin="0,0,0,8">
                     <Grid Margin="8,4,8,4">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="112"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Label Content="Calling AET:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="1" Text="{Binding CallingAET, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" ToolTip="The AE title DCST4 calls from. The destination may only accept AE titles it knows, so it often has to be set up there.&#x0a;&#x0a;Default: DCST4."/>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Label Content="Calling AET (SCU):" VerticalAlignment="Center"
+                               ToolTip="{Binding ToolTip, ElementName=CallingAeBox}"/>
+                        <TextBox x:Name="CallingAeBox" Grid.Column="1" Text="{Binding CallingAET, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,0,2" ToolTip="The AE title DCST4 calls from when it opens an association as SCU: C-STORE, C-ECHO, C-FIND and C-MOVE requests. The destination may only accept AE titles it knows, so it often has to be set up there.&#x0a;&#x0a;Default: DCST4."/>
+
+                        <Label Grid.Row="1" Content="Listen AET (SCP):" VerticalAlignment="Center"
+                               ToolTip="{Binding ToolTip, ElementName=LocalScpAeBox}"/>
+                        <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,2,0,2" IsEnabled="{Binding IsIdle}">
+                            <TextBox x:Name="LocalScpPortBox" DockPanel.Dock="Right" Text="{Binding LocalScpPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center"
+                                     ToolTip="Where this computer listens while a C-MOVE or Storage Commitment test runs. Windows Defender Firewall must allow incoming TCP on it.&#x0a;&#x0a;Default: 11113."/>
+                            <TextBlock DockPanel.Dock="Right" Text="Port:" VerticalAlignment="Center" Margin="10,0,4,0"
+                                       ToolTip="{Binding ToolTip, ElementName=LocalScpPortBox}"/>
+                            <TextBox x:Name="LocalScpAeBox" Text="{Binding LocalScpAe, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"
+                                     ToolTip="The AE title of this computer as SCP: the PACS connects back to it with C-MOVE objects and Storage Commitment reports. The PACS must know it, with this computer's address and the port.&#x0a;&#x0a;Default: DCST4."/>
+                        </DockPanel>
                     </Grid>
                 </GroupBox>
 
                 <GroupBox Header="Server">
                     <Grid Margin="8,4,8,4">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="90"/>
+                            <ColumnDefinition Width="112"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -198,7 +223,12 @@
                             <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding CharacterSets}" SelectedItem="{Binding CharacterSet, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="Specific Character Set (0008,0005): ISO_IR 100 is Latin-1, ISO_IR 192 is UTF-8. Empty value sends the tag with zero length, which means Basic ASCII, so Auto names lose their å, ä and ö.&#x0a;&#x0a;Default: ISO_IR 100."/>
                             <Label Grid.Row="3" Grid.Column="3" Content="Transfer syntax:"/>
-                            <ComboBox Grid.Row="3" Grid.Column="4" ItemsSource="{Binding TransferSyntaxes}" SelectedItem="{Binding SelectedTransferSyntax, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2" ToolTip="The transfer syntax the images are sent and saved in.&#x0a;&#x0a;Default: Explicit VR Little Endian."/>
+                            <ComboBox Grid.Row="3" Grid.Column="4" ItemsSource="{Binding TransferSyntaxView}" IsSynchronizedWithCurrentItem="False" SelectedItem="{Binding SelectedTransferSyntax, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
+                                      ToolTip="The transfer syntax the images are sent and saved in, by codec family. Lossy syntaxes say so in their name. JPEG XL is written lossless by DCST4's own encoder, in both of its syntaxes. H.264 uses the encoder of Windows and is for US Multi-frame only, since the XA and RF images must be MONOCHROME2. JPEG XL and H.264 cannot fall back to Implicit VR, since DCST4 cannot decode them.&#x0a;&#x0a;Default: Explicit VR Little Endian.">
+                                <ComboBox.GroupStyle>
+                                    <StaticResource ResourceKey="SyntaxFamilyGroupStyle"/>
+                                </ComboBox.GroupStyle>
+                            </ComboBox>
 
                             <Label Grid.Row="4" Content="Estimated size:"/>
                             <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding EstimatedSizeText}" Foreground="#FF505050" VerticalAlignment="Center"
@@ -332,16 +362,6 @@
                                     ToolTip="The UID root, the transfer syntax of the store tests, the Storage Commitment times, the settings of the limit, fault and TLS tests, and the results folder"/>
                             <Button DockPanel.Dock="Left" Content="Save profile as JSON..." Width="140" Margin="6,0,0,0" Click="SaveTargetProfileButton_Click" IsEnabled="{Binding IsIdle}"
                                     ToolTip="Save the destination above, with the local SCP and the UID root, as a file for DCST4.Cli.exe"/>
-                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="16,0,0,0" IsEnabled="{Binding IsIdle}">
-                                <TextBlock Text="Local SCP AET:" VerticalAlignment="Center" Margin="0,0,4,0"
-                                           ToolTip="{Binding ToolTip, ElementName=LocalScpAeBox}"/>
-                                <TextBox x:Name="LocalScpAeBox" Text="{Binding LocalScpAe, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="100" VerticalAlignment="Center"
-                                         ToolTip="The AE title of this computer, which the PACS sends C-MOVE objects and Storage Commitment reports to. The PACS must have it, with this computer's address and the port.&#x0a;&#x0a;Default: DCST4."/>
-                                <TextBlock Text="Port:" VerticalAlignment="Center" Margin="10,0,4,0"
-                                           ToolTip="{Binding ToolTip, ElementName=LocalScpPortBox}"/>
-                                <TextBox x:Name="LocalScpPortBox" Text="{Binding LocalScpPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60" VerticalAlignment="Center"
-                                         ToolTip="Where this computer listens during a C-MOVE or Storage Commitment test. Windows Defender Firewall must allow it.&#x0a;&#x0a;Default: 11113."/>
-                            </StackPanel>
                             <Button DockPanel.Dock="Right" Content="Open results folder" Width="120" Margin="6,0,0,0" Click="OpenTestResultsFolderButton_Click"
                                     ToolTip="{Binding TestSuite.ResultsFolder}" ToolTipService.ShowOnDisabled="True"/>
                             <Button DockPanel.Dock="Right" Content="Compare runs..." Width="100" Margin="6,0,0,0" Click="CompareRunsButton_Click" IsEnabled="{Binding IsIdle}"

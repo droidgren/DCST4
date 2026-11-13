@@ -489,7 +489,7 @@ namespace DCST4.Tests
                 && syntax(Request(Named("enhanced-ct")), DicomTransferSyntax.JPEGProcess1).Contains("at most 8 bits"), syntax(Request(Named("ct"), bits: 12), DicomTransferSyntax.JPEGProcess1));
             Check("JPEG Baseline with 8 bits, grayscale or colour: fine", syntax(Request(Named("us")), DicomTransferSyntax.JPEGProcess1).Length == 0 && syntax(Request(Named("cr"), bits: 8), DicomTransferSyntax.JPEGProcess1).Length == 0);
             Check("The uncompressed syntaxes and JPEG Lossless: fine for CT", new[] { DicomTransferSyntax.ExplicitVRLittleEndian, DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.JPEGProcess14SV1 }.All(s => syntax(Request(Named("ct")), s).Length == 0));
-            Check("Generate & Send offers JPEG Baseline last, after the three it had", TransferSyntaxOption.All.Select(o => o.Syntax).SequenceEqual(new[] { DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.ExplicitVRLittleEndian, DicomTransferSyntax.JPEGProcess14SV1, DicomTransferSyntax.JPEGProcess1 }));
+            Check("Generate & Send offers JPEG Baseline first in the JPEG family", TransferSyntaxOption.All.SkipWhile(o => o.Family != TransferSyntaxFamily.Jpeg).First() == TransferSyntaxOption.JpegBaseline);
         }
 
         // ---------------------------------------------------------------- size estimate

@@ -290,6 +290,8 @@ namespace DCST4.Core.Generation.Datasets
                 SeriesDescription = (preset.SeriesDescription ?? string.Empty) + _textSuffix,
                 StationName = "DCST4-" + (_profile.Image?.Code ?? _profile.Object.Code),
                 AutoValuesInBasicAscii = _request.CharacterSet == CharacterSetVariant.EmptyAscii,
+                // The patient name is set above, so this only decides the Referring Physician Name.
+                PatientNaming = _request.PatientNaming,
             };
 
             return new IdentityGenerator(_registry, SeededValues.Random(_context + "/" + scope), () => _request.ReferenceDate, uids)

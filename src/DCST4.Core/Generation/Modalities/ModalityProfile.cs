@@ -153,6 +153,9 @@ namespace DCST4.Core.Generation.Modalities
         /// <summary>Frames in an image unless another number is asked for. 1 for a single-frame modality.</summary>
         public virtual int DefaultFrames => 1;
 
+        /// <summary>The Cine Rate of a cine loop or run. 0 for an object that is not played as video.</summary>
+        public virtual int FramesPerSecond => 0;
+
         public virtual string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY" };
 
         public abstract void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context);

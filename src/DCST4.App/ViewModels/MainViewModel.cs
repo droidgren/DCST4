@@ -161,6 +161,9 @@ namespace DCST4.ViewModels
         public ObservableCollection<ImageObject> ImageObjects { get; } = new ObservableCollection<ImageObject>();
         public IReadOnlyList<string> CharacterSets { get; } = new[] { DicomCharacterSets.Latin1, DicomCharacterSets.Utf8, DicomCharacterSets.EmptyDisplayName };
         public IReadOnlyList<TransferSyntaxOption> TransferSyntaxes => TransferSyntaxOption.All;
+
+        /// <summary>The same list under a heading per codec family, as the Transfer syntax list shows it.</summary>
+        public ICollectionView TransferSyntaxView { get; } = FamilyGroupedView.Create(TransferSyntaxOption.All);
         public ObservableCollection<ExamPreset> Presets { get; } = new ObservableCollection<ExamPreset>();
         public ObservableCollection<int> BitDepths { get; } = new ObservableCollection<int>();
 
@@ -313,8 +316,12 @@ namespace DCST4.ViewModels
         private bool _allowFallback;
         public bool AllowFallback { get => _allowFallback; set { _allowFallback = value; OnPropertyChanged(); Settings.Default.AllowFallback = value; } }
 
-        /// <summary>With Implicit VR selected there is nothing to fall back to.</summary>
-        public bool FallbackIsRelevant => !ReferenceEquals(_selectedTransferSyntax, TransferSyntaxOption.ImplicitVrLe);
+        /// <summary>
+        /// With Implicit VR selected there is nothing to fall back to. JPEG XL and H.264 cannot be decoded here, which falling
+        /// back to another syntax needs.
+        /// </summary>
+        public bool FallbackIsRelevant => !ReferenceEquals(_selectedTransferSyntax, TransferSyntaxOption.ImplicitVrLe)
+            && (_selectedTransferSyntax == null || Core.Codecs.OwnCodecs.CanDecode(_selectedTransferSyntax.Syntax));
 
         private int _minAge;
         public int MinAge { get => _minAge; set { _minAge = value; OnPropertyChanged(); Settings.Default.MinAge = value; RefreshPreview(); } }
@@ -928,8 +935,9 @@ namespace DCST4.ViewModels
                 return;
             }
 
+            // Deflated is native data, but compressed, so its size is measured like an encapsulated syntax's.
             var syntax = _selectedTransferSyntax.Syntax;
-            if (!syntax.IsEncapsulated)
+            if (!syntax.IsEncapsulated && !syntax.IsDeflate)
             {
                 ShowEstimate(uncompressed.Value, request);
             }
@@ -937,8 +945,9 @@ namespace DCST4.ViewModels
             {
                 ShowEstimate(_measuredImageBytes, request);
             }
-            else if (request.Identity == null)
+            else if (request.Identity == null || ExamValidator.SyntaxProblems(request, syntax).Count > 0)
             {
+                // A syntax this exam cannot be sent in is reported when the run starts. There is no sample to measure.
                 ShowUpperLimit(uncompressed.Value, request);
             }
             else
