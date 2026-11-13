@@ -1006,7 +1006,7 @@ namespace DCST4.ViewModels
 
         /// <summary>What the size of a compressed image depends on. The number of images is not part of it.</summary>
         private static string SizeKey(ExamRequest request, FellowOakDicom.DicomTransferSyntax syntax) => string.Join("|",
-            request.Modality.ObjectName, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes, syntax.UID.UID,
+            request.Modality.DisplayName, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes, syntax.UID.UID,
             request.BurnedInTags == null ? string.Empty : string.Join(",", request.BurnedInTags));
         #endregion
 
@@ -1038,7 +1038,7 @@ namespace DCST4.ViewModels
 
             var id = request.Identity;
             _logger.Information("Exam: {object} {preset}, {series} series x {images} images, {rows}x{columns}, {bits} bits, {frames} frames per image, private payload {payload} MB, {charset}. Patient {name}, ID {id}, born {born}, sex {sex}. Accession {accession}, Study ID {studyId}, Study UID {studyUid}",
-                request.Modality.ObjectName, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes / PrivatePayload.BytesPerMegabyte, _characterSet,
+                request.Modality.DisplayName, request.Preset.Name, request.SeriesCount, request.ImagesPerSeries, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes / PrivatePayload.BytesPerMegabyte, _characterSet,
                 id.PatientName, id.PatientId, id.PatientBirthDate, id.PatientSex, id.AccessionNumber, id.StudyId, id.StudyInstanceUid);
             if (id.AdditionalTags.Count > 0)
             {
@@ -1115,7 +1115,8 @@ namespace DCST4.ViewModels
         public DataMix BuildCustomMix()
         {
             if (_selectedImageObject == null || _selectedTransferSyntax == null) return null;
-            return DataMix.Custom(_selectedImageObject.DatasetProfileId, _selectedImageObject.Name, _rows, _columns, _bitsStored, IsMultiFrame ? _framesPerImage : 1,
+            // The display name, not the Object list's label: a mix described as "Single frame ..." would say nothing.
+            return DataMix.Custom(_selectedImageObject.DatasetProfileId, Generating.DisplayName, _rows, _columns, _bitsStored, IsMultiFrame ? _framesPerImage : 1,
                 Generating.SamplesPerPixel, _selectedTransferSyntax.Syntax, _selectedTransferSyntax.Name, PrivatePayloadBytes);
         }
 

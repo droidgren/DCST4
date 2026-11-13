@@ -34,7 +34,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 ## Features
 
 - **Zero Dependencies:** Built on .NET 4.8 (included natively in Windows 10 and 11). No external runtime installation is required.
-- **Realistic exams:** CT, MR and PT stacks, CR, DX, US, XA, RF, MG and NM images, and for US, CT, MR and MG also their multi-frame image, an ultrasound cine loop among them, built to their IODs and checked with outside validators, with consistent slice geometry and believable timestamps. See [Checking with another toolkit](#checking-with-another-toolkit) for what is still reported.
+- **Realistic exams:** CT, MR and PT stacks, CR, DX, US, XA, RF, MG and NM images, and for US, XA, RF, CT, MR and MG also their multi-frame objects: an ultrasound cine loop, a cine run, a fluoro loop, Enhanced CT, MR, XA and XRF and Breast Tomosynthesis, built to their IODs and checked with outside validators, with consistent slice geometry and believable timestamps. See [Checking with another toolkit](#checking-with-another-toolkit) for what is still reported.
 - **Everything is automatic, and everything can be overridden:** patient, accession number, study ID, UIDs, date and time. The fields show what the next run will use.
 - **Additional tags:** add common tags with generated values, or any custom tag, including private ones, under **File > Settings**.
 - **Official test patients:** random Patient IDs come only from Skatteverket's list of test personnummer. Birth date and sex follow from the number.
@@ -57,7 +57,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Reports:** every run is also written as one HTML file that is complete in itself, with the summary, the capability matrix, the chain, the integrity findings, the limits, Storage Commitment, charts of the Performance tests and the protocol timeline of each failed test. It loads nothing from the network and holds no script. See [Reports and comparison](#reports-and-comparison).
 - **Comparison of runs:** two or more saved runs against a baseline: what the PACS no longer supports, tests that now fail, and throughput and latency against a threshold, from the program or with `DCST4.Cli.exe compare`, whose exit code says whether anything regressed. A vendor fingerprint of each system, side by side, for comparing versions and vendors.
 - **Protocol timeline:** each test records the steps of the association, from A-ASSOCIATE to A-RELEASE or A-ABORT, with every DIMSE request and response and its raw status.
-- **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, Enhanced CT and MR, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
+- **Reproducible test datasets:** the same seed gives the same files, from the command line. Single-frame and multi-frame images, cine XA and RF, Enhanced CT, MR, XA and XRF, SR, Key Object Selection, Presentation State, Encapsulated PDF, Segmentation and RT Structure Set, in compressed variants and with character set and edge-case variants. Each comes with a manifest of hashes. See [Test datasets](#test-datasets).
 
 
 ## Install
@@ -138,23 +138,29 @@ Opening **Help > About** also asks GitHub and shows the result in that window, i
 
 ![The Exam tab set up for an ultrasound cine loop in JPEG Baseline with a private payload](screenshots/exam-multiframe.png)
 
-**Modality** is the ten modality codes, and **Object** says which image of that modality to generate, named after its IOD:
+**Modality** is the ten modality codes, and **Object** says which image of that modality to generate:
 
 | Modality | Object |
 | -------- | ------ |
-| US | Ultrasound Image, or **Ultrasound Multi-frame Image**, an RGB cine loop at 8 bits with Frame Time and Cine Rate for 30 frames per second |
-| CT | CT Image, or **Enhanced CT Image** |
-| MR | MR Image, or **Enhanced MR Image** |
-| MG | Digital Mammography X-Ray Image, or **Breast Tomosynthesis Image** |
-| CR, DX, XA, RF, PT, NM | one image each |
+| US | Single frame, or **Multi-frame (cine loop)**: Ultrasound Multi-frame Image, an RGB cine loop at 8 bits with Frame Time and Cine Rate for 30 frames per second |
+| XA | Single frame, **Multi-frame (cine run)** or **Enhanced XA** |
+| RF | Single frame, **Multi-frame (fluoro loop)** or **Enhanced XRF** |
+| CT | Single frame, or **Enhanced CT** |
+| MR | Single frame, or **Enhanced MR** |
+| MG | Single frame, or **Breast Tomosynthesis** |
+| CR, DX, PT, NM | Single frame |
 
-Choosing a modality selects its ordinary image. **Frames per image** says how many frames a multi-frame object has, 1 to 10,000, and is 30 for a cine loop and 8 for the others when the object is selected. Images per series then starts at 1 and is the number of multi-frame objects. The exam type and the bit depth are kept when the object changes, where the other image allows them. Every frame is drawn and marked like any other test image, with its frame number.
+Choosing a modality selects Single frame. **Frames per image** says how many frames a multi-frame object has, 1 to 10,000, and is 30 for a cine loop or a cine run, 16 for a fluoro loop and 8 for the enhanced objects when the object is selected. Images per series then starts at 1 and is the number of multi-frame objects. The exam type and the bit depth are kept when the object changes, where the other image allows them. Every frame is drawn and marked like any other test image, with its frame number.
+
+**A cine XA or RF is the same SOP class as the single-frame image.** The Multi-frame and Cine modules of those two IODs are conditional on the number of frames, so a cath lab's cine run and a single spot image are both X-Ray Angiographic Image Storage. The multi-frame object adds Number of Frames, Frame Time, Frame Increment Pointer, Cine Rate and Recommended Display Frame Rate (15 per second for XA, 8 for RF), Preferred Playback Sequencing, and for XA the Positioner Motion that the XA Positioner module then requires. A PACS that takes the single image can still refuse the run, which is what the pair is there to find out.
+
+**Enhanced XA and Enhanced XRF** are SOP classes of their own (1.2.840.10008.5.1.4.1.1.12.1.1 and …12.2.1), the multi-frame functional group objects that newer angiography and fluoroscopy systems send. DCST4 generates them with Image Type `DERIVED`, one plane, no C-arm geometry, no X-Ray Receptor Type and a linear pixel intensity relationship, which is the combination that leaves every conditional module and macro of those IODs out. What is written is the XA/XRF Series and Enhanced XA/XRF Image modules, an Acquisition Context Sequence, and the five mandatory functional group macros: Frame Content per frame, and Frame Anatomy, Frame VOI LUT, Irradiation Event Identification and X-Ray Frame Pixel Data Properties shared by all frames. The Irradiation Event UID follows from the UID root of the profile. These two have no Frame of Reference, no slice geometry and no Dimension Organization, which the Enhanced CT, Enhanced MR and Breast Tomosynthesis objects do have.
 
 The frames are drawn as they are written and are never all in memory, so an object can be much larger than the computer's memory. With JPEG Lossless or JPEG Baseline the frames are encoded before the object is sent, a few at a time on the processor's cores, and the status bar counts them. Cancel works while this goes on. JPEG Baseline is the slow one: a cine loop of 1,667 frames of 960 x 1280 took about three minutes on a computer with 12 cores, and DCST4 used about 500 MB of memory meanwhile. The pixels of an uncompressed image must be less than 4 GB, which is what the length of a DICOM element can hold, so a long cine loop needs a compressed transfer syntax: 1,667 frames of 960 x 1280 in colour are 5.7 GB, and the run then stops with a message that says so.
 
 **JPEG Baseline** is lossy and holds 8 bits, so it can be chosen for both US images, and for CR, DX, XA, RF and NM at 8 bits stored. The image is then marked with Lossy Image Compression `01`, the ratio and the method, and Image Type `DERIVED`. A colour image is stored as `YBR_FULL_422`, as ultrasound systems store theirs. The test images compress better than real ones: a frame of 960 x 1280 is about 58 KB here, and about 90 KB from an ultrasound system.
 
-Enhanced CT, Enhanced MR and Breast Tomosynthesis still lack some attributes that a strict validator names, see [Checking with another toolkit](#checking-with-another-toolkit). The cine loop passes `dciodvfy` without errors.
+Enhanced CT, Enhanced MR and Breast Tomosynthesis still lack some attributes that a strict validator names, see [Checking with another toolkit](#checking-with-another-toolkit). The cine loop, the cine run and the fluoro loop pass `dciodvfy` without errors, and the two enhanced X-ray objects pass with remarks that come from the validator's own tables.
 
 **Add private payload of ... MB per image** adds one large private value to every image, the way some ultrasound systems send their raw data along with a cine loop, where it can be four times the size of the pixels. Use it to find out whether a PACS takes images with large private data, and whether it keeps it. It is unticked every time DCST4 starts. The size, 1 to 2,000 MB, is remembered.
 
@@ -166,7 +172,7 @@ Enhanced CT, Enhanced MR and Breast Tomosynthesis still lack some attributes tha
 
 The payload is random bytes that follow from the SOP Instance UID, so it does not compress away and two images never carry the same one. It is written as it is generated and is never in memory. A receiver using Implicit VR sees the private tags as UN unless it knows the creator.
 
-To imitate a long cine loop from an ultrasound system that sends its raw data along: US with Ultrasound Multi-frame Image, 960 x 1280, 1,667 frames, JPEG Baseline and a payload of 657 MB, which is an object of 790 MB. Assume that the PACS cannot delete what it receives, and try a large object against a test system first.
+To imitate a long cine loop from an ultrasound system that sends its raw data along: US with Multi-frame (cine loop), 960 x 1280, 1,667 frames, JPEG Baseline and a payload of 657 MB, which is an object of 790 MB. Assume that the PACS cannot delete what it receives, and try a large object against a test system first.
 
 ### Transfer syntax behaviour
 
@@ -528,7 +534,7 @@ Percentiles are p50, p95, p99 and the maximum, by nearest rank. They come from a
 | `large-lossless` | Enhanced CT 512 x 512 x 32 frames in JPEG Lossless |
 | `custom`         | The object described on the Exam tab. In the program only |
 
-**The custom mix** takes Modality, Object, Rows x Columns, Bits stored, Frames per image, Transfer syntax and the private payload from the Exam tab, and nothing else: a load run makes its own studies and patient, as with the other mixes, so Exam type, Series, Images per series, the Identifiers tab and burned-in text are not used. The text beside the list, the plan, the question before the run, the result file and the report all say what it was, for example `Ultrasound Multi-frame Image 960 x 1280, 8 bits, 270 frames, JPEG Baseline (Process 1, lossy), 100 MB private payload`. A load run keeps its objects in memory, encoded, so one object can be at most 1 GB, and the pool holds four variants of an object only while they fit in 1 GB together, down to one. Each variant is generated and encoded before the run starts, which takes minutes for a long cine loop. A larger object stops the run before anything is sent; send that one with Generate & Send. Two runs with the custom mix are compared only if their descriptions are the same. With a large object, lower Max instances first: the default of 5,000 times a 700 MB object is 3.5 TB.
+**The custom mix** takes Modality, Object, Rows x Columns, Bits stored, Frames per image, Transfer syntax and the private payload from the Exam tab, and nothing else: a load run makes its own studies and patient, as with the other mixes, so Exam type, Series, Images per series, the Identifiers tab and burned-in text are not used. The text beside the list, the plan, the question before the run, the result file and the report all say what it was, for example `US Multi-frame 960 x 1280, 8 bits, 270 frames, JPEG Baseline (Process 1, lossy), 100 MB private payload`. A load run keeps its objects in memory, encoded, so one object can be at most 1 GB, and the pool holds four variants of an object only while they fit in 1 GB together, down to one. Each variant is generated and encoded before the run starts, which takes minutes for a long cine loop. A larger object stops the run before anything is sent; send that one with Generate & Send. Two runs with the custom mix are compared only if their descriptions are the same. With a large object, lower Max instances first: the default of 5,000 times a 700 MB object is 3.5 TB.
 
 `--load-pdu` sets the maximum PDU length that DCST4 announces and sends its data PDUs with, at most what the PACS announces. 0, the default, is fo-dicom's default of 262144, which an ordinary send uses.
 
@@ -701,8 +707,10 @@ A multi-frame image has its frames encoded one at a time, so `tomosynthesis-larg
 | DX         | As CR, plus Presentation Intent, Presentation LUT Shape, Pixel Intensity Relationship, Rescale, Detector Type, Image Laterality, Positioner Type                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Ultrasound Multi-frame | As US, in colour (RGB, 8 bits per sample), with Number of Frames, Frame Time 33 ms, Frame Increment Pointer, Cine Rate and Recommended Display Frame Rate 30 |
 | Enhanced CT, Enhanced MR, Breast Tomosynthesis | Multi-frame with Shared and Per-frame Functional Groups: Pixel Measures, Plane Orientation and Position, Frame Content, a frame type, Frame Anatomy, Frame VOI LUT, and Pixel Value Transformation where the image has a rescale. Dimension Organization and Index. Image Type `DERIVED` |
+| Enhanced XA, Enhanced XRF | Multi-frame functional groups without a stack: Frame Content with a Frame Label per frame, and shared X-Ray Frame Pixel Data Properties (Frame Type, Pixel Intensity Relationship `LIN`, Geometrical Properties `UNIFORM`, Image Processing Applied `NONE`), Frame Anatomy from CID 4042, Frame VOI LUT and an Irradiation Event UID. Image Type `DERIVED\PRIMARY\ANGIO\NONE` or `FLUOROSCOPY`, Planes in Acquisition `SINGLE PLANE` with Plane Identification `MONOPLANE`, Content Qualification `RESEARCH`, Presentation LUT Shape, an empty Acquisition Context Sequence |
 | US         | Single-frame grayscale B-mode (MONOCHROME2, 8 bits): Image Type with application and `0001`, Transducer Data and Type, Depth of Scan Field, Mechanical and Thermal Index, Sequence of Ultrasound Regions with calibration in cm                                                                                                                                                                                                                                                                                                            |
 | XA, RF     | Single frame: Image Type with `SINGLE PLANE`, Imager Pixel Spacing, Pixel Intensity Relationship, Radiation Setting, KVP, Tube Current, Exposure Time, Exposure, and for XA Positioner Primary and Secondary Angle |
+| XA, RF multi-frame | As the single-frame image, plus the Multi-frame and Cine modules of the same IOD: Number of Frames, Frame Time, Frame Increment Pointer, Cine Rate and Recommended Display Frame Rate (15 for XA, 8 for RF), Preferred Playback Sequencing, and for XA Positioner Motion `STATIC` |
 | MG         | As DX, For Presentation, plus Positioner Type, Organ Exposed, left or right CC or MLO view with Patient Orientation, and Anatomic Region and View Code Sequences |
 | PT         | Static stack with Frame of Reference and slice geometry, 16 bits: Units `BQML`, Counts Source, Series Type, Corrected Image, Decay Correction, Number of Slices, Image Index, Frame Reference Time, Actual Frame Duration, F-18 FDG in Radiopharmaceutical Information Sequence, Rescale |
 | NM         | Static image, one frame: Image Type with `STATIC` and `EMISSION`, Number of Frames, Frame Increment Pointer, Energy Window and Detector vectors and sequences, Tc-99m in Radiopharmaceutical Information Sequence, Counts Accumulated, Actual Frame Duration, Pixel Spacing |
@@ -777,11 +785,11 @@ Generation knows nothing about sending. The two meet at `IImageSource`, which su
 | Sending existing files from a folder, with optional new UIDs | A new `IImageSource`. Sending does not change.                                                     |
 | MPPS                                                         | `ExamRequest` holds the study and series identity. `Network\` gets a new service.                  |
 
-To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog.All`, which makes it a modality of Generate & Send and a dataset profile. Another image of a modality that already exists goes in `DatasetProfileCatalog` and, to be offered in the **Object** list, in the table in `ModalityCatalog.BuildObjects` with the id of its dataset profile, which is what the custom mix generates it by. `ModalityProfile.ObjectName` is the name the list shows, and `ObjectsOf` gives a modality its images, the ordinary one first. An image type only for datasets goes in `DatasetProfileCatalog` alone. A non-image object subclasses `ObjectProfile`.
+To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog.All`, which makes it a modality of Generate & Send and a dataset profile. Another image of a modality that already exists goes in `DatasetProfileCatalog` and, to be offered in the **Object** list, in the table in `ModalityCatalog.BuildObjects` with the id of its dataset profile, which is what the custom mix generates it by. `ModalityProfile.ObjectName` is the label the list shows, `Single frame` unless the image is multi-frame, and `ObjectsOf` gives a modality its images, the single-frame one first. An image that is the same SOP class with more frames, such as a cine XA, subclasses the single-frame profile and adds its modules; `FunctionalGroupProfile.UsesSliceGeometry` and `UsesDimensionOrganization` switch off the parts of the functional-group skeleton that an IOD does not have, as Enhanced XA and Enhanced XRF do. An image type only for datasets goes in `DatasetProfileCatalog` alone. A non-image object subclasses `ObjectProfile`.
 
 `TestDatasetGenerator` is an `IImageSource`, so its objects go through `StoreRun` like any others. It composes `ExamGenerator` with an `IUidSource`: `GeneratedUidSource` is the default, and `DeterministicUidSource` derives UIDs from the root, seed and counters. Every parameter that changes the data is part of the hashed context, so two variants never share a SOP Instance UID on a PACS. Each object leaves the generator in its final syntax, so a run must use `TestDatasetGenerator.TransferSyntax`. The manifest and the hashes (`ManifestHashes`, `NormalizedAttributes`) are what Phase 4 uses to verify integrity.
 
-Pixel Data of every multi-frame image (`ModalityProfile.RendersFramesOnDemand`: the cine loop, Enhanced CT, Enhanced MR and Breast Tomosynthesis) comes from `RenderedFramesBuffer`, which draws each frame when it is read and keeps only the latest in memory, so a 700 MB object takes little more than one frame of heap. It is OB for 8 bits allocated and OW for 16, and pads an odd length. fo-dicom's transcoder reads every frame before it writes the first, so `TransferSyntaxConverter.Convert` encodes such an image itself when the target is encapsulated: each frame is drawn, run through the transcoder as a one-frame image, and its fragment added with `DicomPixelData.AddFrame`, which also builds the Basic Offset Table. The frames are drawn one after the other, since the drawing is not made for several threads, and encoded in batches, as many frames at a time as there are cores and at most 16, then added in their order. After a batch of large frames the garbage is collected, or the encoders' buffers pile up to over a gigabyte in a long loop. The harness checks that the file is byte for byte what the transcoder gives for the same image held in memory. `Convert` takes a `CancellationToken` and reports each frame, which `StoreRun.FrameEncoded` passes on to the status bar. A dataset has one or two SOP classes, since `StoreService` negotiates from its first window of images.
+Pixel Data of every multi-frame image (`ModalityProfile.RendersFramesOnDemand`: the cine loop, the XA and RF cine objects, Enhanced CT, Enhanced MR, Enhanced XA, Enhanced XRF and Breast Tomosynthesis) comes from `RenderedFramesBuffer`, which draws each frame when it is read and keeps only the latest in memory, so a 700 MB object takes little more than one frame of heap. It is OB for 8 bits allocated and OW for 16, and pads an odd length. fo-dicom's transcoder reads every frame before it writes the first, so `TransferSyntaxConverter.Convert` encodes such an image itself when the target is encapsulated: each frame is drawn, run through the transcoder as a one-frame image, and its fragment added with `DicomPixelData.AddFrame`, which also builds the Basic Offset Table. The frames are drawn one after the other, since the drawing is not made for several threads, and encoded in batches, as many frames at a time as there are cores and at most 16, then added in their order. After a batch of large frames the garbage is collected, or the encoders' buffers pile up to over a gigabyte in a long loop. The harness checks that the file is byte for byte what the transcoder gives for the same image held in memory. `Convert` takes a `CancellationToken` and reports each frame, which `StoreRun.FrameEncoded` passes on to the status bar. A dataset has one or two SOP classes, since `StoreService` negotiates from its first window of images.
 
 `PrivatePayload.Add` writes the private payload from `ExamRequest.PrivatePayloadBytes`, and `TestDatasetRequest.PrivatePayloadBytes` passes it on. Its bytes come from `GeneratedBytesBuffer`, an `IByteBuffer` that works out any part of itself from a seed and the position, so fo-dicom streams it to a file or the network without it ever being in memory. `ExamValidator.SyntaxProblems` says before a run whether an exam can be written in a transfer syntax: an encoder that cannot hold the bit depth, by `CompressionCatalog.Probe`, or uncompressed pixels of 4 GB or more.
 
@@ -853,10 +861,13 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe fileset C:\Temp\fileset
 # One multi-frame object at full size, saved in a folder and, with a port, sent to 127.0.0.1 only. Prints the time and the peak memory.
 # Folder, the id of the dataset profile that makes the same object, rows, columns, frames, payload in MB, implicit|explicit|jpeg|baseline, optionally a port
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe cine C:\Temp\cine us-multiframe 960 1280 1667 657 baseline 11112
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe cine C:\Temp\cine xa-cine 1024 1024 300 0 jpeg
 
-# A load run with a custom mix of one large cine loop in JPEG Baseline, against the mock SCP, which keeps nothing
-# Rows, columns, frames, payload in MB, number of sends
-tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe custommix 960 1280 270 400 6
+# A load run with a custom mix of one large object, against the mock SCP, which keeps nothing
+# The id of the dataset profile, rows, columns, frames, payload in MB, number of sends.
+# JPEG Baseline at 8 bits stored and JPEG Lossless above.
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe custommix us-multiframe 960 1280 270 400 6
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe custommix enhanced-xa 1024 1024 60 0 4
 
 # Only the multi-frame, JPEG Baseline and private payload tests
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe multiframe
@@ -902,6 +913,11 @@ The attributes of the generated objects were checked with two IOD validators in 
 - The empty Specific Character Set variant is an error in `dciodvfy`, as expected, two files.
 - `validate_iods` reports KVP, Exposure Time and Tube Current on DX and MG, and six functional group sequences on Segmentation, as unexpected. `dciodvfy` accepts them, and they are taken as false alarms without having been confirmed in the standard.
 - `dcentvfy` finds CT, MR and PT studies consistent across series and instances.
+
+The four objects added in 1.10.1 were checked with `dciodvfy` of the same snapshot, uncompressed and in JPEG Lossless. The cine XA, including one of 300 frames, and the fluoro loop pass without a remark. Enhanced XA and Enhanced XRF leave two remarks, both from the validator's own tables rather than the objects:
+
+- `Unrecognized defined term <SINGLE PLANE> for Planes in Acquisition`, a warning. PS3.3 C.8.19.2 gives SINGLE PLANE, BIPLANE and UNDEFINED as the values of that attribute, and the object has to name a plane because Plane Identification is Type 1C whenever it is not UNDEFINED.
+- `Unrecognized enumerated value <RF> for Modality` on Enhanced XRF, an error. PS3.3 C.8.19.1 requires Modality XA in the Enhanced XA IOD and RF in the Enhanced XRF IOD, which is what is written.
 
 The store, query and retrieve tests added in 1.6.0 were checked once by hand against DCMTK 3.7.1 `dcmqrscp` on the same computer:
 
@@ -960,28 +976,30 @@ What this means for a reader: compare a system with itself only over several run
 
 New:
 
-- A multi-frame image for the modalities that have one, chosen in a new list, **Object**, on the Exam tab, which holds the images of the selected modality by their IOD names: Ultrasound Multi-frame Image for US, Enhanced CT Image, Enhanced MR Image and Breast Tomosynthesis Image. With one of them, the new field **Frames per image** says how many frames, 1 to 10,000, and Images per series is the number of such objects
+- A new list, **Object**, on the Exam tab, which holds the images the selected modality can generate: **Single frame** and, where DCST4 has them, Multi-frame (cine loop) for US, Multi-frame (cine run) and Enhanced XA for XA, Multi-frame (fluoro loop) and Enhanced XRF for RF, Enhanced CT, Enhanced MR and Breast Tomosynthesis. With a multi-frame object, the new field **Frames per image** says how many frames, 1 to 10,000, and Images per series is the number of such objects
+- **A cine run from a cath lab and a fluoroscopy loop**, as XA and RF multi-frame objects. They are the same SOP class as the single-frame image, with the Multi-frame and Cine modules the IOD requires above one frame: Number of Frames, Frame Time, Frame Increment Pointer, Cine Rate and Recommended Display Frame Rate, and Positioner Motion for XA. A PACS that takes the single image can still refuse the run
+- **Enhanced XA Image Storage and Enhanced XRF Image Storage**, the multi-frame functional group IODs of angiography and fluoroscopy, which newer systems send. They are generated as DERIVED single-plane objects, which leaves out every conditional module of those IODs, with the five mandatory functional group macros, an Acquisition Context Sequence and an Irradiation Event UID from the profile's UID root
 - **JPEG Baseline (Process 1, lossy)** in the Transfer syntax list, for 8 bits stored. A colour image is stored as YBR_FULL_422. Other bit depths stop the run with a message
 - **Add private payload of ... MB per image** on the Exam tab: a private sequence, (0099,1020) under the creator `DCST4 TEST`, with one binary value of 1 to 2,000 MB of random bytes in every image, as some ultrasound systems send their raw data. It is off by default and unticked at every start; the size is remembered
 - The frames of a multi-frame image are drawn as they are written and encoded a few at a time, so a cine loop of 1,667 frames with a 657 MB payload, 790 MB in all, is generated and sent with about 500 MB of memory. The status bar counts the frames while they are encoded, and Cancel works meanwhile
 - **Estimated size** counts frames and the payload. For a compressed multi-frame image it is measured on a few frames
 - The mix **custom** on the Performance tab sends the object described on the Exam tab: its modality, matrix, bits, frames, transfer syntax and private payload. The plan, the question before the run, the result file and the report say what it was. One object can be at most 1 GB, and two custom runs are compared only if they sent the same thing
-- A new store test, `store-breast-tomosynthesis`, on the Tests tab and in `DCST4.Cli.exe run`: one Breast Tomosynthesis object of 128 by 128 with 8 frames, which goes through query, retrieve, integrity and Storage Commitment like the other object types. It was the one image type without a store test
-- In the test harness, for checks by hand: `DCST4.Tests.exe cine` generates one multi-frame object at full size, `custommix` runs a load with a large custom mix against the mock SCP, and `examtab` draws the Exam tab to a PNG
+- Five new store tests on the Tests tab and in `DCST4.Cli.exe run`: `store-breast-tomosynthesis`, `store-xa-cine`, `store-rf-cine`, `store-enhanced-xa` and `store-enhanced-rf`, each one object of 128 by 128 with 8 frames, which go through query, retrieve, integrity and Storage Commitment like the other object types
+- In the test harness, for checks by hand: `DCST4.Tests.exe cine` generates one multi-frame object at full size, `custommix <object> ...` runs a load with a large custom mix of any object against the mock SCP, and `examtab` draws the Exam tab to a PNG
 
 Changed:
 
-- `DCST4.Cli.exe generate` can now compress `tomosynthesis-large`, and a `us-multiframe`, `enhanced-ct` or `enhanced-mr` dataset of any length, since their frames are no longer all held in memory. The files of these datasets are the same as before
+- `DCST4.Cli.exe generate` can now compress `tomosynthesis-large`, and a `us-multiframe`, `enhanced-ct` or `enhanced-mr` dataset of any length, since their frames are no longer all held in memory. The files of these datasets are the same as before. Four dataset profiles are new: `xa-cine`, `rf-cine`, `enhanced-xa` and `enhanced-rf`
 - An uncompressed image whose pixels would be 4 GB or more is refused before anything is generated, with the advice to choose a compressed transfer syntax or fewer frames. A DICOM element cannot be longer
-- The dataset and the store test name Breast Tomosynthesis without "(large)", and every image has the name of its IOD, which the Object list shows
+- The dataset and the store test name Breast Tomosynthesis without "(large)". The Object list names the ordinary image of every modality **Single frame** and the others after what they are
 - The ultrasound cine loop has Cine Rate and Recommended Display Frame Rate, 30 frames per second
-- The selected object is saved beside the modality. A settings file from an earlier version selects the same modality it did, with its ordinary image
+- The selected object is saved beside the modality. A settings file from an earlier version selects the same modality it did, with its single-frame image
 
 Fixed:
 
 - A Cancel that arrived just as a limit, fault or load test had opened a connection could end the test as `TOOL_ERROR` with a NullReferenceException. It now ends as cancelled
 
-Checked by hand with DCMTK 3.7.1 and dicom3tools, against local receivers only: the 790 MB cine loop was saved and sent to `storescp`, which received it whole; `dcmdump` shows one fragment per frame and the private sequence; `dcmdjpeg` decodes a JPEG Baseline loop and a frame of it looks right; `dciodvfy` reports no error on Ultrasound Multi-frame Image. A load run with a custom mix of a 415 MB cine loop stored all six sends on the mock SCP.
+Checked by hand with DCMTK 3.7.1 and dicom3tools, against local receivers only: the 790 MB cine loop was saved and sent to `storescp`, which received it whole; `dcmdump` shows one fragment per frame and the private sequence; `dcmdjpeg` decodes a JPEG Baseline loop and a frame of it looks right; `dciodvfy` reports no error on Ultrasound Multi-frame Image, on a cine XA of 300 frames or on a fluoro loop, and on the two enhanced X-ray objects only the remarks described under [Checking with another toolkit](#checking-with-another-toolkit). A load run with a custom mix of a 415 MB cine loop stored all six sends on the mock SCP, and one of four 9 MB Enhanced XA objects stored all four.
 
 ### 1.10.0
 
