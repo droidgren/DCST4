@@ -143,13 +143,14 @@ namespace DCST4.Tests
                 return _fail == 0 ? 0 : 1;
             }
 
-            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit" || args[0] == "report" || args[0] == "multiframe"))
+            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit" || args[0] == "report" || args[0] == "multiframe" || args[0] == "syntaxes"))
             {
                 try
                 {
                     using (DicomServerFactory.Create<MockStorageScp>(Port))
                     {
                         if (args[0] == "multiframe") MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                        if (args[0] == "syntaxes") TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "report") ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve") RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve" || args[0] == "commit") CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
@@ -200,6 +201,7 @@ namespace DCST4.Tests
                     TestAdditionalTagDelivery(temp).GetAwaiter().GetResult();
                     TestDataTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                    TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                     CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
@@ -349,6 +351,10 @@ namespace DCST4.Tests
             Check("Patient naming: Swedish by default in Core, and when asked", swedishName.PatientName == identity.PatientName && !swedishName.PatientName.StartsWith(TestPatientNames.MarkedPrefix, StringComparison.Ordinal), swedishName.PatientName);
             Check("Patient naming: a typed name wins over both", draw(new IdentityOverrides { PatientName = "Typed^Name", PatientNaming = TestPatientNaming.MarkedTestName }).PatientName == "Typed^Name"
                 && draw(new IdentityOverrides { PatientName = "Typed^Name" }).PatientName == "Typed^Name");
+            Check("Patient naming: the marked referrer, DCST4^REFERRING^ and eight digits", System.Text.RegularExpressions.Regex.IsMatch(marked.ReferringPhysicianName, @"^DCST4\^REFERRING\^\d{8}$"), marked.ReferringPhysicianName);
+            Check("Patient naming: a Swedish referrer with the Swedish naming", swedishName.ReferringPhysicianName == identity.ReferringPhysicianName && !swedishName.ReferringPhysicianName.StartsWith("DCST4^", StringComparison.Ordinal), swedishName.ReferringPhysicianName);
+            Check("Patient naming: a typed referrer wins", draw(new IdentityOverrides { ReferringPhysicianName = "Typed^Doctor", PatientNaming = TestPatientNaming.MarkedTestName }).ReferringPhysicianName == "Typed^Doctor");
+            Check("Patient naming: the referrer does not change the other Auto values", marked.StudyId == identity.StudyId && marked.AccessionNumber == swedishName.AccessionNumber && marked.PatientBirthDate == swedishName.PatientBirthDate, marked.StudyId);
 
             Check("Patient age in years", DicomImageBuilder.PatientAge("19800615", new DateTime(2026, 11, 6)) == "046Y");
             Check("Patient age in months", DicomImageBuilder.PatientAge("20260315", new DateTime(2026, 11, 6)) == "007M");
@@ -1108,8 +1114,9 @@ namespace DCST4.Tests
         private static async Task TestSendingSyntaxes()
         {
             Console.WriteLine("\nSending: transfer syntaxes");
-            // JPEG Baseline is lossy and holds 8 bits, so it has checks of its own in MultiFrameTests.
-            var lossless = TransferSyntaxOption.All.Where(o => !o.Syntax.IsLossy).ToList();
+            // The three the mock SCP accepts by default. JPEG Baseline is lossy and holds 8 bits, so it has checks of its own in
+            // MultiFrameTests, and the other syntaxes of the list are in TransferSyntaxTests.
+            var lossless = new[] { TransferSyntaxOption.ImplicitVrLe, TransferSyntaxOption.ExplicitVrLe, TransferSyntaxOption.JpegLossless };
             foreach (var option in lossless)
             {
                 foreach (var bits in new[] { 12, 16 })
@@ -1988,7 +1995,8 @@ namespace DCST4.Tests
                         {
                             foreach (var option in TransferSyntaxOption.All.Where(o => !o.Syntax.IsLossy))
                             {
-                                var suffix = option.Syntax == DicomTransferSyntax.ImplicitVRLittleEndian ? "implicit" : option.Syntax == DicomTransferSyntax.JPEGProcess14SV1 ? "jpeg" : "explicit";
+                                var suffix = option.Syntax == DicomTransferSyntax.JPEGProcess14SV1 ? "jpeg" : CompressionCatalog.For(option.Syntax)?.Id ?? option.Syntax.UID.UID;
+                                if (ExamValidator.SyntaxProblems(request, option.Syntax).Count > 0) continue;
                                 var name = $"{modality.Code}_{preset.Name.Replace(" ", string.Empty)}_{bits}bit_{i + 1}_{suffix}.dcm";
                                 TransferSyntaxConverter.Convert(images[i].File, option.Syntax).Save(Path.Combine(folder, name));
                                 count++;
@@ -2059,6 +2067,14 @@ namespace DCST4.Tests
 
             foreach (var choice in CompressionCatalog.Compressed)
             {
+                if (choice.IsVideo)
+                {
+                    // A colour cine loop is the only object video holds.
+                    var loop = small("us-multiframe");
+                    loop.TransferSyntax = choice.Syntax;
+                    write($"codec_{choice.Id}_us-multiframe", loop);
+                    continue;
+                }
                 foreach (var bits in new[] { 8, 12, 16 })
                 {
                     var request = small("cr");
@@ -2106,7 +2122,9 @@ namespace DCST4.Tests
         /// <summary>Sends one exam to any SCP: DCST4.Tests.exe send &lt;host&gt; &lt;port&gt; &lt;calledAe&gt; &lt;modality&gt; &lt;images&gt; &lt;bits&gt; &lt;implicit|explicit|jpeg&gt; [fallback]</summary>
         private static int SendTo(string[] args)
         {
-            var syntax = args[7] == "implicit" ? DicomTransferSyntax.ImplicitVRLittleEndian : args[7] == "jpeg" ? DicomTransferSyntax.JPEGProcess14SV1 : DicomTransferSyntax.ExplicitVRLittleEndian;
+            // Or any id of CompressionCatalog: deflated, rle, jpeg-xl, h264 ...
+            var syntax = args[7] == "implicit" ? DicomTransferSyntax.ImplicitVRLittleEndian : args[7] == "jpeg" ? DicomTransferSyntax.JPEGProcess14SV1
+                : CompressionCatalog.Find(args[7])?.Syntax ?? DicomTransferSyntax.ExplicitVRLittleEndian;
             var options = SendOptions(syntax, int.Parse(args[2], CultureInfo.InvariantCulture));
             options.Endpoint.Host = args[1];
             options.Endpoint.CalledAe = args[3];
@@ -2141,7 +2159,7 @@ namespace DCST4.Tests
             }
             var modality = chosen.Image;
             var syntax = args[7] == "implicit" ? DicomTransferSyntax.ImplicitVRLittleEndian : args[7] == "jpeg" ? DicomTransferSyntax.JPEGProcess14SV1
-                : args[7] == "baseline" ? DicomTransferSyntax.JPEGProcess1 : DicomTransferSyntax.ExplicitVRLittleEndian;
+                : args[7] == "baseline" ? DicomTransferSyntax.JPEGProcess1 : CompressionCatalog.Find(args[7])?.Syntax ?? DicomTransferSyntax.ExplicitVRLittleEndian;
             var port = args.Length > 8 ? int.Parse(args[8], CultureInfo.InvariantCulture) : 0;
 
             var request = new ExamRequest

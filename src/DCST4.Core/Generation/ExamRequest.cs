@@ -185,6 +185,12 @@ namespace DCST4.Core.Generation
                 problems.Add($"{syntax.UID.Name} is not a transfer syntax DCST4 can generate.");
                 return problems;
             }
+            var fit = Datasets.CompressionCatalog.FitProblem(choice, request.Modality, request.Rows, request.Columns);
+            if (fit != null)
+            {
+                problems.Add(fit);
+                return problems;
+            }
             var probe = Datasets.CompressionCatalog.Probe(choice, request.BitsStored, request.Modality.SamplesPerPixel);
             if (!probe.Available) problems.Add($"{request.Modality.DisplayName} with {request.BitsStored} bits stored cannot be sent as {syntax.UID.Name}: {probe.Reason}");
             return problems;

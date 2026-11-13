@@ -8,7 +8,10 @@ namespace DCST4.Core.TestData
     {
         /// <summary>An invented Swedish name. Not the default since 1.9.0.</summary>
         RegistrySwedishName,
-        /// <summary>DCST4^TEST^&lt;random number&gt;, which is plainly not a person. The default, see <see cref="TestPatientNames.Default"/>.</summary>
+        /// <summary>
+        /// DCST4^TEST^&lt;random number&gt;, which is plainly not a person, and DCST4^REFERRING^&lt;random number&gt; for an Auto
+        /// Referring Physician Name. The default, see <see cref="TestPatientNames.Default"/>.
+        /// </summary>
         MarkedTestName,
     }
 
@@ -19,6 +22,9 @@ namespace DCST4.Core.TestData
 
         public const string MarkedPrefix = "DCST4^TEST^";
 
+        /// <summary>The Referring Physician Name under the marked naming, so that it cannot be taken for the patient's.</summary>
+        public const string MarkedReferringPrefix = "DCST4^REFERRING^";
+
         /// <summary>The six letters that show whether a character set is handled correctly.</summary>
         public const string SwedishLetters = "åäöÅÄÖ";
 
@@ -27,7 +33,14 @@ namespace DCST4.Core.TestData
 
         /// <summary>DCST4^TEST^ and eight digits.</summary>
         public static string Marked(Random random) =>
-            MarkedPrefix + random.Next(MarkedNumberMin, MarkedNumberMax).ToString(CultureInfo.InvariantCulture);
+            MarkedPrefix + MarkedNumber(random);
+
+        /// <summary>DCST4^REFERRING^ and eight digits.</summary>
+        public static string MarkedReferring(Random random) =>
+            MarkedReferringPrefix + MarkedNumber(random);
+
+        private static string MarkedNumber(Random random) =>
+            random.Next(MarkedNumberMin, MarkedNumberMax).ToString(CultureInfo.InvariantCulture);
 
         /// <summary>Reads a setting or a command line value. Anything else gives false.</summary>
         public static bool TryParse(string text, out TestPatientNaming naming)

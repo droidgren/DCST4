@@ -27,6 +27,7 @@ namespace DCST4.Tests
     {
         private const int SmallMatrix = 64;
         private static readonly Regex MarkedName = new Regex(@"^DCST4\^TEST\^\d+$", RegexOptions.CultureInvariant);
+        private static readonly Regex MarkedReferrer = new Regex(@"^DCST4\^REFERRING\^\d{8}$", RegexOptions.CultureInvariant);
 
         private static TestDatasetRequest Small(string profile, int seed = 1)
         {
@@ -379,6 +380,8 @@ namespace DCST4.Tests
             check("Swedish name: not marked", swedish.Images.All(i => !Text(i.File.Dataset, DicomTag.PatientName).StartsWith("DCST4")), null);
             check("Marked name: DCST4^TEST^<number>", marked.Images.All(i => MarkedName.IsMatch(Text(i.File.Dataset, DicomTag.PatientName))), Text(marked.Images[0].File.Dataset, DicomTag.PatientName));
             check("Marked name: the number varies", marked.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientName)).Distinct().Count() > 15, null);
+            check("Marked name: Referring Physician DCST4^REFERRING^<number>", marked.Images.All(i => MarkedReferrer.IsMatch(Text(i.File.Dataset, DicomTag.ReferringPhysicianName))), Text(marked.Images[0].File.Dataset, DicomTag.ReferringPhysicianName));
+            check("Swedish name: the referrer is not marked", swedish.Images.All(i => !Text(i.File.Dataset, DicomTag.ReferringPhysicianName).StartsWith("DCST4")), Text(swedish.Images[0].File.Dataset, DicomTag.ReferringPhysicianName));
 
             var again = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.MarkedTestName });
             check("Marked name: the number comes from the seed", again.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientName)).SequenceEqual(marked.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientName))), null);
@@ -563,6 +566,12 @@ namespace DCST4.Tests
 
             foreach (var choice in CompressionCatalog.Compressed)
             {
+                // Video holds a colour cine loop only.
+                if (choice.IsVideo)
+                {
+                    CheckVariant(check, folder, choice, "us-multiframe", 8, 3);
+                    continue;
+                }
                 foreach (var bits in new[] { 8, 12, 16 }) CheckVariant(check, folder, choice, "cr", bits, 1);
                 CheckVariant(check, folder, choice, "secondary-capture", 8, 3);
                 CheckVariant(check, folder, choice, "enhanced-ct", 16, 1);
@@ -584,7 +593,7 @@ namespace DCST4.Tests
                 Rows = SmallMatrix,
                 Columns = SmallMatrix,
                 BitsStored = bits,
-                Frames = profileId == "enhanced-ct" ? 2 : 0,
+                Frames = profileId == "enhanced-ct" ? 2 : profileId == "us-multiframe" ? 3 : 0,
                 TransferSyntax = choice.Syntax,
             };
 
@@ -619,14 +628,19 @@ namespace DCST4.Tests
                 if (choice.Syntax.IsLossy)
                 {
                     var ratio = read.Dataset.GetSingleValueOrDefault(DicomTag.LossyImageCompressionRatio, string.Empty);
-                    check($"{label}: marked lossy, with method and ratio", Text(read.Dataset, DicomTag.LossyImageCompression) == "01" && Text(read.Dataset, DicomTag.LossyImageCompressionMethod) == choice.Syntax.LossyCompressionMethod && ratio.Length > 0 && ratio.Length <= 16, ratio);
+                    var method = choice.IsVideo ? DCST4.Core.Codecs.OwnCodecs.H264CompressionMethod : choice.Syntax.LossyCompressionMethod;
+                    check($"{label}: marked lossy, with method and ratio", Text(read.Dataset, DicomTag.LossyImageCompression) == "01" && Text(read.Dataset, DicomTag.LossyImageCompressionMethod) == method && ratio.Length > 0 && ratio.Length <= 16, ratio);
                     return;
                 }
 
                 check($"{label}: Lossy Image Compression stays 00", Text(read.Dataset, DicomTag.LossyImageCompression) == "00", Text(read.Dataset, DicomTag.LossyImageCompression));
 
-                var decoded = read.Clone(DicomTransferSyntax.ExplicitVRLittleEndian);
-                check($"{label}: decodes to the manifest's frame hashes", ManifestHashes.FrameHashes(decoded.Dataset).SequenceEqual(entry.FrameSha256), null);
+                // fo-dicom cannot decode JPEG XL, so the harness's own decoder for what DCST4 writes does.
+                var bitsAllocated = read.Dataset.GetSingleValue<int>(DicomTag.BitsAllocated);
+                var hashes = DCST4.Core.Codecs.OwnCodecs.IsJpegXl(choice.Syntax)
+                    ? fragments.Fragments.Select(f => ManifestHashes.Sha256Hex(JpegXlNative(JpegXlSubsetDecoder.Decode(f.Data), bitsAllocated))).ToList()
+                    : ManifestHashes.FrameHashes(read.Clone(DicomTransferSyntax.ExplicitVRLittleEndian).Dataset);
+                check($"{label}: decodes to the manifest's frame hashes", hashes.SequenceEqual(entry.FrameSha256), null);
 
                 // Not only PureCodecs' own decoder: this one was written from the standard.
                 if (choice.Syntax == DicomTransferSyntax.JPEGProcess14SV1 && samples == 1)
@@ -639,6 +653,25 @@ namespace DCST4.Tests
             {
                 File.Delete(path);
             }
+        }
+
+        /// <summary>A decoded JPEG XL image as the bytes of a native frame: samples interleaved, little endian.</summary>
+        internal static byte[] JpegXlNative(JpegXlSubsetDecoder.Image image, int bitsAllocated)
+        {
+            var pixels = image.Width * image.Height;
+            var channels = image.Channels.Length;
+            var bytes = new byte[pixels * channels * (bitsAllocated / 8)];
+            for (var p = 0; p < pixels; p++)
+            {
+                for (var c = 0; c < channels; c++)
+                {
+                    var value = image.Channels[c][p];
+                    var i = p * channels + c;
+                    if (bitsAllocated == 8) bytes[i] = (byte)value;
+                    else { bytes[2 * i] = (byte)value; bytes[2 * i + 1] = (byte)(value >> 8); }
+                }
+            }
+            return bytes;
         }
 
         private static byte[] ToBytes(int[] values, int bits)

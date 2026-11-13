@@ -99,6 +99,11 @@ namespace DCST4.Core.Generation.Datasets
             {
                 if (!profile.HasPixelData) problems.Add($"{profile.DisplayName} has no pixel data, so {TransferSyntax.UID.Name} does not apply.");
                 else if (profile.Image.IsBinaryMask) problems.Add($"{profile.DisplayName} is generated uncompressed only.");
+                else if (profile.IsImage)
+                {
+                    var fit = CompressionCatalog.FitProblem(CompressionCatalog.For(TransferSyntax), profile.Image, ResolvedRows, ResolvedColumns);
+                    if (fit != null) problems.Add(fit);
+                }
             }
 
             if (PrivatePayloadBytes < 0 || PrivatePayloadBytes > PrivatePayload.MaxBytes) problems.Add($"The private payload can be at most {PrivatePayload.MaxMegabytes} MB.");

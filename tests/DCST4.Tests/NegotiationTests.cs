@@ -165,8 +165,15 @@ namespace DCST4.Tests
             check("JPEG XL is proposed in all three variants", new[] { "1.2.840.10008.1.2.4.110", "1.2.840.10008.1.2.4.111", "1.2.840.10008.1.2.4.112" }.All(uid => CapabilityCatalog.TransferSyntaxes.Any(p => p.Syntax.UID.UID == uid)), null);
             check("Every proposed syntax has its dictionary name", CapabilityCatalog.TransferSyntaxes.All(s => CapabilityMatrix.DisplayName(s.Syntax.UID.UID) != s.Syntax.UID.UID), string.Join(", ", CapabilityCatalog.TransferSyntaxes.Where(s => CapabilityMatrix.DisplayName(s.Syntax.UID.UID) == s.Syntax.UID.UID).Select(s => s.Syntax.UID.UID)));
             check("A syntax looked up by UID equals a fresh lookup", ProbeOnlyByUid.All(s => s == DicomTransferSyntax.Parse(s.UID.UID) && s.IsExplicitVR && s.IsEncapsulated), null);
-            var probeOnly = ProbeOnlyByUid.Concat(new[] { DicomTransferSyntax.MPEG2, DicomTransferSyntax.MPEG2MainProfileHighLevel, DicomTransferSyntax.HEVCH265MainProfileLevel51, DicomTransferSyntax.HEVCH265Main10ProfileLevel51 }).ToList();
+            // JPEG XL Lossless, JPEG XL and H.264 High Profile / Level 4.1 have encoders of DCST4's own and are no longer probe-only.
+            var generated = new[] { "1.2.840.10008.1.2.4.110", "1.2.840.10008.1.2.4.112", DicomTransferSyntax.MPEG4AVCH264HighProfileLevel41.UID.UID };
+            var probeOnly = ProbeOnlyByUid.Where(s => !generated.Contains(s.UID.UID)).Concat(new[]
+            {
+                DicomTransferSyntax.MPEG2, DicomTransferSyntax.MPEG2MainProfileHighLevel, DicomTransferSyntax.HEVCH265MainProfileLevel51, DicomTransferSyntax.HEVCH265Main10ProfileLevel51,
+                DicomTransferSyntax.MPEG4AVCH264BDCompatibleHighProfileLevel41, DicomTransferSyntax.MPEG4AVCH264HighProfileLevel42For2DVideo,
+            }).ToList();
             check("Probe-only syntaxes can not be chosen to generate or send in", probeOnly.All(s => CompressionCatalog.All.All(c => c.Syntax != s) && CompressionCatalog.Find(s.UID.UID) == null), null);
+            check("JPEG XL Lossless, JPEG XL and H.264 Level 4.1 can be generated, and are still probed", generated.All(uid => CompressionCatalog.Find(uid) != null && CapabilityCatalog.TransferSyntaxes.Any(p => p.Syntax.UID.UID == uid)), null);
             check("Column labels are short and unique", CapabilityCatalog.TransferSyntaxes.All(s => s.ShortName.Length <= 11) && CapabilityCatalog.TransferSyntaxes.Select(s => s.ShortName).Distinct().Count() == CapabilityCatalog.TransferSyntaxes.Count, null);
 
             var plan = ProbePlan.Create(null);

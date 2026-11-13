@@ -18,6 +18,7 @@ namespace DCST4.ViewModels
             _main = main;
             UidRoot = main.TestUidRoot;
             StoreSyntaxChoices = main.TestSuite.StoreSyntaxChoices;
+            StoreSyntaxView = DCST4.Infrastructure.FamilyGroupedView.Create(StoreSyntaxChoices);
             StoreSyntax = main.TestSuite.SelectedStoreSyntax;
             CommitLingerSeconds = Text(main.CommitLingerSeconds);
             CommitWaitSeconds = Text(main.CommitWaitSeconds);
@@ -31,6 +32,8 @@ namespace DCST4.ViewModels
 
         public string UidRoot { get; set; }
         public IReadOnlyList<StoreSyntaxChoice> StoreSyntaxChoices { get; }
+        /// <summary>The same choices under a heading per codec family, as the list shows them.</summary>
+        public System.ComponentModel.ICollectionView StoreSyntaxView { get; }
         public StoreSyntaxChoice StoreSyntax { get; set; }
         public string CommitLingerSeconds { get; set; }
         public string CommitWaitSeconds { get; set; }

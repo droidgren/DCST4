@@ -20,7 +20,8 @@ namespace DCST4.Cli
             "\n" +
             "  --tests            Comma-separated test ids or categories, for example c-echo, negotiation-probe or Capability.\n" +
             "  --log-dir          Where to write the log. Default: %LocalAppData%\\DCST4\\Logs\n" +
-            "  --patient-naming   RegistrySwedishName (default) or MarkedTestName, which gives DCST4^TEST^<number>.\n" +
+            "  --patient-naming   MarkedTestName (default), which gives DCST4^TEST^<number> and the Referring Physician\n" +
+            "                     DCST4^REFERRING^<number>, or RegistrySwedishName for Swedish names.\n" +
             "\n" +
             "Options of run for the tests that store objects:\n" +
             "  --seed <n>                       Fixes the generated data. The same seed repeats the same UIDs, which are duplicates on a real system\n" +

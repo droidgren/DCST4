@@ -51,12 +51,12 @@
                                Text="When off, Auto values stay until you click New values or restart the program, so the exam is easy to find in PACS. Another run with the same values adds a new series to the same study."/>
 
                     <Label Margin="0,14,0,0" Padding="0,0,0,4" Content="Patient name in generated objects:"/>
-                    <ComboBox x:Name="TestPatientNaming" SelectedValuePath="Tag" HorizontalAlignment="Left" MinWidth="280" ToolTip="How an Auto patient name is made, in Generate &amp; Send and in the objects the tests on the Tests and Performance tabs send. A name typed on the Identifiers tab always wins. The Patient ID comes from the test personnummer list either way.&#x0a;&#x0a;Default: Marked test name (DCST4^TEST^number).">
+                    <ComboBox x:Name="TestPatientNaming" SelectedValuePath="Tag" HorizontalAlignment="Left" MinWidth="280" ToolTip="How an Auto patient name is made, in Generate &amp; Send and in the objects the tests on the Tests and Performance tabs send. The Auto Referring Physician Name follows it: DCST4^REFERRING^number with the marked name, a Swedish name otherwise. A name typed on the Identifiers tab always wins. The Patient ID comes from the test personnummer list either way.&#x0a;&#x0a;Default: Marked test name (DCST4^TEST^number).">
                         <ComboBoxItem Tag="MarkedTestName" Content="Marked test name (DCST4^TEST^number), the default"/>
                         <ComboBoxItem Tag="RegistrySwedishName" Content="Swedish name"/>
                     </ComboBox>
                     <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#FF505050"
-                               Text="For the Auto patient name in Generate &amp; Send and in the objects the tests on the Tests and Performance tabs send. A name typed on the Identifiers tab always wins. The Patient ID comes from the list of test personnummer in both cases."/>
+                               Text="For the Auto patient name in Generate &amp; Send and in the objects the tests on the Tests and Performance tabs send. The Auto Referring Physician Name follows it, as DCST4^REFERRING^number or a Swedish name. A name typed on the Identifiers tab always wins. The Patient ID comes from the list of test personnummer in both cases."/>
                 </StackPanel>
             </TabItem>
 

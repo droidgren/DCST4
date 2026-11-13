@@ -1,4 +1,8 @@
+using DCST4.Core.Codecs;
+using DCST4.Core.Codecs.JpegXl;
+using DCST4.Core.Codecs.Video;
 using DCST4.Core.Generation;
+using DCST4.Core.Generation.Modalities;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
@@ -40,9 +44,28 @@ namespace DCST4.Core.Pipeline
                 return file;
             }
 
+            // DCST4's own encoders read native samples, so an object that is already compressed is decoded first.
+            var ownEncoder = OwnCodecs.IsH264(syntax) || OwnCodecs.IsJpegXl(syntax);
+            if (ownEncoder && file.Dataset.InternalTransferSyntax.IsEncapsulated) file = file.Clone(DicomTransferSyntax.ExplicitVRLittleEndian);
+            if (OwnCodecs.IsH264(syntax)) return EncodeVideo(file, syntax, token, frameEncoded);
+
             var uncompressedSize = syntax.IsLossy ? PixelBytes(file.Dataset) : 0;
             var rendered = syntax.IsEncapsulated ? (file.Dataset.GetDicomItem<DicomElement>(DicomTag.PixelData)?.Buffer as RenderedFramesBuffer) : null;
-            var converted = rendered != null ? EncodeFrameByFrame(file, rendered, syntax, token, frameEncoded) : file.Clone(syntax);
+            DicomFile converted;
+            if (OwnCodecs.IsJpegXl(syntax))
+            {
+                var frames = FramesOf(file.Dataset, rendered);
+                converted = EncodeFrameByFrame(file, frames.Item1, frames.Item2, syntax, token, frameEncoded, JpegXlFrameCodec.Encode);
+            }
+            else if (rendered != null)
+            {
+                converted = EncodeFrameByFrame(file, rendered.Frames, rendered.ReadFrame, syntax, token, frameEncoded,
+                    (single, target) => new DicomTranscoder(single.InternalTransferSyntax, target).Transcode(single));
+            }
+            else
+            {
+                converted = file.Clone(syntax);
+            }
             // The transcoder adds Number of Frames, which a single-frame IOD does not have.
             if (!file.Dataset.Contains(DicomTag.NumberOfFrames)) converted.Dataset.Remove(DicomTag.NumberOfFrames);
             UseOtherByteForEncapsulatedPixelData(converted.Dataset);
@@ -56,7 +79,8 @@ namespace DCST4.Core.Pipeline
         /// not fit in memory for. Here each frame is drawn, encoded as an image of its own and let go, so that only the
         /// encoded frames are kept. The result is the one the transcoder gives for the whole image.
         /// </summary>
-        private static DicomFile EncodeFrameByFrame(DicomFile file, RenderedFramesBuffer frames, DicomTransferSyntax syntax, CancellationToken token, Action<int, int> frameEncoded)
+        private static DicomFile EncodeFrameByFrame(DicomFile file, int frameCount, Func<int, byte[]> readFrame, DicomTransferSyntax syntax,
+            CancellationToken token, Action<int, int> frameEncoded, Func<DicomDataset, DicomTransferSyntax, DicomDataset> encodeOne)
         {
             var source = file.Dataset;
             var inWords = source.GetDicomItem<DicomItem>(DicomTag.PixelData) is DicomOtherWord;
@@ -73,16 +97,18 @@ namespace DCST4.Core.Pipeline
             // side by side, which is where the time goes: JPEG Baseline takes several times as long as the drawing. A batch
             // is as many frames as there are cores, so that is also the most frames in memory as drawn.
             var batch = Math.Max(1, Math.Min(Environment.ProcessorCount, MaxFramesEncodedAtOnce));
-            for (var start = 0; start < frames.Frames; start += batch)
+            for (var start = 0; start < frameCount; start += batch)
             {
                 token.ThrowIfCancellationRequested();
 
-                var count = Math.Min(batch, frames.Frames - start);
+                var count = Math.Min(batch, frameCount - start);
                 var drawn = new byte[count][];
+                long drawnBytes = 0;
                 for (var i = 0; i < count; i++)
                 {
                     token.ThrowIfCancellationRequested();
-                    drawn[i] = frames.ReadFrame(start + i);
+                    drawn[i] = readFrame(start + i);
+                    drawnBytes += drawn[i].Length;
                 }
 
                 var ones = new DicomDataset[count];
@@ -93,7 +119,7 @@ namespace DCST4.Core.Pipeline
                     var bytes = new MemoryByteBuffer(drawn[i]);
                     if (inWords) single.AddOrUpdate(new DicomOtherWord(DicomTag.PixelData, bytes));
                     else single.AddOrUpdate(new DicomOtherByte(DicomTag.PixelData, bytes));
-                    ones[i] = new DicomTranscoder(source.InternalTransferSyntax, syntax).Transcode(single);
+                    ones[i] = encodeOne(single, syntax);
                 });
 
                 // In the order of the frames, whatever order they were finished in.
@@ -107,22 +133,17 @@ namespace DCST4.Core.Pipeline
                         encoded = DicomPixelData.Create(result, true);
                     }
                     encoded.AddFrame(DicomPixelData.Create(ones[i]).GetFrame(0));
-                    frameEncoded?.Invoke(start + i + 1, frames.Frames);
+                    frameEncoded?.Invoke(start + i + 1, frameCount);
                 }
 
                 // The frames as drawn and what the encoders used are garbage now, many times the size of what is kept.
                 // Left to itself, the collector lets a long loop of large frames pile up over a gigabyte of it.
                 drawn = null;
                 ones = null;
-                if ((long)count * frames.FrameSize >= CollectAfterBatchBytes) GC.Collect();
+                if (drawnBytes >= CollectAfterBatchBytes) GC.Collect();
             }
 
-            var converted = new DicomFile(result);
-            foreach (var tag in new[] { DicomTag.SourceApplicationEntityTitle, DicomTag.ImplementationClassUID, DicomTag.ImplementationVersionName })
-            {
-                if (file.FileMetaInfo.Contains(tag)) converted.FileMetaInfo.AddOrUpdate(file.FileMetaInfo.GetDicomItem<DicomItem>(tag));
-            }
-            return converted;
+            return WithFileMeta(file, result);
         }
 
         /// <summary>
@@ -170,7 +191,7 @@ namespace DCST4.Core.Pipeline
             var ratio = compressedSize > 0 ? (double)uncompressedSize / compressedSize : 0;
 
             dataset.AddOrUpdate(DicomTag.LossyImageCompression, "01");
-            dataset.AddOrUpdate(DicomTag.LossyImageCompressionMethod, syntax.LossyCompressionMethod);
+            dataset.AddOrUpdate(DicomTag.LossyImageCompressionMethod, OwnCodecs.IsH264(syntax) ? OwnCodecs.H264CompressionMethod : syntax.LossyCompressionMethod);
             dataset.AddOrUpdate(DicomTag.LossyImageCompressionRatio, ratio.ToString(RatioFormat, CultureInfo.InvariantCulture));
 
             if (dataset.TryGetValues<string>(DicomTag.ImageType, out var imageType) && imageType.Length > 0 && imageType[0] != ImageTypeDerived)
@@ -179,12 +200,106 @@ namespace DCST4.Core.Pipeline
             }
         }
 
-        private static long PixelBytes(DicomDataset dataset)
+        /// <summary>
+        /// The bytes of Pixel Data: the frames of native data, or the fragments of encapsulated data. A video stream is one
+        /// fragment for all frames, which fo-dicom cannot split into frames.
+        /// </summary>
+        public static long PixelBytes(DicomDataset dataset)
         {
+            if (!dataset.Contains(DicomTag.PixelData)) return 0;
+            if (dataset.GetDicomItem<DicomItem>(DicomTag.PixelData) is DicomFragmentSequence fragments) return fragments.Fragments.Sum(f => f.Size);
+
             var pixelData = DicomPixelData.Create(dataset);
             long size = 0;
             for (var frame = 0; frame < pixelData.NumberOfFrames; frame++) size += pixelData.GetFrame(frame).Size;
             return size;
+        }
+
+        /// <summary>The number of frames and how to read each, as native bytes.</summary>
+        private static Tuple<int, Func<int, byte[]>> FramesOf(DicomDataset dataset, RenderedFramesBuffer rendered)
+        {
+            if (rendered != null) return Tuple.Create<int, Func<int, byte[]>>(rendered.Frames, rendered.ReadFrame);
+            var pixelData = DicomPixelData.Create(dataset);
+            return Tuple.Create<int, Func<int, byte[]>>(pixelData.NumberOfFrames, frame => pixelData.GetFrame(frame).Data);
+        }
+
+        /// <summary>
+        /// The whole loop as one H.264 stream in an MP4 container, in one fragment (PS3.5 8.2.7, Non-Fragmentable). The
+        /// Basic Offset Table is empty, since the frames are not separate in the stream.
+        /// </summary>
+        private static DicomFile EncodeVideo(DicomFile file, DicomTransferSyntax syntax, CancellationToken token, Action<int, int> frameEncoded)
+        {
+            var source = file.Dataset;
+            var rows = source.GetSingleValue<ushort>(DicomTag.Rows);
+            var columns = source.GetSingleValue<ushort>(DicomTag.Columns);
+            var samples = source.GetSingleValueOrDefault<ushort>(DicomTag.SamplesPerPixel, 1);
+            var bitsAllocated = source.GetSingleValueOrDefault<ushort>(DicomTag.BitsAllocated, 0);
+            var photometric = source.GetSingleValueOrDefault(DicomTag.PhotometricInterpretation, string.Empty);
+            var planar = source.GetSingleValueOrDefault<ushort>(DicomTag.PlanarConfiguration, 0);
+            if (samples != 3 || bitsAllocated != 8 || photometric != "RGB")
+            {
+                throw new NotSupportedException($"{syntax.UID.Name} is made from 8-bit RGB frames. This object is {photometric} with {samples} samples of {bitsAllocated} bits.");
+            }
+
+            var fps = FramesPerSecond(source);
+            var rendered = source.GetDicomItem<DicomElement>(DicomTag.PixelData)?.Buffer as RenderedFramesBuffer;
+            var frames = FramesOf(source, rendered);
+            Func<int, byte[]> rgb = frame => planar == 0 ? frames.Item2(frame) : Interleave(frames.Item2(frame), rows * columns);
+            var uncompressed = (long)rows * columns * 3 * frames.Item1;
+
+            var mp4 = H264Encoder.EncodeMp4(columns, rows, frames.Item1, fps, rgb, token, frameEncoded);
+            if (mp4.Length % 2 != 0) Array.Resize(ref mp4, mp4.Length + 1);
+
+            var result = new DicomDataset(syntax);
+            foreach (var item in source.Where(item => item.Tag != DicomTag.PixelData)) result.Add(item);
+            result.AddOrUpdate(DicomTag.PhotometricInterpretation, "YBR_PARTIAL_420");
+            result.AddOrUpdate(DicomTag.SamplesPerPixel, (ushort)3);
+            result.AddOrUpdate(DicomTag.PlanarConfiguration, (ushort)0);
+            result.AddOrUpdate(DicomTag.BitsAllocated, (ushort)8);
+            result.AddOrUpdate(DicomTag.BitsStored, (ushort)8);
+            result.AddOrUpdate(DicomTag.HighBit, (ushort)7);
+            result.AddOrUpdate(DicomTag.PixelRepresentation, (ushort)0);
+            result.AddOrUpdate(DicomTag.NumberOfFrames, frames.Item1);
+            // The stream is the timing. Pixel Aspect Ratio is absent for square pixels (PS3.5 8.2.7).
+            result.AddOrUpdate(DicomTag.FrameTime, ModalityProfile.Ds(1000.0 / fps));
+            result.Remove(DicomTag.PixelAspectRatio);
+
+            var fragments = new DicomOtherByteFragment(DicomTag.PixelData);
+            fragments.Fragments.Add(new MemoryByteBuffer(mp4));
+            result.AddOrUpdate(fragments);
+            MarkLossy(result, syntax, uncompressed);
+            return WithFileMeta(file, result);
+        }
+
+        /// <summary>Cine Rate, or else what Frame Time works out to.</summary>
+        private static double FramesPerSecond(DicomDataset dataset)
+        {
+            var cineRate = dataset.GetSingleValueOrDefault(DicomTag.CineRate, 0);
+            if (cineRate > 0) return cineRate;
+            var frameTime = dataset.GetSingleValueOrDefault(DicomTag.FrameTime, 0.0);
+            return frameTime > 0 ? 1000.0 / frameTime : 0;
+        }
+
+        private static byte[] Interleave(byte[] planar, int pixels)
+        {
+            var interleaved = new byte[pixels * 3];
+            for (var i = 0; i < pixels; i++)
+            {
+                interleaved[i * 3] = planar[i];
+                interleaved[i * 3 + 1] = planar[pixels + i];
+                interleaved[i * 3 + 2] = planar[2 * pixels + i];
+            }
+            return interleaved;
+        }
+
+        private static DicomFile WithFileMeta(DicomFile file, DicomDataset dataset)
+        {
+            var converted = new DicomFile(dataset);
+            foreach (var tag in new[] { DicomTag.SourceApplicationEntityTitle, DicomTag.ImplementationClassUID, DicomTag.ImplementationVersionName })
+            {
+                if (file.FileMetaInfo.Contains(tag)) converted.FileMetaInfo.AddOrUpdate(file.FileMetaInfo.GetDicomItem<DicomItem>(tag));
+            }
+            return converted;
         }
 
         /// <summary>

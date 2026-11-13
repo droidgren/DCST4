@@ -16,7 +16,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public const int CineFrames = 30;
         private const int FrameTimeMs = 33;
-        private const int FramesPerSecond = 30;
+        private const int CineRate = 30;
 
         public override string DisplayName => "US Multi-frame";
         public override string ObjectName => "Multi-frame (cine loop)";
@@ -25,14 +25,15 @@ namespace DCST4.Core.Generation.Modalities
         public override bool IsMultiFrame => true;
         public override bool RendersFramesOnDemand => true;
         public override int DefaultFrames => CineFrames;
+        public override int FramesPerSecond => CineRate;
 
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
             base.AddModalityTags(dataset, preset, context);
             dataset.AddOrUpdate(DicomTag.FrameTime, FrameTimeMs.ToString(CultureInfo.InvariantCulture));
             dataset.AddOrUpdate(DicomTag.FrameIncrementPointer, DicomTag.FrameTime);
-            dataset.AddOrUpdate(DicomTag.CineRate, FramesPerSecond.ToString(CultureInfo.InvariantCulture));
-            dataset.AddOrUpdate(DicomTag.RecommendedDisplayFrameRate, FramesPerSecond.ToString(CultureInfo.InvariantCulture));
+            dataset.AddOrUpdate(DicomTag.CineRate, CineRate.ToString(CultureInfo.InvariantCulture));
+            dataset.AddOrUpdate(DicomTag.RecommendedDisplayFrameRate, CineRate.ToString(CultureInfo.InvariantCulture));
         }
     }
 
@@ -63,20 +64,21 @@ namespace DCST4.Core.Generation.Modalities
     {
         /// <summary>Two seconds of a cine run.</summary>
         public const int CineFrames = 30;
-        private const int FramesPerSecond = 15;
+        private const int CineRate = 15;
 
         public override string DisplayName => "XA Multi-frame";
         public override string ObjectName => "Multi-frame (cine run)";
         public override bool IsMultiFrame => true;
         public override bool RendersFramesOnDemand => true;
         public override int DefaultFrames => CineFrames;
+        public override int FramesPerSecond => CineRate;
         /// <summary>One object is a whole run, not one frame of it.</summary>
         public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(10);
 
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
             base.AddModalityTags(dataset, preset, context);
-            CineModule.Add(dataset, FramesPerSecond);
+            CineModule.Add(dataset, CineRate);
             // Type 2C in the XA Positioner module as soon as the object has more than one frame. The C-arm stands still here.
             dataset.AddOrUpdate(DicomTag.PositionerMotion, "STATIC");
         }
@@ -87,19 +89,20 @@ namespace DCST4.Core.Generation.Modalities
     {
         /// <summary>Two seconds of fluoroscopy.</summary>
         public const int LoopFrames = 16;
-        private const int FramesPerSecond = 8;
+        private const int CineRate = 8;
 
         public override string DisplayName => "RF Multi-frame";
         public override string ObjectName => "Multi-frame (fluoro loop)";
         public override bool IsMultiFrame => true;
         public override bool RendersFramesOnDemand => true;
         public override int DefaultFrames => LoopFrames;
+        public override int FramesPerSecond => CineRate;
         public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(10);
 
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
             base.AddModalityTags(dataset, preset, context);
-            CineModule.Add(dataset, FramesPerSecond);
+            CineModule.Add(dataset, CineRate);
         }
     }
 

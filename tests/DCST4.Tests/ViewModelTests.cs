@@ -713,7 +713,21 @@ namespace DCST4.Tests
 
             check("The Modality list is the ten modalities, as before", string.Join(",", vm.Modalities.Select(m => m.Code)) == "CT,MR,CR,DX,US,XA,RF,MG,PT,NM", string.Join(",", vm.Modalities.Select(m => m.Code)));
             check("CT: its two objects, the single-frame image selected", objectList() == "Single frame | Enhanced CT" && vm.SelectedImageObject.DatasetProfileId == "ct" && !vm.IsMultiFrame, objectList());
-            check("The Transfer syntax list ends with JPEG Baseline", vm.TransferSyntaxes.Last() == TransferSyntaxOption.JpegBaseline && vm.TransferSyntaxes.Count == 4, null);
+            check("The Transfer syntax list has the 15 syntaxes, H.264 last", vm.TransferSyntaxes.Last() == TransferSyntaxOption.H264HighProfile && vm.TransferSyntaxes.Count == 15, vm.TransferSyntaxes.Count.ToString());
+            var shownGroups = vm.TransferSyntaxView.Groups.Cast<System.Windows.Data.CollectionViewGroup>().ToList();
+            check("The Transfer syntax list is grouped by codec family, in order", shownGroups.Select(g => (string)g.Name).SequenceEqual(TransferSyntaxFamily.All)
+                && shownGroups.Sum(g => g.ItemCount) == 15, string.Join(" | ", shownGroups.Select(g => g.Name + " " + g.ItemCount)));
+            var settingsCopy = new TestSettingsViewModel(vm);
+            var storeGroups = settingsCopy.StoreSyntaxView.Groups.Cast<System.Windows.Data.CollectionViewGroup>().Select(g => (string)g.Name).ToList();
+            check("Test settings: the store syntax list is grouped the same, after the capability matrix", storeGroups.SequenceEqual(new[] { StoreSyntaxChoice.MatrixFamily }.Concat(TransferSyntaxFamily.All)), string.Join(" | ", storeGroups));
+            var fallbackSyntax = vm.SelectedTransferSyntax;
+            vm.SelectedTransferSyntax = TransferSyntaxOption.JpegXlLossless;
+            var noFallbackJxl = !vm.FallbackIsRelevant;
+            vm.SelectedTransferSyntax = TransferSyntaxOption.H264HighProfile;
+            var noFallbackH264 = !vm.FallbackIsRelevant;
+            vm.SelectedTransferSyntax = TransferSyntaxOption.RleLossless;
+            check("Fallback is off for JPEG XL and H.264, which cannot be decoded, and on for RLE", noFallbackJxl && noFallbackH264 && vm.FallbackIsRelevant, null);
+            vm.SelectedTransferSyntax = fallbackSyntax;
             check("CT: one frame, and the Frames field is off", !vm.IsMultiFrame && vm.FramesPerImage == 1, vm.FramesPerImage.ToString());
             check("The private payload is off, at 100 MB", !vm.AddPrivatePayload && vm.PrivatePayloadMb == 100, vm.PrivatePayloadMb.ToString());
 
@@ -978,6 +992,35 @@ namespace DCST4.Tests
                 help.ShowTopic(help.Topics[0].Title);
                 help.UpdateLayout();
                 check("The first topic goes back to the top", scroller.VerticalOffset == 0, scroller.VerticalOffset.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+                // Quick search.
+                help.Search("storage commitment");
+                help.UpdateLayout();
+                check("Search: matches are found, case aside", help.MatchCount > 3 && help.CurrentMatch == 1, help.SearchStatusText);
+                check("Search: only the topics with a match are listed, with their count", help.ShownTopics.Count < help.Topics.Count
+                    && help.ShownTopics.Any(t => t.Title == "Storage Commitment") && help.ShownTopics.All(t => t.MatchCount > 0 && t.DisplayTitle.EndsWith(")")),
+                    string.Join(", ", help.ShownTopics.Select(t => t.DisplayTitle)));
+                check("Search: the counts add up", help.ShownTopics.Sum(t => t.MatchCount) == help.MatchCount, help.MatchCount.ToString());
+                check("Search: the match is selected", string.Equals(help.SelectedText, "storage commitment", StringComparison.OrdinalIgnoreCase), help.SelectedText);
+                check("Search: the status says where it is", help.SearchStatusText.StartsWith("1 of " + help.MatchCount), help.SearchStatusText);
+                var firstOffset = scroller.VerticalOffset;
+                help.NextMatch();
+                help.UpdateLayout();
+                check("Search: next goes on", help.CurrentMatch == 2 && scroller.VerticalOffset >= firstOffset, help.SearchStatusText);
+                help.PreviousMatch();
+                help.PreviousMatch();
+                check("Search: previous wraps to the last", help.CurrentMatch == help.MatchCount, help.SearchStatusText);
+                help.NextMatch();
+                check("Search: next wraps to the first", help.CurrentMatch == 1, help.SearchStatusText);
+
+                help.Search("Listen AET (SCP) and Port");
+                check("Search: a phrase that is partly bold is found", help.MatchCount >= 1 && help.SelectedText == "Listen AET (SCP) and Port", help.SelectedText);
+
+                help.Search("qwxzzy no such text");
+                check("Search: nothing found", help.MatchCount == 0 && help.CurrentMatch == 0 && help.ShownTopics.Count == 0 && help.SearchStatusText == "No matches", help.SearchStatusText);
+
+                help.Search("");
+                check("Search: an empty search lists every topic again", help.ShownTopics.Count == help.Topics.Count && help.MatchCount == 0 && help.SearchStatusText.Length == 0 && help.Topics.All(t => t.DisplayTitle == t.Title), help.ShownTopics.Count.ToString());
             }
             finally
             {

@@ -546,6 +546,18 @@ namespace DCST4.Tests
             return new DicomCEchoResponse(request, Scp.EchoStatus ?? DicomStatus.Success);
         }
 
+        /// <summary>The first frame as sent, or for a video syntax the whole stream, which fo-dicom cannot split into frames.</summary>
+        private static byte[] FirstFrame(DicomDataset dataset)
+        {
+            if (!dataset.Contains(DicomTag.PixelData)) return null;
+            if (DCST4.Core.Codecs.OwnCodecs.IsVideo(dataset.InternalTransferSyntax))
+            {
+                var fragments = dataset.GetDicomItem<DicomFragmentSequence>(DicomTag.PixelData);
+                return fragments.Fragments.SelectMany(f => f.Data).ToArray();
+            }
+            return DicomPixelData.Create(dataset).GetFrame(0).Data.ToArray();
+        }
+
         public async Task<DicomCStoreResponse> OnCStoreRequestAsync(DicomCStoreRequest request)
         {
             var generation = Scp.Generation;
@@ -557,7 +569,7 @@ namespace DCST4.Tests
                 {
                     Dataset = request.Dataset.Clone(),
                     Syntax = request.Dataset.InternalTransferSyntax,
-                    Frame = request.Dataset.Contains(DicomTag.PixelData) ? DicomPixelData.Create(request.Dataset).GetFrame(0).Data.ToArray() : null,
+                    Frame = FirstFrame(request.Dataset),
                     CalledAe = _calledAe,
                     CallingAe = _callingAe,
                 });

@@ -38,15 +38,15 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Everything is automatic, and everything can be overridden:** patient, accession number, study ID, UIDs, date and time. The fields show what the next run will use.
 - **Additional tags:** add common tags with generated values, or any custom tag, including private ones, under **File > Settings**.
 - **Official test patients:** random Patient IDs come only from Skatteverket's list of test personnummer. Birth date and sex follow from the number.
-- **Patient names:** `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name, chosen under **File > Settings**. About 40% of the Swedish names contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192. An empty Specific Character Set (Basic ASCII) is also available, and random names then lose their diacritics.
+- **Patient names:** `DCST4^TEST^<number>` by default, which is plainly not a person, with the Referring Physician `DCST4^REFERRING^<number>`, or Swedish names, chosen under **File > Settings**. About 40% of the Swedish names contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192. An empty Specific Character Set (Basic ASCII) is also available, and random names then lose their diacritics.
 - **Optional burned-in text:** turn on a text box in the pixels and choose which tags it shows, so you can compare them with the tags in the viewer. It is off by default.
 - **Configurable images:** number of series and images, matrix from 64 to 4096, 8 to 16 bits stored as the modality allows, and up to 10,000 frames in a multi-frame image.
 - **Private payload:** optionally, a large private binary value in every image, as some ultrasound systems send their raw data, to find out whether a PACS takes it. It is off by default and at every start. See [Multi-frame images and private payload](#multi-frame-images-and-private-payload).
 - **Estimated size:** the Exam box shows how much data the whole exam will be, and updates as you change the settings.
-- **Transfer syntaxes:** Implicit VR LE, Explicit VR LE, JPEG Lossless (Process 14 SV1) and, for 8 bits stored, JPEG Baseline (Process 1, lossy).
+- **Transfer syntaxes:** 15 in the Transfer syntax list, grouped by codec family: Implicit VR LE, Explicit VR LE and Deflated; RLE Lossless; JPEG Baseline, Extended and Lossless SV1; JPEG-LS Lossless; JPEG 2000 Lossless and lossy; HTJ2K Lossless and lossy; JPEG XL Lossless and JPEG XL, written by DCST4's own encoder; and H.264 High Profile for an ultrasound cine loop, written by the encoder of Windows. See [Transfer syntaxes](#transfer-syntaxes).
 - **Full response logging:** status code, state, description, Error Comment, Offending Element and time for every image, including warnings and vendor-specific codes.
 - **Save to disk:** instead of, or in addition to, sending, as a DICOM File-set with a DICOMDIR that viewers can open.
-- **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles.
+- **Connectivity:** Ping, DICOM Echo, TLS, and saved destination profiles. Under **Local**, **Calling AET (SCU)** is the AE title DCST4 calls from, and **Listen AET (SCP)** and **Port** are where the PACS connects back for C-MOVE and Storage Commitment.
 - **Reset to defaults:** **File > Settings** puts every setting back to its default in one go, and keeps the saved destination profiles.
 - **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). Each run writes an HTML report, and can also write JSON and CSV files for comparison over time. On the Tests tab the tests are in folded groups, each says in a tooltip what it does, nothing is ticked at the start, and a run that stores objects says how many examinations and how much data it will leave on the destination and asks first. Every setting in the program explains itself on hover, with its default. See [Testing a PACS](#testing-a-pacs).
 - **Capability matrix:** finds out from association negotiation alone, with no images sent, which SOP classes and transfer syntaxes a PACS supports, 30 syntaxes from uncompressed to JPEG XL and HEVC/H.265, and compares that with what the vendor's Conformance Statement claims. See [What the PACS supports](#what-the-pacs-supports).
@@ -87,12 +87,12 @@ The program is not digitally signed, so you may see a **Windows protected your P
 ## Usage
 
 1. Enter the server's AE title, host and port. Try **Ping** and **Dicom Echo**.
-2. On the **Exam** tab, select modality and exam type, and how many images you want. 1 series with 1 image gives a single test image. **Estimated size** shows how much data that is. For Implicit and Explicit VR it is calculated. For JPEG Lossless and JPEG Baseline, one sample image is compressed in the background and the result multiplied by the number of images. A saved File-set's DICOMDIR is not counted.
+2. On the **Exam** tab, select modality and exam type, and how many images you want. 1 series with 1 image gives a single test image. **Estimated size** shows how much data that is. For Implicit and Explicit VR it is calculated. For the other syntaxes, Deflated included, one sample image is compressed in the background and the result multiplied by the number of images. A saved File-set's DICOMDIR is not counted.
 3. Optionally, enter your own values on the **Identifiers** tab by unticking **Auto**.
 4. Click **Generate & Send** and follow each image in **Results**.
 5. Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text first.
 
-F1 in the program opens the help, with a list of topics on the left.
+F1 in the program opens the help, with a list of topics on the left. The box above the list searches the whole help: Ctrl+F gets there, and **Help > Search help...** (Ctrl+F1) opens the help with the box ready. The list then shows only the topics with a match and how many, Enter or F3 goes to the next match and Shift+Enter or Shift+F3 to the one before, and Esc ends the search.
 
 ### When Auto values change
 
@@ -156,7 +156,7 @@ Choosing a modality selects Single frame. **Frames per image** says how many fra
 
 **Enhanced XA and Enhanced XRF** are SOP classes of their own (1.2.840.10008.5.1.4.1.1.12.1.1 and …12.2.1), the multi-frame functional group objects that newer angiography and fluoroscopy systems send. DCST4 generates them with Image Type `DERIVED`, one plane, no C-arm geometry, no X-Ray Receptor Type and a linear pixel intensity relationship, which is the combination that leaves every conditional module and macro of those IODs out. What is written is the XA/XRF Series and Enhanced XA/XRF Image modules, an Acquisition Context Sequence, and the five mandatory functional group macros: Frame Content per frame, and Frame Anatomy, Frame VOI LUT, Irradiation Event Identification and X-Ray Frame Pixel Data Properties shared by all frames. The Irradiation Event UID follows from the UID root of the profile. These two have no Frame of Reference, no slice geometry and no Dimension Organization, which the Enhanced CT, Enhanced MR and Breast Tomosynthesis objects do have.
 
-The frames are drawn as they are written and are never all in memory, so an object can be much larger than the computer's memory. With JPEG Lossless or JPEG Baseline the frames are encoded before the object is sent, a few at a time on the processor's cores, and the status bar counts them. Cancel works while this goes on. JPEG Baseline is the slow one: a cine loop of 1,667 frames of 960 x 1280 took about three minutes on a computer with 12 cores, and DCST4 used about 500 MB of memory meanwhile. The pixels of an uncompressed image must be less than 4 GB, which is what the length of a DICOM element can hold, so a long cine loop needs a compressed transfer syntax: 1,667 frames of 960 x 1280 in colour are 5.7 GB, and the run then stops with a message that says so.
+The frames are drawn as they are written and are never all in memory, so an object can be much larger than the computer's memory. With a compressed transfer syntax the frames are encoded before the object is sent, a few at a time on the processor's cores, and the status bar counts them. H.264 is the exception: it encodes the whole loop as one stream, one frame after the other. Cancel works while this goes on. JPEG Baseline is the slow one: a cine loop of 1,667 frames of 960 x 1280 took about three minutes on a computer with 12 cores, and DCST4 used about 500 MB of memory meanwhile. The pixels of an uncompressed image must be less than 4 GB, which is what the length of a DICOM element can hold, so a long cine loop needs a compressed transfer syntax: 1,667 frames of 960 x 1280 in colour are 5.7 GB, and the run then stops with a message that says so.
 
 **JPEG Baseline** is lossy and holds 8 bits, so it can be chosen for both US images, and for CR, DX, XA, RF and NM at 8 bits stored. The image is then marked with Lossy Image Compression `01`, the ratio and the method, and Image Type `DERIVED`. A colour image is stored as `YBR_FULL_422`, as ultrasound systems store theirs. The test images compress better than real ones: a frame of 960 x 1280 is about 58 KB here, and about 90 KB from an ultrasound system.
 
@@ -174,11 +174,36 @@ The payload is random bytes that follow from the SOP Instance UID, so it does no
 
 To imitate a long cine loop from an ultrasound system that sends its raw data along: US with Multi-frame (cine loop), 960 x 1280, 1,667 frames, JPEG Baseline and a payload of 657 MB, which is an object of 790 MB. Assume that the PACS cannot delete what it receives, and try a large object against a test system first.
 
+### Transfer syntaxes
+
+The **Transfer syntax** list on the Exam tab, and **Store tests send in** in the Test settings, show the syntaxes under a heading for each codec family:
+
+| Family       | Syntaxes                                                                              | Encoder                         |
+| ------------ | ------------------------------------------------------------------------------------- | ------------------------------- |
+| Uncompressed | Implicit VR Little Endian, Explicit VR Little Endian, Deflated Explicit VR Little Endian | fo-dicom                     |
+| RLE          | RLE Lossless                                                                          | PureCodecs                      |
+| JPEG         | JPEG Baseline (Process 1, lossy), JPEG Extended (Process 2 & 4, lossy), JPEG Lossless (Process 14 SV1) | PureCodecs     |
+| JPEG-LS      | JPEG-LS Lossless                                                                      | PureCodecs                      |
+| JPEG 2000    | JPEG 2000 Lossless, JPEG 2000 (lossy)                                                 | PureCodecs                      |
+| HTJ2K        | HTJ2K Lossless, HTJ2K (lossy)                                                         | PureCodecs                      |
+| JPEG XL      | JPEG XL Lossless, JPEG XL                                                             | DCST4's own                     |
+| Video        | H.264 High Profile / Level 4.1 (lossy)                                                | Windows, through Media Foundation |
+
+A syntax that the exam cannot be written in stops the run with a message before anything is generated: JPEG Baseline holds 8 bits and JPEG Extended at most 12, and H.264 is for a colour cine loop only. A lossy syntax marks the image with Lossy Image Compression `01`, the ratio and the method, and Image Type `DERIVED`.
+
+**Deflated** is Explicit VR Little Endian compressed with deflate as it is written, to a file or on the network. The pixels are not changed, and the size estimate is measured, since how much it saves depends on the image.
+
+**JPEG XL** is written by an encoder in DCST4, since PureCodecs and fo-dicom have none. It writes a lossless codestream of one modular frame, 1 to 16 bits, grayscale or RGB, one codestream per frame, and it compresses less than libjxl would. The syntax JPEG XL (`1.2.840.10008.1.2.4.112`) allows both lossy and lossless streams, so DCST4 writes the lossless one there too, and the image is not marked lossy. The streams decode exactly with libjxl, checked by hand. The test harness has its own decoder for exactly what DCST4 writes, since libjxl cannot be a dependency of the tests.
+
+**H.264** uses the H.264 encoder that comes with Windows. Windows N does not have it without the Media Feature Pack, and the run then says so. It is for **US Multi-frame (cine loop)** only: PS3.5 requires `YBR_PARTIAL_420` for H.264, and the XA and RF IODs require `MONOCHROME2`. The whole loop is one H.264 High Profile stream at Level 4.1 in an MP4 container, in one fragment with an empty Basic Offset Table, as PS3.5 8.2.7 requires. At most 1080 rows of 1920, an even number of each, and a frame rate Level 4.1 allows at that size. The frames are stored as BT.601 limited range 4:2:0, Frame Time follows Cine Rate, and Pixel Aspect Ratio is left out since the pixels are square.
+
 ### Transfer syntax behaviour
 
 fo-dicom always proposes Implicit VR in a presentation context of its own, next to the selected syntax, and would silently convert to it if the selected one was not accepted. A test of JPEG Lossless could then pass against a PACS that cannot take it.
 
 So by default, **the run stops with an error and sends nothing if the server does not accept the selected syntax.** Tick **Allow fallback to Implicit VR** to behave like a real modality instead. The run then finishes with a warning, and the **Syntax used** column shows what was really sent.
+
+JPEG XL and H.264 cannot fall back, since falling back means decoding the image again and DCST4 has no decoder for them. The box is off for them, and the run stops with an error that says so if the server does not accept them.
 
 ### Reading the results
 
@@ -230,7 +255,7 @@ The list is grouped: Association, Store, Query, Retrieve & integrity, Storage Co
 
 While a run is going, the status bar shows which test is running, what it is doing or waiting for, and for how many seconds, for example `Test 51 of 51: Limit: connection without an association request (ARTIM). Connected without sending an A-ASSOCIATE-RQ. Waiting up to 60 s for the system to close the connection (23 s)`. The command line prints the same as a line of its own.
 
-Beside the buttons are the local AE title and port that C-MOVE and Storage Commitment reports go to. The other settings are in **Test settings...**: the UID root of the objects the tests send, the transfer syntax of the store tests, the Storage Commitment times, see [Storage Commitment](#storage-commitment), and the settings of the Limits tests, see [Limits and faults](#limits-and-faults). They change only when you click OK, and a value that cannot be used is named and nothing is changed. The results folder, which files each run writes and after how many days old results are deleted are under **File > Settings**, on the **Test and Performance Results** tab, see [Result files](#result-files). **Open results folder** opens the folder in Explorer.
+C-MOVE and Storage Commitment reports go to **Listen AET (SCP)** and **Port** under **Local**, at the top left, beside **Calling AET (SCU)**. The other settings are in **Test settings...**: the UID root of the objects the tests send, the transfer syntax of the store tests, the Storage Commitment times, see [Storage Commitment](#storage-commitment), and the settings of the Limits tests, see [Limits and faults](#limits-and-faults). They change only when you click OK, and a value that cannot be used is named and nothing is changed. The results folder, which files each run writes and after how many days old results are deleted are under **File > Settings**, on the **Test and Performance Results** tab, see [Result files](#result-files). **Open results folder** opens the folder in Explorer.
 
 ![The Test settings dialog](screenshots/test-settings.png)
 
@@ -677,7 +702,7 @@ DCST4.Cli.exe generate --dataset enhanced-ct --out C:\Temp\enhanced --seed 42 --
 | `--dataset`                                                           | A profile from `list-datasets`                                                                                    |
 | `--seed`                                                              | Everything that varies follows from this. Default 1                                                               |
 | `--uid-root`                                                          | UIDs start with this root. Without it they are `2.25.` and a value hashed from the seed and counters              |
-| `--patient-naming`                                                    | `MarkedTestName` (default), which gives `DCST4^TEST^<number>`, or `RegistrySwedishName` for a Swedish name       |
+| `--patient-naming`                                                    | `MarkedTestName` (default), which gives `DCST4^TEST^<number>` and the Referring Physician `DCST4^REFERRING^<number>`, or `RegistrySwedishName` for Swedish names |
 | `--patients` `--studies` `--series` `--instances`                     | How many. Default 1 of each                                                                                       |
 | `--rows` `--columns` `--bits` `--frames`                              | The image. The profile's own values if left out                                                                   |
 | `--transfer-syntax`                                                   | `explicit` (default), `implicit`, or a name from `list-codecs`, or a Transfer Syntax UID                          |
@@ -686,7 +711,7 @@ DCST4.Cli.exe generate --dataset enhanced-ct --out C:\Temp\enhanced --seed 42 --
 
 Assume that a PACS cannot delete what it receives, and keep the volumes small. `tomosynthesis-large`, about 700 MB per object, only runs when asked for by name.
 
-**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name is `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name with `--patient-naming RegistrySwedishName` or on the Identifiers tab of **File > Settings**. The same setting gives the Auto patient name of Generate & Send, and it applies to the objects that the store, query, duplicate, limit, fault and Performance tests send.
+**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name is `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name with `--patient-naming RegistrySwedishName` or on the Identifiers tab of **File > Settings**. The Referring Physician's Name follows the setting: `DCST4^REFERRING^<number>` with the marked name, a Swedish name otherwise. The same setting gives the Auto patient name and referring physician of Generate & Send, and it applies to the objects that the store, query, duplicate, limit, fault and Performance tests send.
 
 **What is guaranteed:** the same seed, parameters, personnummer list and reference date give byte-identical files, within one DCST4 version, one fo-dicom and PureCodecs version, and the same Windows GDI+ and Consolas rendering. On another computer the UIDs, names and all non-pixel attributes still match, and the pixels match only if the rendering does. `manifest.json` records these versions. The reference date is fixed, so the same request gives the same result on any day.
 
@@ -694,7 +719,7 @@ Assume that a PACS cannot delete what it receives, and keep the volumes small. `
 
 A multi-frame image has its frames encoded one at a time, so `tomosynthesis-large` and a long `us-multiframe` can be generated compressed. Uncompressed, the pixels of one image must be less than 4 GB.
 
-**Compressed variants** are tried per bit depth, since PureCodecs is pre-1.0. `list-codecs` shows what works on this computer. What cannot be produced is reported as unavailable in the output and the manifest, and is not an error. JPEG Baseline is 8-bit only and JPEG Extended at most 12-bit. A lossy variant has Lossy Image Compression `01` with ratio and method, and Image Type `DERIVED`.
+**Compressed variants** are tried per bit depth, since PureCodecs is pre-1.0. `list-codecs` shows what works on this computer. What cannot be produced is reported as unavailable in the output and the manifest, and is not an error. JPEG Baseline is 8-bit only and JPEG Extended at most 12-bit. A lossy variant has Lossy Image Compression `01` with ratio and method, and Image Type `DERIVED`. `--transfer-syntax deflated` is Deflated Explicit VR Little Endian. `jpeg-xl` and `jpeg-xl-lossy` come from DCST4's own lossless JPEG XL encoder, and `h264` from the H.264 encoder of Windows, which only `us-multiframe` can be written in. The bytes of an H.264 stream depend on the encoder of the Windows version too.
 
 ## Generated tags
 
@@ -743,7 +768,10 @@ src\DCST4.Core\     No WPF reference
     Objects\        Objects without pixels: SR, KOS, GSPS, PDF, RT Structure Set
     Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
   TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
-  Pipeline\         IImageSource, StoreRun (transcode, save, send), RunSummary, ExamSizeEstimator, TransferSyntaxConverter (which encodes a multi-frame image frame by frame)
+  Pipeline\         IImageSource, StoreRun (transcode, save, send), TransferSyntaxOption and TransferSyntaxFamily (the list of Generate & Send, by codec family), RunSummary, ExamSizeEstimator, TransferSyntaxConverter (which encodes a multi-frame image frame by frame, and sends JPEG XL and H.264 to the encoders below)
+  Codecs\           OwnCodecs: which syntaxes DCST4 encodes itself, which are video, and which can be decoded
+    JpegXl\         JpegXlEncoder (lossless JPEG XL codestream), JxlPrefixCode, JxlBitWriter, JpegXlFrameCodec (one DICOM frame to one codestream)
+    Video\          H264Encoder (H.264 in MP4 with the encoder of Windows, and a decoder for checks), MediaFoundation.cs (the COM interop)
   Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), Storage Commitment (StorageCommitment.cs), RawAssociation (limit, fault and load tests), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
   Performance\      Load engine and its workers (LoadEngine.cs), InstancePool and UidStamper, DataMixCatalog, LoadSettings, MetricsCollector and LatencyHistogram, SaturationDetector, DegradationDetector, RateGate, AvailabilityPoller, MetricsFileWriter
   Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
@@ -790,6 +818,8 @@ To add a modality, subclass `ModalityProfile` and add it to `ModalityCatalog.All
 `TestDatasetGenerator` is an `IImageSource`, so its objects go through `StoreRun` like any others. It composes `ExamGenerator` with an `IUidSource`: `GeneratedUidSource` is the default, and `DeterministicUidSource` derives UIDs from the root, seed and counters. Every parameter that changes the data is part of the hashed context, so two variants never share a SOP Instance UID on a PACS. Each object leaves the generator in its final syntax, so a run must use `TestDatasetGenerator.TransferSyntax`. The manifest and the hashes (`ManifestHashes`, `NormalizedAttributes`) are what Phase 4 uses to verify integrity.
 
 Pixel Data of every multi-frame image (`ModalityProfile.RendersFramesOnDemand`: the cine loop, the XA and RF cine objects, Enhanced CT, Enhanced MR, Enhanced XA, Enhanced XRF and Breast Tomosynthesis) comes from `RenderedFramesBuffer`, which draws each frame when it is read and keeps only the latest in memory, so a 700 MB object takes little more than one frame of heap. It is OB for 8 bits allocated and OW for 16, and pads an odd length. fo-dicom's transcoder reads every frame before it writes the first, so `TransferSyntaxConverter.Convert` encodes such an image itself when the target is encapsulated: each frame is drawn, run through the transcoder as a one-frame image, and its fragment added with `DicomPixelData.AddFrame`, which also builds the Basic Offset Table. The frames are drawn one after the other, since the drawing is not made for several threads, and encoded in batches, as many frames at a time as there are cores and at most 16, then added in their order. After a batch of large frames the garbage is collected, or the encoders' buffers pile up to over a gigabyte in a long loop. The harness checks that the file is byte for byte what the transcoder gives for the same image held in memory. `Convert` takes a `CancellationToken` and reports each frame, which `StoreRun.FrameEncoded` passes on to the status bar. A dataset has one or two SOP classes, since `StoreService` negotiates from its first window of images.
+
+The transfer syntaxes of Generate & Send are `TransferSyntaxOption.All`, each with a `Family` from `TransferSyntaxFamily`, and the App groups them with `Infrastructure\FamilyGroupedView`, a `ListCollectionView` with a `PropertyGroupDescription` and the `SyntaxFamilyGroupStyle` that `MainWindow.xaml` and `TestSettingsDialog.xaml` each define, since the harness opens windows without the `Application`. Every option must also be in `CompressionCatalog`, which is where its encoder is probed. `TransferSyntaxConverter.Convert` encodes JPEG XL frame by frame like the PureCodecs syntaxes, with `JpegXlFrameCodec.Encode` in place of fo-dicom's transcoder, and H.264 as one stream through `H264Encoder.EncodeMp4`. The JPEG XL encoder writes one modular frame with a global MA tree of a single leaf (the clamped gradient predictor), hybrid-uint tokens with split exponent 4, and one prefix code in the Brotli format for the residuals of the whole image, in groups of 256 x 256. A video stream is one fragment for all frames, which fo-dicom's `DicomPixelData.GetFrame` cannot split, so `TransferSyntaxConverter.PixelBytes` counts fragments, and `IntegrityOracle` compares a video stream as a whole. `CompressionCatalog.FitProblem` says which objects a syntax cannot hold whatever the encoder can do, which for H.264 is all but a multi-frame RGB object, and both `ExamValidator.SyntaxProblems` and `TestDatasetRequest.Validate` ask it. `StoreService` stops a send that would need fallback from a syntax `OwnCodecs.CanDecode` says no to.
 
 `PrivatePayload.Add` writes the private payload from `ExamRequest.PrivatePayloadBytes`, and `TestDatasetRequest.PrivatePayloadBytes` passes it on. Its bytes come from `GeneratedBytesBuffer`, an `IByteBuffer` that works out any part of itself from a seed and the position, so fo-dicom streams it to a file or the network without it ever being in memory. `ExamValidator.SyntaxProblems` says before a run whether an exam can be written in a transfer syntax: an encoder that cannot hold the bit depth, by `CompressionCatalog.Probe`, or uncompressed pixels of 4 GB or more.
 
@@ -844,7 +874,7 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe commit
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe report
 ```
 
-JPEG Lossless streams are checked with a small decoder written from ITU T.81 (`LosslessJpegDecoder.cs`). fo-dicom's built-in decoder is not used as the reference, because it was seen returning 0 for the last pixel of a frame that this decoder and PureCodecs both decode correctly.
+JPEG XL streams are checked with a decoder for exactly what DCST4's encoder writes (`JpegXlSubsetDecoder.cs`), which also checks each header field. JPEG Lossless streams are checked with a small decoder written from ITU T.81 (`LosslessJpegDecoder.cs`). fo-dicom's built-in decoder is not used as the reference, because it was seen returning 0 for the last pixel of a frame that this decoder and PureCodecs both decode correctly.
 
 ### Checking with another toolkit
 
@@ -859,7 +889,8 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe matrix C:\Temp\matrix
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe fileset C:\Temp\fileset
 
 # One multi-frame object at full size, saved in a folder and, with a port, sent to 127.0.0.1 only. Prints the time and the peak memory.
-# Folder, the id of the dataset profile that makes the same object, rows, columns, frames, payload in MB, implicit|explicit|jpeg|baseline, optionally a port
+# Folder, the id of the dataset profile that makes the same object, rows, columns, frames, payload in MB, implicit|explicit|jpeg|baseline
+# or a name that generate --transfer-syntax takes (deflated, jpeg-xl, h264 ...), optionally a port
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe cine C:\Temp\cine us-multiframe 960 1280 1667 657 baseline 11112
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe cine C:\Temp\cine xa-cine 1024 1024 300 0 jpeg
 
@@ -872,10 +903,13 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe custommix enhanced-xa 1024 1
 # Only the multi-frame, JPEG Baseline and private payload tests
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe multiframe
 
+# Only the tests of the transfer syntax list, Deflated, JPEG XL and H.264
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe syntaxes
+
 # The Exam tab with a multi-frame object, drawn to a PNG at the window's smallest size
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe examtab C:\Temp\examtab.png
 
-# Send one exam to any SCP: host, port, called AE, modality, images, bits, implicit|explicit|jpeg, optionally fallback
+# Send one exam to any SCP: host, port, called AE, modality, images, bits, implicit|explicit|jpeg or a name that generate --transfer-syntax takes, optionally fallback
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe send 127.0.0.1 11112 MYSCP CT 60 16 jpeg
 ```
 
@@ -913,6 +947,8 @@ The attributes of the generated objects were checked with two IOD validators in 
 - The empty Specific Character Set variant is an error in `dciodvfy`, as expected, two files.
 - `validate_iods` reports KVP, Exposure Time and Tube Current on DX and MG, and six functional group sequences on Segmentation, as unexpected. `dciodvfy` accepts them, and they are taken as false alarms without having been confirmed in the standard.
 - `dcentvfy` finds CT, MR and PT studies consistent across series and instances.
+
+The transfer syntaxes added in 1.10.1 were checked by hand, outside `run-tests.ps1`, as the Changelog of 1.10.1 says. One remark is left: `dciodvfy` warns `Unrecognized defined term <YBR_PARTIAL_420>` on an H.264 cine loop, which is the value PS3.5 8.2.7 requires for that syntax.
 
 The four objects added in 1.10.1 were checked with `dciodvfy` of the same snapshot, uncompressed and in JPEG Lossless. The cine XA, including one of 300 frames, and the fluoro loop pass without a remark. Enhanced XA and Enhanced XRF leave two remarks, both from the validator's own tables rather than the objects:
 
@@ -979,14 +1015,19 @@ New:
 - A new list, **Object**, on the Exam tab, which holds the images the selected modality can generate: **Single frame** and, where DCST4 has them, Multi-frame (cine loop) for US, Multi-frame (cine run) and Enhanced XA for XA, Multi-frame (fluoro loop) and Enhanced XRF for RF, Enhanced CT, Enhanced MR and Breast Tomosynthesis. With a multi-frame object, the new field **Frames per image** says how many frames, 1 to 10,000, and Images per series is the number of such objects
 - **A cine run from a cath lab and a fluoroscopy loop**, as XA and RF multi-frame objects. They are the same SOP class as the single-frame image, with the Multi-frame and Cine modules the IOD requires above one frame: Number of Frames, Frame Time, Frame Increment Pointer, Cine Rate and Recommended Display Frame Rate, and Positioner Motion for XA. A PACS that takes the single image can still refuse the run
 - **Enhanced XA Image Storage and Enhanced XRF Image Storage**, the multi-frame functional group IODs of angiography and fluoroscopy, which newer systems send. They are generated as DERIVED single-plane objects, which leaves out every conditional module of those IODs, with the five mandatory functional group macros, an Acquisition Context Sequence and an Irradiation Event UID from the profile's UID root
+- **The Transfer syntax list has 15 syntaxes, under a heading for each codec family**: Uncompressed (Implicit VR, Explicit VR and the new Deflated Explicit VR Little Endian), RLE (RLE Lossless), JPEG (JPEG Baseline, the new JPEG Extended, JPEG Lossless SV1), JPEG-LS (JPEG-LS Lossless), JPEG 2000 (Lossless and lossy), HTJ2K (Lossless and lossy), JPEG XL (JPEG XL Lossless and JPEG XL) and Video (H.264 High Profile / Level 4.1). **Store tests send in** in the Test settings offers the same list, grouped the same way
 - **JPEG Baseline (Process 1, lossy)** in the Transfer syntax list, for 8 bits stored. A colour image is stored as YBR_FULL_422. Other bit depths stop the run with a message
+- **JPEG XL**, from an encoder in DCST4 itself, since PureCodecs and fo-dicom have none. It writes a lossless codestream, one per frame, at 1 to 16 bits in grayscale or RGB, in both JPEG XL Lossless and JPEG XL, so the image is not marked lossy
+- **H.264 High Profile / Level 4.1** for the ultrasound cine loop, from the H.264 encoder of Windows. The whole loop is one stream in an MP4 container, in one fragment, stored as YBR_PARTIAL_420, at most 1080 rows of 1920. Other objects are refused with the reason, since the XA and RF images must be MONOCHROME2. Windows N needs the Media Feature Pack
+- **Deflated Explicit VR Little Endian**, which compresses the whole dataset with deflate as it is written, to a file or on the network
 - **Add private payload of ... MB per image** on the Exam tab: a private sequence, (0099,1020) under the creator `DCST4 TEST`, with one binary value of 1 to 2,000 MB of random bytes in every image, as some ultrasound systems send their raw data. It is off by default and unticked at every start; the size is remembered
 - The frames of a multi-frame image are drawn as they are written and encoded a few at a time, so a cine loop of 1,667 frames with a 657 MB payload, 790 MB in all, is generated and sent with about 500 MB of memory. The status bar counts the frames while they are encoded, and Cancel works meanwhile
 - **Estimated size** counts frames and the payload. For a compressed multi-frame image it is measured on a few frames
 - The mix **custom** on the Performance tab sends the object described on the Exam tab: its modality, matrix, bits, frames, transfer syntax and private payload. The plan, the question before the run, the result file and the report say what it was. One object can be at most 1 GB, and two custom runs are compared only if they sent the same thing
 - Five new store tests on the Tests tab and in `DCST4.Cli.exe run`: `store-breast-tomosynthesis`, `store-xa-cine`, `store-rf-cine`, `store-enhanced-xa` and `store-enhanced-rf`, each one object of 128 by 128 with 8 frames, which go through query, retrieve, integrity and Storage Commitment like the other object types
-- The negotiation probe proposes 11 more transfer syntaxes, 30 in all: JPEG XL Lossless, JPEG XL JPEG Recompression and JPEG XL, JPEG Extended (Process 2 & 4) and JPEG Lossless (Process 14), MPEG-2 Main Profile at Main and High Level, HEVC/H.265 Main and Main 10, Encapsulated Uncompressed Explicit VR Little Endian and Deflated Image Frame Compression. The Capabilities tab has a column for each, and the default probe takes 8 associations instead of 5. They are only proposed, so the store tests still send in a syntax DCST4 can encode
-- In the test harness, for checks by hand: `DCST4.Tests.exe cine` generates one multi-frame object at full size, `custommix <object> ...` runs a load with a large custom mix of any object against the mock SCP, and `examtab` draws the Exam tab to a PNG
+- The negotiation probe proposes 11 more transfer syntaxes, 30 in all: JPEG XL Lossless, JPEG XL JPEG Recompression and JPEG XL, JPEG Extended (Process 2 & 4) and JPEG Lossless (Process 14), MPEG-2 Main Profile at Main and High Level, HEVC/H.265 Main and Main 10, Encapsulated Uncompressed Explicit VR Little Endian and Deflated Image Frame Compression. The Capabilities tab has a column for each, and the default probe takes 8 associations instead of 5. Of these, DCST4 can also write JPEG XL Lossless and JPEG XL. The others are only proposed, so the store tests still send in a syntax DCST4 can encode
+- In the test harness, for checks by hand: `DCST4.Tests.exe cine` generates one multi-frame object at full size, `custommix <object> ...` runs a load with a large custom mix of any object against the mock SCP, and `examtab` draws the Exam tab to a PNG. `cine` and `send` also take any name that `generate --transfer-syntax` takes, and `syntaxes` runs only the tests of the new syntaxes
+- **Search in the help:** a box above the topic list finds a phrase anywhere in the help, also when part of it is bold. The list keeps only the topics that have it, with how many matches each, and the match is highlighted. Enter or F3 goes to the next match, Shift+Enter or Shift+F3 to the one before, Ctrl+F goes to the box and Esc ends the search. **Help > Search help...** (Ctrl+F1) opens the help with the box ready
 
 Changed:
 
@@ -995,12 +1036,17 @@ Changed:
 - The dataset and the store test name Breast Tomosynthesis without "(large)". The Object list names the ordinary image of every modality **Single frame** and the others after what they are
 - The ultrasound cine loop has Cine Rate and Recommended Display Frame Rate, 30 frames per second
 - The selected object is saved beside the modality. A settings file from an earlier version selects the same modality it did, with its single-frame image
+- `DCST4.Cli.exe generate --transfer-syntax` takes `deflated`, `jpeg-xl`, `jpeg-xl-lossy` and `h264`, and `list-codecs` lists the three that need an encoder
+- **Allow fallback to Implicit VR** is off for JPEG XL and H.264, which DCST4 cannot decode. A send that would need to fall back from them stops with an error that says so, also from the command line
+- With the marked patient name, the default, an Auto Referring Physician's Name (0008,0090) is now `DCST4^REFERRING^<number>` in place of a Swedish name, in Generate & Send, in the objects the tests send and in `DCST4.Cli.exe generate`. With **Swedish name** it is a Swedish name as before, and a name typed on the Identifiers tab always wins
+- The local SCP AE title and port have moved from the Tests tab to the **Local** box at the top left, as **Listen AET (SCP)** and **Port**, under **Calling AET (SCU)**, which was **Calling AET**. They are still one setting for the whole program and not part of a destination profile
+- The `DCST4.Cli.exe` usage text named `RegistrySwedishName` as the default of `--patient-naming`. The default is `MarkedTestName`, as it has been since 1.9.0
 
 Fixed:
 
 - A Cancel that arrived just as a limit, fault or load test had opened a connection could end the test as `TOOL_ERROR` with a NullReferenceException. It now ends as cancelled
 
-Checked by hand with DCMTK 3.7.1 and dicom3tools, against local receivers only: the 790 MB cine loop was saved and sent to `storescp`, which received it whole; `dcmdump` shows one fragment per frame and the private sequence; `dcmdjpeg` decodes a JPEG Baseline loop and a frame of it looks right; `dciodvfy` reports no error on Ultrasound Multi-frame Image, on a cine XA of 300 frames or on a fluoro loop, and on the two enhanced X-ray objects only the remarks described under [Checking with another toolkit](#checking-with-another-toolkit). A load run with a custom mix of a 415 MB cine loop stored all six sends on the mock SCP, and one of four 9 MB Enhanced XA objects stored all four.
+Checked by hand with DCMTK 3.7.1 and dicom3tools, against local receivers only: the 790 MB cine loop was saved and sent to `storescp`, which received it whole; `dcmdump` shows one fragment per frame and the private sequence; `dcmdjpeg` decodes a JPEG Baseline loop and a frame of it looks right; `dciodvfy` reports no error on Ultrasound Multi-frame Image, on a cine XA of 300 frames or on a fluoro loop, and on the two enhanced X-ray objects only the remarks described under [Checking with another toolkit](#checking-with-another-toolkit). A load run with a custom mix of a 415 MB cine loop stored all six sends on the mock SCP, and one of four 9 MB Enhanced XA objects stored all four. The new transfer syntaxes, checked the same way: libjxl (through imagecodecs) and pydicom decode the 639 JPEG XL and Deflated files of the matrix to exactly the pixels of the Explicit VR files; `storescp` received Deflated, JPEG XL and H.264 sends, and `dcmftest` passes on them; ffmpeg decodes all 300 frames of an H.264 loop of 960 x 1280 as High Profile, level 4.1; `dciodvfy` reports no error on it, and one warning, that it does not know YBR_PARTIAL_420, which PS3.5 requires for H.264.
 
 ### 1.10.0
 
