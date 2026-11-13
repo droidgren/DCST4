@@ -19,7 +19,7 @@ namespace DCST4.Core.Generation.Modalities
         private const int FramesPerSecond = 30;
 
         public override string DisplayName => "US Multi-frame";
-        public override string ObjectName => "Ultrasound Multi-frame Image";
+        public override string ObjectName => "Multi-frame (cine loop)";
         public override DicomUID SopClass => DicomUID.UltrasoundMultiFrameImageStorage;
         public override int SamplesPerPixel => 3;
         public override bool IsMultiFrame => true;
@@ -33,6 +33,73 @@ namespace DCST4.Core.Generation.Modalities
             dataset.AddOrUpdate(DicomTag.FrameIncrementPointer, DicomTag.FrameTime);
             dataset.AddOrUpdate(DicomTag.CineRate, FramesPerSecond.ToString(CultureInfo.InvariantCulture));
             dataset.AddOrUpdate(DicomTag.RecommendedDisplayFrameRate, FramesPerSecond.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    /// <summary>
+    /// The Cine and Multi-frame modules, which the XA and XRF IODs require as soon as an object has more than one frame.
+    /// Both are conditional modules of the same IOD, so a cine run is the single-frame SOP class with these tags added.
+    /// </summary>
+    public static class CineModule
+    {
+        /// <summary>Cine Rate and Recommended Display Frame Rate are IS, so the rate is a whole number of frames per second.</summary>
+        public static void Add(DicomDataset dataset, int framesPerSecond)
+        {
+            var rate = framesPerSecond.ToString(CultureInfo.InvariantCulture);
+            dataset.AddOrUpdate(DicomTag.FrameTime, ModalityProfile.Ds(1000.0 / framesPerSecond));
+            dataset.AddOrUpdate(DicomTag.FrameIncrementPointer, DicomTag.FrameTime);
+            dataset.AddOrUpdate(DicomTag.CineRate, rate);
+            dataset.AddOrUpdate(DicomTag.RecommendedDisplayFrameRate, rate);
+            // 0 is looping, which is how a cine run is shown.
+            dataset.AddOrUpdate(DicomTag.PreferredPlaybackSequencing, (ushort)0);
+        }
+    }
+
+    /// <summary>
+    /// X-Ray Angiographic Image IOD with the Multi-frame and Cine modules: a cine run from a cath lab, in the same SOP class
+    /// as the single-frame XA image. The frames are drawn as they are written, so a long run is never in memory at once.
+    /// </summary>
+    public sealed class XaCineProfile : XaProfile
+    {
+        /// <summary>Two seconds of a cine run.</summary>
+        public const int CineFrames = 30;
+        private const int FramesPerSecond = 15;
+
+        public override string DisplayName => "XA Multi-frame";
+        public override string ObjectName => "Multi-frame (cine run)";
+        public override bool IsMultiFrame => true;
+        public override bool RendersFramesOnDemand => true;
+        public override int DefaultFrames => CineFrames;
+        /// <summary>One object is a whole run, not one frame of it.</summary>
+        public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(10);
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            base.AddModalityTags(dataset, preset, context);
+            CineModule.Add(dataset, FramesPerSecond);
+            // Type 2C in the XA Positioner module as soon as the object has more than one frame. The C-arm stands still here.
+            dataset.AddOrUpdate(DicomTag.PositionerMotion, "STATIC");
+        }
+    }
+
+    /// <summary>X-Ray Radiofluoroscopic Image IOD with the Multi-frame and Cine modules: a fluoroscopy loop.</summary>
+    public sealed class RfCineProfile : RfProfile
+    {
+        /// <summary>Two seconds of fluoroscopy.</summary>
+        public const int LoopFrames = 16;
+        private const int FramesPerSecond = 8;
+
+        public override string DisplayName => "RF Multi-frame";
+        public override string ObjectName => "Multi-frame (fluoro loop)";
+        public override bool IsMultiFrame => true;
+        public override bool RendersFramesOnDemand => true;
+        public override int DefaultFrames => LoopFrames;
+        public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(10);
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            base.AddModalityTags(dataset, preset, context);
+            CineModule.Add(dataset, FramesPerSecond);
         }
     }
 
@@ -74,25 +141,38 @@ namespace DCST4.Core.Generation.Modalities
         public override bool UsesFunctionalGroups => true;
         public override bool UsesFrameOfReference => true;
 
+        /// <summary>
+        /// The frames lie in a stack in the patient coordinate system: Pixel Measures, Plane Orientation and Plane Position.
+        /// False for an IOD whose functional group macros do not include them, such as Enhanced XA.
+        /// </summary>
+        protected virtual bool UsesSliceGeometry => true;
+
+        /// <summary>
+        /// The object has a Dimension Organization, and each frame its index in it. False for an IOD where the
+        /// Multi-frame Dimension module is not used, which also leaves Stack ID out of Frame Content.
+        /// </summary>
+        protected virtual bool UsesDimensionOrganization => true;
+
         public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
         {
-            dataset.AddOrUpdate(DicomTag.PositionReferenceIndicator, string.Empty);
-            AddDimensions(dataset, context);
+            if (UsesSliceGeometry) dataset.AddOrUpdate(DicomTag.PositionReferenceIndicator, string.Empty);
+            if (UsesDimensionOrganization) AddDimensions(dataset, context);
 
             var spacing = preset.FieldOfViewMm / Math.Max(context.Rows, context.Columns);
-            var shared = new DicomDataset
+            var shared = new DicomDataset();
+            if (UsesSliceGeometry)
             {
-                new DicomSequence(DicomTag.PixelMeasuresSequence, new DicomDataset
+                shared.Add(new DicomSequence(DicomTag.PixelMeasuresSequence, new DicomDataset
                 {
                     { DicomTag.PixelSpacing, Ds(spacing), Ds(spacing) },
                     { DicomTag.SliceThickness, Ds(preset.SliceThicknessMm) },
                     { DicomTag.SpacingBetweenSlices, Ds(preset.SliceThicknessMm) },
-                }),
-                new DicomSequence(DicomTag.PlaneOrientationSequence, new DicomDataset
+                }));
+                shared.Add(new DicomSequence(DicomTag.PlaneOrientationSequence, new DicomDataset
                 {
                     { DicomTag.ImageOrientationPatient, "1", "0", "0", "0", "1", "0" },
-                }),
-            };
+                }));
+            }
             AddSharedGroups(shared, preset);
             dataset.AddOrUpdate(new DicomSequence(DicomTag.SharedFunctionalGroupsSequence, shared));
 
@@ -100,24 +180,30 @@ namespace DCST4.Core.Generation.Modalities
             for (var frame = 0; frame < context.Frames; frame++)
             {
                 var offset = (frame - (context.Frames - 1) / 2.0) * preset.SliceThicknessMm;
-                var item = new DicomDataset
+                var frameContent = new DicomDataset();
+                if (UsesDimensionOrganization)
                 {
-                    new DicomSequence(DicomTag.FrameContentSequence, new DicomDataset
-                    {
-                        { DicomTag.DimensionIndexValues, DimensionIndexValues(frame) },
-                        { DicomTag.StackID, StackId },
-                        { DicomTag.InStackPositionNumber, (uint)(frame + 1) },
-                    }),
-                    new DicomSequence(DicomTag.PlanePositionSequence, new DicomDataset
+                    frameContent.Add(DicomTag.DimensionIndexValues, DimensionIndexValues(frame));
+                    frameContent.Add(DicomTag.StackID, StackId);
+                    frameContent.Add(DicomTag.InStackPositionNumber, (uint)(frame + 1));
+                }
+                AddFrameContent(frameContent, frame);
+                var item = new DicomDataset { new DicomSequence(DicomTag.FrameContentSequence, frameContent) };
+                if (UsesSliceGeometry)
+                {
+                    item.Add(new DicomSequence(DicomTag.PlanePositionSequence, new DicomDataset
                     {
                         { DicomTag.ImagePositionPatient, Ds(-context.Columns * spacing / 2), Ds(-context.Rows * spacing / 2), Ds(offset) },
-                    }),
-                };
+                    }));
+                }
                 AddPerFrameGroups(item, context);
                 perFrame[frame] = item;
             }
             dataset.AddOrUpdate(new DicomSequence(DicomTag.PerFrameFunctionalGroupsSequence, perFrame));
         }
+
+        /// <summary>More of the Frame Content item of one frame, for an IOD that has no dimension index to put there.</summary>
+        protected virtual void AddFrameContent(DicomDataset frameContent, int frame) { }
 
         /// <summary>What a frame's Dimension Index Values point at, as pairs of index and the sequence holding it.</summary>
         protected virtual DicomTag[][] DimensionPointers { get; } =
@@ -199,7 +285,6 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "CT";
         public override string DisplayName => "Enhanced CT";
-        public override string ObjectName => "Enhanced CT Image";
         public override DicomUID SopClass => DicomUID.EnhancedCTImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 16 };
         public override int DefaultBitDepth => 16;
@@ -225,7 +310,6 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "MR";
         public override string DisplayName => "Enhanced MR";
-        public override string ObjectName => "Enhanced MR Image";
         public override DicomUID SopClass => DicomUID.EnhancedMRImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -264,7 +348,6 @@ namespace DCST4.Core.Generation.Modalities
 
         public override string Code => "MG";
         public override string DisplayName => "Breast Tomosynthesis";
-        public override string ObjectName => "Breast Tomosynthesis Image";
         public override DicomUID SopClass => DicomUID.BreastTomosynthesisImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 14;
@@ -290,6 +373,118 @@ namespace DCST4.Core.Generation.Modalities
             dataset.AddOrUpdate(new DicomSequence(DicomTag.AcquisitionContextSequence));
             base.AddModalityTags(dataset, preset, context);
         }
+    }
+
+    /// <summary>
+    /// What the Enhanced XA and Enhanced XRF Image IODs have in common (PS3.3 A.47 and A.48). Both are built so that every
+    /// conditional module and macro of those IODs falls away: Image Type value 1 is DERIVED, so XA/XRF Acquisition,
+    /// X-Ray Collimator and the positioner macros are not required; C-arm Positioner Tabletop Relationship is absent, so
+    /// Frame of Reference, Synchronization, Patient Orientation in Frame and the table and geometry macros are not required;
+    /// X-Ray Receptor Type is absent, so neither detector module is; Pixel Intensity Relationship is LIN, not LOG, so the
+    /// Pixel Intensity Relationship LUT macro is not required; and there is no contrast or cardiac synchronization. What is
+    /// left mandatory is the XA/XRF Series and Enhanced XA/XRF Image modules, Acquisition Context, the functional groups, and
+    /// the Frame Content, Frame Anatomy, Frame VOI LUT, Irradiation Event Identification and X-Ray Frame Pixel Data
+    /// Properties macros. Frame VOI LUT is written by <see cref="DicomImageBuilder"/>, which puts it in the shared groups.
+    /// </summary>
+    public abstract class EnhancedXrayProfile : FunctionalGroupProfile
+    {
+        /// <summary>Only the combinations of Table C.8.19.2-2: 8 bits allocated with 8 stored, or 16 allocated with 9 to 16.</summary>
+        private static readonly int[] XrayBitDepths = { 8, 12, 16 };
+
+        public override IReadOnlyList<int> BitDepths => XrayBitDepths;
+        public override int DefaultBitDepth => 12;
+        public override int DefaultRows => 1024;
+        public override int DefaultColumns => 1024;
+        public override TimeSpan InstanceInterval => TimeSpan.FromSeconds(10);
+        public override int DefaultFrames => EnhancedFrames;
+        public override bool RendersFramesOnDemand => true;
+
+        // The frames are not a stack in the patient coordinate system, and the Multi-frame Dimension module is not used.
+        public override bool UsesFrameOfReference => false;
+        protected override bool UsesSliceGeometry => false;
+        protected override bool UsesDimensionOrganization => false;
+
+        /// <summary>Image Type value 3, the image flavour of this IOD.</summary>
+        protected abstract string Flavour { get; }
+        /// <summary>SNOMED CT code of the imaged region, with its meaning. From CID 4042, as both IODs require.</summary>
+        protected abstract string[] Anatomy { get; }
+
+        public override string[] ImageType(ExamPreset preset) => new[] { "DERIVED", "PRIMARY", Flavour, "NONE" };
+
+        public override void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context)
+        {
+            dataset.AddOrUpdate(DicomTag.AcquisitionDateTime, DicomImageBuilder.Dt(context.ContentTime));
+            dataset.AddOrUpdate(DicomTag.ContentQualification, "RESEARCH");
+            // One plane, as a cath lab with a single C-arm sends. Plane Identification is then Type 1C and must be present.
+            dataset.AddOrUpdate(DicomTag.PlanesInAcquisition, "SINGLE PLANE");
+            dataset.AddOrUpdate(DicomTag.PlaneIdentification, "MONOPLANE");
+            dataset.AddOrUpdate(DicomTag.PresentationLUTShape, "IDENTITY");
+            dataset.AddOrUpdate(DicomTag.LossyImageCompression, "00");
+            dataset.AddOrUpdate(new DicomSequence(DicomTag.AcquisitionContextSequence));
+            base.AddModalityTags(dataset, preset, context);
+
+            // The event UID has to follow from the UID root, which only the context knows, and the shared groups exist by now.
+            var eventUid = context.Uids.Uid("irradiation-event/" + context.SeriesIndex.ToString(CultureInfo.InvariantCulture) + "/" + context.ImageIndex.ToString(CultureInfo.InvariantCulture));
+            dataset.GetSequence(DicomTag.SharedFunctionalGroupsSequence).Items[0]
+                .AddOrUpdate(new DicomSequence(DicomTag.IrradiationEventIdentificationSequence, new DicomDataset
+                {
+                    { DicomTag.IrradiationEventUID, eventUid },
+                }));
+        }
+
+        protected override void AddSharedGroups(DicomDataset shared, ExamPreset preset)
+        {
+            shared.Add(new DicomSequence(DicomTag.FramePixelDataPropertiesSequence, new DicomDataset
+            {
+                { DicomTag.FrameType, ImageType(preset) },
+                { DicomTag.PixelIntensityRelationship, "LIN" },
+                { DicomTag.PixelIntensityRelationshipSign, (short)1 },
+                { DicomTag.GeometricalProperties, "UNIFORM" },
+                { DicomTag.ImageProcessingApplied, "NONE" },
+            }));
+
+            shared.Add(new DicomSequence(DicomTag.FrameAnatomySequence, new DicomDataset
+            {
+                new DicomSequence(DicomTag.AnatomicRegionSequence, CodeItem("SCT", Anatomy[0], Anatomy[1])),
+                new DicomCodeString(DicomTag.FrameLaterality, "U"),
+            }));
+        }
+
+        /// <summary>A DERIVED frame needs none of the Frame Content attributes, so it gets the one that says which frame it is.</summary>
+        protected override void AddFrameContent(DicomDataset frameContent, int frame) =>
+            frameContent.Add(DicomTag.FrameLabel, "Frame " + (frame + 1).ToString(CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>Enhanced XA Image IOD: a cine run as a multi-frame functional group object.</summary>
+    public sealed class EnhancedXaProfile : EnhancedXrayProfile
+    {
+        public override string Code => "XA";
+        public override string DisplayName => "Enhanced XA";
+        public override DicomUID SopClass => DicomUID.EnhancedXAImageStorage;
+        protected override string Flavour => "ANGIO";
+        /// <summary>Coronary artery, from CID 3010, which CID 4042 includes.</summary>
+        protected override string[] Anatomy { get; } = { "41801008", "Coronary artery" };
+
+        public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
+        {
+            new ExamPreset { Name = "Coronary", StudyDescription = "XA Coronary", SeriesDescription = "Coronary Enhanced", ProtocolName = "Coronary", BodyPart = "HEART", FieldOfViewMm = 200, RadiationSetting = "GR", Kvp = 80, TubeCurrentMa = 600, ExposureTimeMs = 7 },
+        };
+    }
+
+    /// <summary>Enhanced XRF Image IOD: the RF modality's enhanced object, a fluoroscopy loop.</summary>
+    public sealed class EnhancedRfProfile : EnhancedXrayProfile
+    {
+        public override string Code => "RF";
+        public override string DisplayName => "Enhanced XRF";
+        public override DicomUID SopClass => DicomUID.EnhancedXRFImageStorage;
+        protected override string Flavour => "FLUOROSCOPY";
+        /// <summary>Stomach, from CID 4031, which CID 4042 includes.</summary>
+        protected override string[] Anatomy { get; } = { "69695003", "Stomach" };
+
+        public override IReadOnlyList<ExamPreset> Presets { get; } = new[]
+        {
+            new ExamPreset { Name = "Upper GI", StudyDescription = "RF Upper GI", SeriesDescription = "Upper GI Enhanced", ProtocolName = "Upper GI", BodyPart = "STOMACH", FieldOfViewMm = 400, RadiationSetting = "SC", Kvp = 90, TubeCurrentMa = 400, ExposureTimeMs = 100 },
+        };
     }
 
     /// <summary>Segmentation IOD: one binary segment, with every frame derived from the source image. Rows and Columns must be multiples of 8.</summary>

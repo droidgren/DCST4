@@ -242,13 +242,25 @@ namespace DCST4.Tests
             DicomTag.FrameOfReferenceUID, DicomTag.PositionReferenceIndicator,
         };
 
+        private static readonly DicomTag[] EnhancedXrayRequired =
+        {
+            DicomTag.NumberOfFrames, DicomTag.SharedFunctionalGroupsSequence, DicomTag.PerFrameFunctionalGroupsSequence,
+            DicomTag.AcquisitionDateTime, DicomTag.ContentQualification, DicomTag.PresentationLUTShape, DicomTag.PlanesInAcquisition,
+            DicomTag.PlaneIdentification, DicomTag.AcquisitionContextSequence,
+        };
+
         private static readonly Dictionary<string, DicomTag[]> Required = new Dictionary<string, DicomTag[]>
         {
             { "us-multiframe", new[] { DicomTag.NumberOfFrames, DicomTag.FrameTime, DicomTag.FrameIncrementPointer, DicomTag.PlanarConfiguration, DicomTag.TransducerData, DicomTag.SequenceOfUltrasoundRegions } },
+            { "xa-cine", new[] { DicomTag.NumberOfFrames, DicomTag.FrameTime, DicomTag.FrameIncrementPointer, DicomTag.CineRate, DicomTag.PositionerMotion, DicomTag.RadiationSetting, DicomTag.ImagerPixelSpacing } },
+            { "rf-cine", new[] { DicomTag.NumberOfFrames, DicomTag.FrameTime, DicomTag.FrameIncrementPointer, DicomTag.CineRate, DicomTag.RadiationSetting, DicomTag.ImagerPixelSpacing } },
             { "secondary-capture", new[] { DicomTag.ConversionType, DicomTag.PatientOrientation, DicomTag.PlanarConfiguration } },
             { "enhanced-ct", EnhancedRequired },
             { "enhanced-mr", EnhancedRequired.Concat(new[] { DicomTag.ComplexImageComponent, DicomTag.AcquisitionContrast }).ToArray() },
             { "tomosynthesis-large", EnhancedRequired.Concat(new[] { DicomTag.ImageLaterality, DicomTag.PresentationIntentType, DicomTag.AcquisitionContextSequence }).ToArray() },
+            // The Enhanced XA and XRF IODs have no Frame of Reference, no dimensions and no Pixel Presentation.
+            { "enhanced-xa", EnhancedXrayRequired },
+            { "enhanced-rf", EnhancedXrayRequired },
             { "segmentation", new[] { DicomTag.NumberOfFrames, DicomTag.SharedFunctionalGroupsSequence, DicomTag.PerFrameFunctionalGroupsSequence, DicomTag.DimensionOrganizationSequence, DicomTag.DimensionIndexSequence, DicomTag.SegmentationType, DicomTag.ContentLabel, DicomTag.ContentDescription, DicomTag.ContentCreatorName, DicomTag.SegmentSequence, DicomTag.ReferencedSeriesSequence, DicomTag.FrameOfReferenceUID } },
             { "basic-text-sr", new[] { DicomTag.CompletionFlag, DicomTag.VerificationFlag, DicomTag.ValueType, DicomTag.ConceptNameCodeSequence, DicomTag.ContinuityOfContent, DicomTag.ContentSequence, DicomTag.PerformedProcedureCodeSequence, DicomTag.ReferencedPerformedProcedureStepSequence } },
             { "key-object-selection", new[] { DicomTag.ValueType, DicomTag.ConceptNameCodeSequence, DicomTag.ContinuityOfContent, DicomTag.ContentTemplateSequence, DicomTag.ContentSequence, DicomTag.CurrentRequestedProcedureEvidenceSequence, DicomTag.ReferencedPerformedProcedureStepSequence } },
@@ -333,8 +345,12 @@ namespace DCST4.Tests
             var perFrame = dataset.GetSequence(DicomTag.PerFrameFunctionalGroupsSequence).Items;
             var shared = dataset.GetSequence(DicomTag.SharedFunctionalGroupsSequence).Items[0];
             check($"{profile.Id}: one item per frame", perFrame.Count == frames, perFrame.Count.ToString());
-            check($"{profile.Id}: frame content and position per frame", perFrame.All(i => i.Contains(DicomTag.FrameContentSequence) && i.Contains(DicomTag.PlanePositionSequence)), null);
-            check($"{profile.Id}: pixel measures and orientation shared", shared.Contains(DicomTag.PixelMeasuresSequence) && shared.Contains(DicomTag.PlaneOrientationSequence), null);
+            check($"{profile.Id}: frame content per frame", perFrame.All(i => i.Contains(DicomTag.FrameContentSequence)), null);
+            // The Enhanced XA and XRF IODs have none of the slice geometry macros, so they are the exception here.
+            var stack = !(profile.Image is EnhancedXrayProfile);
+            check($"{profile.Id}: frame position per frame, where the IOD has it", perFrame.All(i => i.Contains(DicomTag.PlanePositionSequence) == stack), null);
+            check($"{profile.Id}: pixel measures and orientation shared, where the IOD has them",
+                shared.Contains(DicomTag.PixelMeasuresSequence) == stack && shared.Contains(DicomTag.PlaneOrientationSequence) == stack, null);
             check($"{profile.Id}: no window at the top level", !dataset.Contains(DicomTag.WindowCenter) && !dataset.Contains(DicomTag.RescaleIntercept), null);
             check($"{profile.Id}: no acquisition date without a time zone rule", !dataset.Contains(DicomTag.AcquisitionDate), null);
 

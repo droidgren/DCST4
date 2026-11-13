@@ -138,7 +138,7 @@
                         </Table.Columns>
                         <TableRowGroup>
                             <TableRow><TableCell><Paragraph><Bold>Modality</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>CT, MR, CR, DX, US, XA, RF, MG, PT or NM. Choosing one sets its usual matrix, bit depth and exam type, and its ordinary image under Object.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>CT, MR, CR, DX, US, XA, RF, MG, PT or NM. Choosing one sets its usual matrix, bit depth and exam type, and Single frame under Object.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Exam type</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Sets the descriptions, body part, modality-specific tags and usual number of images.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Series</Bold></Paragraph></TableCell>
@@ -156,9 +156,9 @@
                             <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How much data the whole exam will be. It updates as you change the other fields.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Object</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>Which image of the modality to generate, named after its IOD. US, CT, MR and MG also have a multi-frame image; the other six have one image each.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>Which image of the modality to generate: Single frame, or a multi-frame one where DCST4 has it. US has a cine loop, XA a cine run and Enhanced XA, RF a fluoro loop and Enhanced XRF, CT and MR their enhanced image and MG Breast Tomosynthesis. CR, DX, PT and NM have one image each.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Frames per image</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>For a multi-frame object: how many frames each image has, 1 to 10,000. 30 for a cine loop and 8 for the others when the object is selected.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>For a multi-frame object: how many frames each image has, 1 to 10,000. 30 for a cine loop or a cine run, 16 for a fluoro loop and 8 for the enhanced objects when the object is selected.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Add private payload</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Adds a large private binary value of the given size to every image. Off at every start. See below.</Paragraph></TableCell></TableRow>
                         </TableRowGroup>
@@ -173,12 +173,15 @@
                     <Paragraph>The DICOMDIR of a saved File-set is not counted. For a compressed multi-frame image the sample has a few frames, and the rest are taken to be as large. A private payload is added as it is.</Paragraph>
                     <Paragraph Style="{StaticResource H2}">Multi-frame images</Paragraph>
                     <Paragraph>
-                        <Bold>Object</Bold> says which image of the modality to generate. US, CT, MR and MG have a
-                        multi-frame one as well: <Bold>Ultrasound Multi-frame Image</Bold>, a colour cine loop of 30 frames
-                        per second as an ultrasound system sends, and <Bold>Enhanced CT Image</Bold>,
-                        <Bold>Enhanced MR Image</Bold> and <Bold>Breast Tomosynthesis Image</Bold>, which have functional
-                        groups for each frame. The frames are drawn as they are written and are never all in memory, so an
-                        object can be larger than the computer's memory.
+                        <Bold>Object</Bold> says which image of the modality to generate. Six modalities have a
+                        multi-frame one as well: <Bold>Multi-frame (cine loop)</Bold> for US, a colour loop of 30 frames per
+                        second as an ultrasound system sends; <Bold>Multi-frame (cine run)</Bold> for XA and
+                        <Bold>Multi-frame (fluoro loop)</Bold> for RF, which are the same SOP class as the single-frame
+                        image with the Cine and Multi-frame modules added, as a cath lab and a fluoroscopy room send them;
+                        and <Bold>Enhanced CT</Bold>, <Bold>Enhanced MR</Bold>, <Bold>Enhanced XA</Bold>,
+                        <Bold>Enhanced XRF</Bold> and <Bold>Breast Tomosynthesis</Bold>, which are IODs of their own with
+                        functional groups for each frame. The frames are drawn as they are written and are never all in
+                        memory, so an object can be larger than the computer's memory.
                     </Paragraph>
                     <List>
                         <ListItem><Paragraph>With JPEG Lossless or JPEG Baseline the frames are encoded before the image is sent, a few at a time. The status bar counts them, and <Bold>Cancel</Bold> works meanwhile. JPEG Baseline is the slow one: a cine loop of 1,667 frames of 960 x 1280 takes a few minutes.</Paragraph></ListItem>
@@ -492,7 +495,8 @@
                     </Paragraph>
                     <Paragraph>
                         There is a store test for each kind of object, the multi-frame ones included: the ultrasound cine
-                        loop, Enhanced CT, Enhanced MR and Breast Tomosynthesis are sent with 8 frames of 128 by 128.
+                        loop, the XA cine run, the RF fluoro loop, Enhanced CT, Enhanced MR, Enhanced XA, Enhanced XRF and
+                        Breast Tomosynthesis are sent with 8 frames of 128 by 128.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Test settings</Paragraph>
                     <Paragraph>

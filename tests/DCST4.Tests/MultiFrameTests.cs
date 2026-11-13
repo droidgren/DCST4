@@ -35,6 +35,7 @@ namespace DCST4.Tests
 
             TestCatalog();
             TestFramesOnDemand();
+            TestXrayObjects();
             TestFrameByFrameEncoding();
             TestProgressCancelAndMemory();
             TestPayload(temp);
@@ -112,15 +113,23 @@ namespace DCST4.Tests
 
             Func<string, IReadOnlyList<ImageObject>> objectsOf = code => ModalityCatalog.ObjectsOf(ModalityCatalog.Find(code));
             Func<string, string> listOf = code => string.Join(" | ", objectsOf(code).Select(o => o.Name + " (" + o.DatasetProfileId + ")"));
-            Check("US: the ultrasound image and the cine loop, in that order", listOf("US") == "Ultrasound Image (us) | Ultrasound Multi-frame Image (us-multiframe)", listOf("US"));
-            Check("CT, MR and MG: the ordinary image and the enhanced one", listOf("CT") == "CT Image (ct) | Enhanced CT Image (enhanced-ct)" && listOf("MR") == "MR Image (mr) | Enhanced MR Image (enhanced-mr)"
-                && listOf("MG") == "Digital Mammography X-Ray Image (mg) | Breast Tomosynthesis Image (tomosynthesis-large)", listOf("CT") + " / " + listOf("MR") + " / " + listOf("MG"));
-            Check("The other six have one object each, named after their IOD", new[] { "CR", "DX", "XA", "RF", "PT", "NM" }.All(c => objectsOf(c).Count == 1 && !objectsOf(c)[0].IsMultiFrame && objectsOf(c)[0].DatasetProfileId == c.ToLowerInvariant()),
+            Check("US: the single-frame image and the cine loop, in that order", listOf("US") == "Single frame (us) | Multi-frame (cine loop) (us-multiframe)", listOf("US"));
+            Check("CT, MR and MG: the single-frame image and the enhanced one", listOf("CT") == "Single frame (ct) | Enhanced CT (enhanced-ct)" && listOf("MR") == "Single frame (mr) | Enhanced MR (enhanced-mr)"
+                && listOf("MG") == "Single frame (mg) | Breast Tomosynthesis (tomosynthesis-large)", listOf("CT") + " / " + listOf("MR") + " / " + listOf("MG"));
+            Check("XA and RF: the single-frame image, the cine one and the enhanced IOD", listOf("XA") == "Single frame (xa) | Multi-frame (cine run) (xa-cine) | Enhanced XA (enhanced-xa)"
+                && listOf("RF") == "Single frame (rf) | Multi-frame (fluoro loop) (rf-cine) | Enhanced XRF (enhanced-rf)", listOf("XA") + " / " + listOf("RF"));
+            Check("The other four have one object each", new[] { "CR", "DX", "PT", "NM" }.All(c => objectsOf(c).Count == 1 && !objectsOf(c)[0].IsMultiFrame && objectsOf(c)[0].DatasetProfileId == c.ToLowerInvariant()),
                 listOf("CR") + " / " + listOf("NM"));
-            Check("Only the second object of a modality is multi-frame", ModalityCatalog.All.All(m => !ModalityCatalog.ObjectsOf(m)[0].IsMultiFrame && ModalityCatalog.ObjectsOf(m).Skip(1).All(o => o.IsMultiFrame)));
+            Check("The first object of a modality is the single-frame one, and the rest are multi-frame", ModalityCatalog.All.All(m =>
+                !ModalityCatalog.ObjectsOf(m)[0].IsMultiFrame && ModalityCatalog.ObjectsOf(m)[0].Name == "Single frame" && ModalityCatalog.ObjectsOf(m).Skip(1).All(o => o.IsMultiFrame)));
+            Check("A cine XA or RF is the SOP class of its single-frame image", Named("xa-cine").SopClass == DicomUID.XRayAngiographicImageStorage
+                && Named("rf-cine").SopClass == DicomUID.XRayRadiofluoroscopicImageStorage && Named("enhanced-xa").SopClass == DicomUID.EnhancedXAImageStorage
+                && Named("enhanced-rf").SopClass == DicomUID.EnhancedXRFImageStorage);
 
             var all = ModalityCatalog.All.SelectMany(ModalityCatalog.ObjectsOf).ToList();
-            Check("Fourteen objects in all, each named once", all.Count == 14 && all.Select(o => o.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 14, string.Join(", ", all.Select(o => o.Name)));
+            Check("Eighteen objects in all, named once within their modality", all.Count == 18
+                && ModalityCatalog.All.All(m => ModalityCatalog.ObjectsOf(m).Select(o => o.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == ModalityCatalog.ObjectsOf(m).Count),
+                string.Join(", ", all.Select(o => o.Name)));
             Check("The same instances every time, so a selection stays selected", ModalityCatalog.ObjectsOf(ModalityCatalog.Find("US")).SequenceEqual(objectsOf("US")));
             Check("Each has a dataset profile of the same SOP class, for the custom mix", all.All(o =>
             {
@@ -130,8 +139,16 @@ namespace DCST4.Tests
             Check("Found by id, within a modality and across all of them", ModalityCatalog.FindObject("us-multiframe").Image.SopClass == DicomUID.UltrasoundMultiFrameImageStorage
                 && ModalityCatalog.FindObject(ModalityCatalog.Find("US"), "us-multiframe") != null && ModalityCatalog.FindObject(ModalityCatalog.Find("CT"), "us-multiframe") == null && ModalityCatalog.FindObject("nope") == null);
             Check("The dataset list is unchanged by them", DatasetProfileCatalog.All.Count(p => p.Id == "us" || p.Id == "ct") == 2 && ModalityCatalog.All.Count == 10);
-            Check("Default frames: 30 for a cine loop, 8 for the enhanced images, 1 otherwise", Named("us-multiframe").DefaultFrames == 30 && Named("enhanced-ct").DefaultFrames == 8 && Named("enhanced-mr").DefaultFrames == 8
-                && Named("tomosynthesis-large").DefaultFrames == 8 && Named("ct").DefaultFrames == 1);
+            Check("Default frames: 30 for a cine loop or run, 16 for a fluoro loop, 8 for the enhanced images, 1 otherwise",
+                Named("us-multiframe").DefaultFrames == 30 && Named("xa-cine").DefaultFrames == 30 && Named("rf-cine").DefaultFrames == 16
+                && Named("enhanced-ct").DefaultFrames == 8 && Named("enhanced-mr").DefaultFrames == 8 && Named("tomosynthesis-large").DefaultFrames == 8
+                && Named("enhanced-xa").DefaultFrames == 8 && Named("enhanced-rf").DefaultFrames == 8 && Named("ct").DefaultFrames == 1);
+            Check("A modality's objects keep its exam types, so the selection survives the change", new[] { "xa-cine", "rf-cine", "us-multiframe" }.All(id =>
+            {
+                var image = ModalityCatalog.FindObject(id).Image;
+                var modality = ModalityCatalog.Find(image.Code);
+                return image.Presets.Select(p => p.Name).SequenceEqual(modality.Presets.Select(p => p.Name));
+            }));
         }
 
         // ---------------------------------------------------------------- frames on demand
@@ -174,6 +191,92 @@ namespace DCST4.Tests
             Check("... and the padded file reads back with the same frames", FramesOf(oddBack.Dataset).Select((f, i) => f.SequenceEqual(FramesOf(odd.Dataset)[i])).All(same => same));
         }
 
+        // ---------------------------------------------------------------- the XA and RF objects
+
+        private static void TestXrayObjects()
+        {
+            Console.WriteLine("\nMulti-frame: XA and RF cine, and the Enhanced XA and XRF IODs");
+
+            // A cine run and a fluoro loop are the single-frame SOP class with the Multi-frame and Cine modules added.
+            var cineRun = First(Request(Named("xa-cine"))).Dataset;
+            var fluoro = First(Request(Named("rf-cine"))).Dataset;
+            var single = First(Request(Named("xa"))).Dataset;
+
+            Check("Cine run: the SOP class of the single-frame XA image, with Number of Frames",
+                cineRun.GetSingleValue<DicomUID>(DicomTag.SOPClassUID) == single.GetSingleValue<DicomUID>(DicomTag.SOPClassUID)
+                && cineRun.GetSingleValue<int>(DicomTag.NumberOfFrames) == Frames && !single.Contains(DicomTag.NumberOfFrames));
+            Check("Cine run: Frame Time, Frame Increment Pointer and a whole-number frame rate, 15 per second",
+                cineRun.GetString(DicomTag.FrameTime) == "66.666667" && cineRun.GetSingleValue<DicomTag>(DicomTag.FrameIncrementPointer) == DicomTag.FrameTime
+                && cineRun.GetString(DicomTag.CineRate) == "15" && cineRun.GetString(DicomTag.RecommendedDisplayFrameRate) == "15"
+                && cineRun.GetSingleValue<ushort>(DicomTag.PreferredPlaybackSequencing) == 0, cineRun.GetString(DicomTag.FrameTime));
+            Check("Cine run: Positioner Motion, which the XA Positioner module requires above one frame",
+                cineRun.GetString(DicomTag.PositionerMotion) == "STATIC" && !single.Contains(DicomTag.PositionerMotion));
+            Check("Fluoro loop: the RF SOP class at 8 frames per second", fluoro.GetSingleValue<DicomUID>(DicomTag.SOPClassUID) == DicomUID.XRayRadiofluoroscopicImageStorage
+                && fluoro.GetString(DicomTag.FrameTime) == "125" && fluoro.GetString(DicomTag.CineRate) == "8" && fluoro.GetSingleValue<int>(DicomTag.NumberOfFrames) == Frames);
+            Check("Both keep what the single-frame image has: the X-Ray Image module and the exposure",
+                cineRun.GetString(DicomTag.PixelIntensityRelationship) == single.GetString(DicomTag.PixelIntensityRelationship)
+                && cineRun.GetString(DicomTag.RadiationSetting) == single.GetString(DicomTag.RadiationSetting) && fluoro.Contains(DicomTag.Exposure));
+
+            foreach (var id in new[] { "enhanced-xa", "enhanced-rf" })
+            {
+                var image = Named(id);
+                var name = image.DisplayName;
+                var file = First(Request(image));
+                var dataset = file.Dataset;
+                var shared = dataset.GetSequence(DicomTag.SharedFunctionalGroupsSequence).Items[0];
+                var perFrame = dataset.GetSequence(DicomTag.PerFrameFunctionalGroupsSequence);
+
+                Check($"{name}: its own SOP class, the right modality and {Frames} frames in functional groups",
+                    dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID) == image.SopClass && dataset.GetString(DicomTag.Modality) == image.Code
+                    && dataset.GetSingleValue<int>(DicomTag.NumberOfFrames) == Frames && perFrame.Items.Count == Frames);
+                Check($"{name}: Image Type is DERIVED, with NONE as value 4", dataset.GetValues<string>(DicomTag.ImageType).SequenceEqual(new[] { "DERIVED", "PRIMARY", id == "enhanced-xa" ? "ANGIO" : "FLUOROSCOPY", "NONE" }),
+                    string.Join("\\", dataset.GetValues<string>(DicomTag.ImageType)));
+                Check($"{name}: one plane, named, and the rest of the Enhanced XA/XRF Image module",
+                    dataset.GetString(DicomTag.PlanesInAcquisition) == "SINGLE PLANE" && dataset.GetString(DicomTag.PlaneIdentification) == "MONOPLANE"
+                    && dataset.GetString(DicomTag.ContentQualification) == "RESEARCH" && dataset.GetString(DicomTag.PresentationLUTShape) == "IDENTITY"
+                    && dataset.GetString(DicomTag.LossyImageCompression) == "00" && dataset.Contains(DicomTag.AcquisitionDateTime)
+                    && dataset.GetString(DicomTag.PhotometricInterpretation) == "MONOCHROME2");
+                Check($"{name}: an Acquisition Context Sequence, which the IOD requires, with no items",
+                    dataset.GetSequence(DicomTag.AcquisitionContextSequence).Items.Count == 0);
+
+                var properties = shared.GetSequence(DicomTag.FramePixelDataPropertiesSequence).Items[0];
+                Check($"{name}: X-Ray Frame Pixel Data Properties, with LIN so that no intensity LUT is needed",
+                    properties.GetValues<string>(DicomTag.FrameType).SequenceEqual(dataset.GetValues<string>(DicomTag.ImageType))
+                    && properties.GetString(DicomTag.PixelIntensityRelationship) == "LIN" && properties.GetSingleValue<short>(DicomTag.PixelIntensityRelationshipSign) == 1
+                    && properties.GetString(DicomTag.GeometricalProperties) == "UNIFORM" && properties.GetString(DicomTag.ImageProcessingApplied) == "NONE");
+
+                var anatomy = shared.GetSequence(DicomTag.FrameAnatomySequence).Items[0];
+                var region = anatomy.GetSequence(DicomTag.AnatomicRegionSequence).Items[0];
+                Check($"{name}: Frame Anatomy with a SNOMED CT code of CID 4042 and an unpaired laterality",
+                    anatomy.GetString(DicomTag.FrameLaterality) == "U" && region.GetString(DicomTag.CodingSchemeDesignator) == "SCT"
+                    && region.GetString(DicomTag.CodeValue) == (id == "enhanced-xa" ? "41801008" : "69695003"), region.GetString(DicomTag.CodeMeaning));
+                Check($"{name}: Frame VOI LUT in the shared groups, where this IOD has no window of its own",
+                    shared.GetSequence(DicomTag.FrameVOILUTSequence).Items[0].Contains(DicomTag.WindowCenter) && !dataset.Contains(DicomTag.WindowCenter));
+
+                var eventUid = shared.GetSequence(DicomTag.IrradiationEventIdentificationSequence).Items[0].GetString(DicomTag.IrradiationEventUID);
+                var again = First(Request(image)).Dataset.GetSequence(DicomTag.SharedFunctionalGroupsSequence).Items[0]
+                    .GetSequence(DicomTag.IrradiationEventIdentificationSequence).Items[0].GetString(DicomTag.IrradiationEventUID);
+                Check($"{name}: an Irradiation Event UID that follows from the UID root, the same one every time",
+                    ExamValidator.IsValidUid(eventUid) && eventUid.StartsWith("2.25.", StringComparison.Ordinal) && eventUid == again, eventUid);
+
+                Check($"{name}: the frames are drawn as they are written", PixelBuffer(dataset) != null && !PixelBuffer(dataset).IsMemory);
+                Check($"{name}: each frame has a Frame Content item and nothing that belongs to a stack",
+                    perFrame.Items.Select((item, i) => item.Count() == 1 && item.GetSequence(DicomTag.FrameContentSequence).Items[0].GetString(DicomTag.FrameLabel) == "Frame " + (i + 1)
+                        && !item.Contains(DicomTag.PlanePositionSequence)).All(ok => ok));
+                Check($"{name}: no Frame of Reference, slice geometry or Dimension Organization, none of which the IOD has",
+                    !dataset.Contains(DicomTag.FrameOfReferenceUID) && !dataset.Contains(DicomTag.DimensionOrganizationSequence) && !dataset.Contains(DicomTag.DimensionIndexSequence)
+                    && !shared.Contains(DicomTag.PixelMeasuresSequence) && !shared.Contains(DicomTag.PlaneOrientationSequence)
+                    && !perFrame.Items[0].GetSequence(DicomTag.FrameContentSequence).Items[0].Contains(DicomTag.StackID));
+            }
+
+            // The same skeleton still carries the stack of an enhanced CT, which the two new IODs switch off.
+            var enhancedCt = First(Request(Named("enhanced-ct"))).Dataset;
+            var ctShared = enhancedCt.GetSequence(DicomTag.SharedFunctionalGroupsSequence).Items[0];
+            Check("Enhanced CT keeps its slice geometry and dimensions", ctShared.Contains(DicomTag.PixelMeasuresSequence) && ctShared.Contains(DicomTag.PlaneOrientationSequence)
+                && enhancedCt.Contains(DicomTag.DimensionOrganizationSequence) && enhancedCt.Contains(DicomTag.FrameOfReferenceUID)
+                && enhancedCt.GetSequence(DicomTag.PerFrameFunctionalGroupsSequence).Items[0].GetSequence(DicomTag.FrameContentSequence).Items[0].Contains(DicomTag.StackID));
+        }
+
         // ---------------------------------------------------------------- encoding one frame at a time
 
         private static void TestFrameByFrameEncoding()
@@ -189,6 +292,8 @@ namespace DCST4.Tests
                 Tuple.Create("enhanced-mr", "jpeg-lossless"),
                 Tuple.Create("tomosynthesis-large", "jpeg-lossless"),
                 Tuple.Create("tomosynthesis-large", "jpeg2000"),
+                Tuple.Create("xa-cine", "jpeg-lossless"),
+                Tuple.Create("enhanced-xa", "rle"),
             };
 
             foreach (var item in cases)

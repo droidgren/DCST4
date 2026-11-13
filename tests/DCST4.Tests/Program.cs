@@ -93,7 +93,7 @@ namespace DCST4.Tests
                 return 0;
             }
 
-            if (args.Length == 6 && args[0] == "custommix")
+            if (args.Length == 7 && args[0] == "custommix")
             {
                 return PerformanceTests.RunCustomMix(args).GetAwaiter().GetResult();
             }

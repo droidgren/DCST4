@@ -34,6 +34,7 @@ namespace DCST4.Tests
 
             await TestRoundTrip();
             await TestTomosynthesis();
+            await TestXrayObjects();
             await TestModifications();
             await TestMoveDiagnosis(closedPort);
             await TestStoreMapping(closedPort);
@@ -121,6 +122,49 @@ namespace DCST4.Tests
             Scp.ContextTable.Set(DicomUID.BreastTomosynthesisImageStorage, ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported));
             var refused = await Execute(id);
             _check("A system without the SOP class: NOT_SUPPORTED, nothing sent", Result(refused, id).Result == TestResultClass.NOT_SUPPORTED && Scp.StoreCount == 0, Show(refused));
+        }
+
+        // ---------------------------------------------------------------- the XA and RF objects in the chain
+
+        private static async Task TestXrayObjects()
+        {
+            Console.WriteLine("\nChain: XA and RF cine, Enhanced XA and Enhanced XRF");
+            var ids = new[] { "store-xa-cine", "store-rf-cine", "store-enhanced-xa", "store-enhanced-rf" };
+            var tests = ids.Select(id => TestCatalog.All.SingleOrDefault(t => t.Id == id)).ToList();
+            _check("The four store tests exist, with the other store tests and in 'all'", tests.All(t => t != null && t.Storage != null && t.Storage.Objects == 1)
+                && ids.All(id => TestCatalog.Select("all", out _).Any(t => t.Id == id)), string.Join(", ", tests.Select(t => t?.Name)));
+            _check("They are named after their objects", string.Join(" | ", tests.Select(t => t?.Name)) == "C-STORE: XA Multi-frame | C-STORE: RF Multi-frame | C-STORE: Enhanced XA | C-STORE: Enhanced XRF",
+                string.Join(" | ", tests.Select(t => t?.Name)));
+
+            Fresh();
+            var report = await Execute(string.Join(",", ids) + ",query-index,retrieve-cget,retrieve-cmove,verify-integrity");
+            _check("All four stored, found, retrieved both ways and intact", report.Results.All(r => r.Result == TestResultClass.PASS), Show(report));
+            _check("A chain row each, all four steps passed", report.Chain != null && report.Chain.Count == 4
+                && report.Chain.All(r => r.Accepted?.Result == TestResultClass.PASS && r.Indexed?.Result == TestResultClass.PASS
+                    && r.Retrievable?.Result == TestResultClass.PASS && r.Intact?.Result == TestResultClass.PASS), Show(report));
+
+            var byClass = Scp.Archive.ToDictionary(a => a.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID), a => a.Dataset);
+            _check("The mock got a cine XA and RF in the single-frame SOP classes, both multi-frame",
+                byClass.Count == 4 && byClass[DicomUID.XRayAngiographicImageStorage].GetSingleValue<int>(DicomTag.NumberOfFrames) == 8
+                && byClass[DicomUID.XRayAngiographicImageStorage].GetString(DicomTag.CineRate) == "15"
+                && byClass[DicomUID.XRayRadiofluoroscopicImageStorage].GetString(DicomTag.CineRate) == "8", string.Join(", ", byClass.Keys.Select(k => k.Name)));
+            _check("... and the two enhanced objects, with their functional groups",
+                byClass.ContainsKey(DicomUID.EnhancedXAImageStorage) && byClass.ContainsKey(DicomUID.EnhancedXRFImageStorage)
+                && byClass[DicomUID.EnhancedXAImageStorage].Contains(DicomTag.SharedFunctionalGroupsSequence)
+                && byClass[DicomUID.EnhancedXRFImageStorage].GetString(DicomTag.PlaneIdentification) == "MONOPLANE", null);
+            foreach (var pair in new[] { Tuple.Create("xa-cine", "XA Multi-frame"), Tuple.Create("enhanced-xa", "Enhanced XA") })
+            {
+                var instance = Set(report, pair.Item1, "C-GET").Instances.Single();
+                _check($"{pair.Item2}: what came back is byte-identical, and every frame matches the manifest",
+                    instance.Pixel == PixelVerdict.ByteIdentical && instance.FramesMatchManifest == true && instance.NormalizedHashMatchesManifest, instance.Pixel.ToString());
+            }
+
+            Fresh();
+            Scp.ContextTable = new ScpContextTable();
+            Scp.ContextTable.Set(DicomUID.EnhancedXAImageStorage, ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported));
+            var refused = await Execute("store-enhanced-xa,store-xa-cine");
+            _check("A system without Enhanced XA: NOT_SUPPORTED for it, and the cine run still goes",
+                Result(refused, "store-enhanced-xa").Result == TestResultClass.NOT_SUPPORTED && Result(refused, "store-xa-cine").Result == TestResultClass.PASS && Scp.StoreCount == 1, Show(refused));
         }
 
         // ---------------------------------------------------------------- acceptance: the round trip

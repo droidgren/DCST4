@@ -1,4 +1,5 @@
 using DCST4.Core.Generation.Datasets;
+using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Network;
 using DCST4.Core.Performance;
 using DCST4.Core.TestData;
@@ -91,15 +92,28 @@ namespace DCST4.Tests
         }
 
         /// <summary>
-        /// A load run with a custom mix of one large cine loop against the mock, for a check by hand of what the test run
-        /// only does small: DCST4.Tests.exe custommix &lt;rows&gt; &lt;columns&gt; &lt;frames&gt; &lt;payload MB&gt; &lt;count&gt;.
-        /// The mock keeps nothing. Prints the result, the time and the most memory the process used.
+        /// A load run with a custom mix of one large object against the mock, for a check by hand of what the test run
+        /// only does small: DCST4.Tests.exe custommix &lt;object&gt; &lt;rows&gt; &lt;columns&gt; &lt;frames&gt; &lt;payload MB&gt; &lt;count&gt;,
+        /// where the object is the id of a dataset profile, as the <c>cine</c> command takes it. The syntax follows the bit
+        /// depth: JPEG Baseline at 8 bits and JPEG Lossless above. The mock keeps nothing. Prints the result, the time and
+        /// the most memory the process used.
         /// </summary>
         public static async Task<int> RunCustomMix(string[] args)
         {
             Func<int, int> number = i => int.Parse(args[i], CultureInfo.InvariantCulture);
-            var mix = DataMix.Custom("us-multiframe", "US Multi-frame", number(1), number(2), 8, number(3), 3, DicomTransferSyntax.JPEGProcess1, "JPEG Baseline (Process 1, lossy)", number(4) * 1024L * 1024);
-            var settings = new LoadSettings { MixOverride = mix, Mix = DataMix.CustomId, Associations = 2, InstanceCount = number(5), SampleEvery = 0, WarmUpSeconds = 0 };
+            var chosen = ModalityCatalog.FindObject(args[1]);
+            if (chosen == null)
+            {
+                Console.WriteLine("Unknown object. One of: " + string.Join(", ", ModalityCatalog.All.SelectMany(ModalityCatalog.ObjectsOf).Select(o => o.DatasetProfileId)));
+                return 2;
+            }
+
+            var image = chosen.Image;
+            var lossy = image.DefaultBitDepth <= 8;
+            var syntax = lossy ? DicomTransferSyntax.JPEGProcess1 : DicomTransferSyntax.JPEGProcess14SV1;
+            var mix = DataMix.Custom(chosen.DatasetProfileId, image.DisplayName, number(2), number(3), image.DefaultBitDepth, number(4), image.SamplesPerPixel,
+                syntax, lossy ? "JPEG Baseline (Process 1, lossy)" : "JPEG Lossless", number(5) * 1024L * 1024);
+            var settings = new LoadSettings { MixOverride = mix, Mix = DataMix.CustomId, Associations = 2, InstanceCount = number(6), SampleEvery = 0, WarmUpSeconds = 0 };
             Console.WriteLine(settings.Validate(LoadMode.Load) ?? settings.DescribePlan(LoadMode.Load, "the mock SCP"));
             if (settings.Validate(LoadMode.Load) != null) return 2;
 

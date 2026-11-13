@@ -62,9 +62,13 @@ namespace DCST4.Core.Generation.Datasets
         {
             var profiles = ModalityCatalog.All.Select(m => DatasetProfile.ForImage(m.Code.ToLowerInvariant(), m)).ToList();
             profiles.Add(DatasetProfile.ForImage("us-multiframe", new UsMultiFrameProfile(), DefaultCineFrames));
+            profiles.Add(DatasetProfile.ForImage("xa-cine", new XaCineProfile(), DefaultCineFrames));
+            profiles.Add(DatasetProfile.ForImage("rf-cine", new RfCineProfile(), DefaultCineFrames));
             profiles.Add(DatasetProfile.ForImage("secondary-capture", new SecondaryCaptureProfile()));
             profiles.Add(DatasetProfile.ForImage("enhanced-ct", new EnhancedCtProfile(), DefaultCineFrames));
             profiles.Add(DatasetProfile.ForImage("enhanced-mr", new EnhancedMrProfile(), DefaultCineFrames));
+            profiles.Add(DatasetProfile.ForImage("enhanced-xa", new EnhancedXaProfile(), DefaultCineFrames));
+            profiles.Add(DatasetProfile.ForImage("enhanced-rf", new EnhancedRfProfile(), DefaultCineFrames));
             profiles.Add(DatasetProfile.ForImage("tomosynthesis-large", new BreastTomosynthesisProfile(), BreastTomosynthesisProfile.LargeFrames, includedByDefault: false));
             profiles.Add(DatasetProfile.ForObject("basic-text-sr", new BasicTextSrProfile()));
             profiles.Add(DatasetProfile.ForObject("key-object-selection", new KeyObjectProfile()));
