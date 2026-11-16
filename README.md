@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.11.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.11.1-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -1031,6 +1031,18 @@ What this means for a reader: compare a system with itself only over several run
 | Series of a Performance test, written as it runs | Next to the result files, as `DCST4-run-<start>-<test id>.csv`, and for the soak also `-windows.csv` |
 
 ## Changelog
+
+### 1.11.1
+
+New:
+
+- A Help topic, **Transfer syntaxes**, that explains all 30 syntaxes DCST4 knows: the 15 in the Transfer syntax list, by codec family, and the 15 that only the negotiation probe proposes. Each has its name, the short name on the Capabilities tab, the UID, lossless or lossy, the bit limits, the encoder and which objects it suits. A test fails if a syntax is added to the list or the probe without being described there
+- `DCST4.Tests.exe screenshots <folder>` retakes the README pictures of the app windows against the mock SCP, with every setting at its default in memory only
+
+Changes:
+
+- All README screenshots are retaken for 1.11.0, with a new one of the Transfer syntaxes topic
+- *Transfer syntax and fallback* in the Help keeps the fallback rules, and points to the new topic for the syntaxes
 
 ### 1.11.0
 
