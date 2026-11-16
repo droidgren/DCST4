@@ -200,8 +200,8 @@
                                 <TableCell><Paragraph>Which image of the modality to generate: Single frame, or a multi-frame one where DCST4 has it. US has a cine loop and Enhanced US Volume, XA a cine run and Enhanced XA, RF a fluoro loop and Enhanced XRF, CT and MR their enhanced image and MG Breast Tomosynthesis. CR, DX, PT and NM have one image each. OT is Secondary Capture, DOC an Encapsulated PDF, and SR a Basic Text SR or Enhanced SR report. DOC and SR have no pixels, so the matrix, bits, frames and private payload are greyed out, and only Implicit VR, Explicit VR and Deflated can be chosen as transfer syntax.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Frames per image</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>For a multi-frame object: how many frames each image has, 1 to 10,000. 30 for a cine loop or a cine run, 16 for a fluoro loop and 8 for the enhanced objects when the object is selected.</Paragraph></TableCell></TableRow>
-                            <TableRow><TableCell><Paragraph><Bold>Add private payload</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>Adds a large private binary value of the given size to every image. Off at every start. See below.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Private payload</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Adds a large private binary value of the given size, in MB, to every image. 0, the default, adds none, and it is 0 at every start. See below.</Paragraph></TableCell></TableRow>
                         </TableRowGroup>
                     </Table>
                     <Paragraph Style="{StaticResource H2}">Estimated size</Paragraph>
@@ -235,13 +235,13 @@
                         Some ultrasound systems send their raw data along with a cine loop, as one private value that can be
                         several times the size of the pixels. <Bold>Private payload ... MB/image</Bold>, under Frames per image, does the
                         same, to find out whether a PACS takes images with large private data and keeps it: a private
-                        sequence, (0099,1020) under the private creator DCST4 TEST, with one binary value of 1 to 2,000 MB.
+                        sequence, (0099,1020) under the private creator DCST4 TEST, with one binary value of 1 to 2,000 MB. A size of 0 adds none.
                         The value is random bytes, so it does not compress away, and it is written as it is generated,
                         without being held in memory.
                     </Paragraph>
                     <Paragraph Style="{StaticResource Note}">
-                        The box is unticked every time DCST4 starts, so that a large payload is never sent because it was on
-                        the last time. The size is remembered. Assume that a PACS cannot delete what it receives, and try a
+                        The size is set back to 0 every time DCST4 starts, so that a large payload is never sent because it
+                        was set the last time. Assume that a PACS cannot delete what it receives, and try a
                         large object against a test system first.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Running</Paragraph>

@@ -812,7 +812,7 @@ namespace DCST4.Tests
             check("Fallback is off for JPEG XL and H.264, which cannot be decoded, and on for RLE", noFallbackJxl && noFallbackH264 && vm.FallbackIsRelevant, null);
             vm.SelectedTransferSyntax = fallbackSyntax;
             check("CT: one frame, and the Frames field is off", !vm.IsMultiFrame && vm.FramesPerImage == 1, vm.FramesPerImage.ToString());
-            check("The private payload is off, at 100 MB", !vm.AddPrivatePayload && vm.PrivatePayloadMb == 100, vm.PrivatePayloadMb.ToString());
+            check("The private payload is 0, none", vm.PrivatePayloadMb == 0, vm.PrivatePayloadMb.ToString());
 
             var notified = new List<string>();
             vm.PropertyChanged += (s, e) => notified.Add(e.PropertyName);
@@ -882,8 +882,6 @@ namespace DCST4.Tests
             await measured();
             var withoutPayload = vm.EstimatedSizeText;
             vm.PrivatePayloadMb = 1;
-            check("A size that is not ticked changes nothing", vm.EstimatedSizeText == withoutPayload, vm.EstimatedSizeText);
-            vm.AddPrivatePayload = true;
             await measured();
             check("Estimated size counts the payload", withoutPayload.EndsWith(" KB", StringComparison.Ordinal) && vm.EstimatedSizeText == "about 1.0 MB", withoutPayload + " and " + vm.EstimatedSizeText);
 
@@ -899,10 +897,10 @@ namespace DCST4.Tests
                 && Core.TestData.TestPersonnummerRegistry.Default.Contains(received[0].Dataset.GetString(DicomTag.PatientID)), null);
 
             var restarted = new MainViewModel();
-            check("At the next start: the modality, the object, the frames and the size are back, and the payload is off",
+            check("At the next start: the modality, the object and the frames are back, and the payload is 0",
                 restarted.SelectedModality.Code == "US" && restarted.SelectedImageObject.DatasetProfileId == "us-multiframe" && restarted.FramesPerImage == 6
-                && restarted.PrivatePayloadMb == 1 && !restarted.AddPrivatePayload && restarted.SelectedTransferSyntax == TransferSyntaxOption.JpegBaseline,
-                restarted.SelectedModality + " " + restarted.SelectedImageObject + " " + restarted.FramesPerImage + " " + restarted.AddPrivatePayload);
+                && restarted.PrivatePayloadMb == 0 && restarted.SelectedTransferSyntax == TransferSyntaxOption.JpegBaseline,
+                restarted.SelectedModality + " " + restarted.SelectedImageObject + " " + restarted.FramesPerImage + " " + restarted.PrivatePayloadMb);
 
             // A settings file from before 1.11.0 holds the modality code and no object, which the catalog answers with
             // nothing and the view model with the modality's ordinary image, as selecting that one does.
@@ -925,14 +923,13 @@ namespace DCST4.Tests
                 await h.Execute(vm.RunCommand);
                 return Scp.AssociationCount == 0 ? string.Join("; ", h.Messages) : "sent";
             };
-            vm.PrivatePayloadMb = 0;
-            var noSize = await refused();
-            check("A payload of 0 MB is refused", noSize.Contains("at least 1 MB"), noSize);
+            vm.PrivatePayloadMb = -1;
+            var negative = await refused();
+            check("A negative payload is refused", negative.Contains("0 for none, or 1 to 2000 MB"), negative);
             vm.PrivatePayloadMb = 2001;
             var tooLarge = await refused();
             check("A payload over 2000 MB is refused", tooLarge.Contains("at most 2000 MB"), tooLarge);
-            vm.PrivatePayloadMb = 1;
-            vm.AddPrivatePayload = false;
+            vm.PrivatePayloadMb = 0;
 
             vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
             vm.Rows = 960;
@@ -973,7 +970,7 @@ namespace DCST4.Tests
             var told = new List<string>();
             p.PropertyChanged += (s, e) => told.Add(e.PropertyName);
             vm.FramesPerImage = 12;
-            vm.AddPrivatePayload = true;
+            vm.PrivatePayloadMb = 1;
             check("custom: a change on the Exam tab reaches the text and the plan", told.Contains(nameof(p.MixDescription)) && told.Contains(nameof(p.PlanText))
                 && p.MixDescription.EndsWith("12 frames, JPEG Baseline (Process 1, lossy), 1 MB private payload", StringComparison.Ordinal), p.MixDescription);
             var entry = p.Settings.ResolvedMix.Entries.Single();
@@ -1003,12 +1000,11 @@ namespace DCST4.Tests
                 try { Directory.Delete(vm.TestSuite.ResultsFolder, true); } catch (IOException) { }
             }
 
-            vm.AddPrivatePayload = false;
+            vm.PrivatePayloadMb = 0;
             p.SelectedMix = Core.Performance.DataMixCatalog.Find("ct");
             check("Back to a mix of the catalog: its own description, and nothing of the Exam tab", p.MixDescription == Core.Performance.DataMixCatalog.Find("ct").Description && p.Settings.MixOverride == null && p.Settings.ResolvedMix.Id == "ct", p.MixDescription);
 
             // The settings are shared with the sections that follow, in memory.
-            vm.PrivatePayloadMb = MainViewModel.DefaultPrivatePayloadMb;
             vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
             select("CT", "ct");
             Scp.Reset();
@@ -1858,8 +1854,7 @@ namespace DCST4.Tests
                 vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
                 vm.SelectedImageObject = Core.Generation.Modalities.ModalityCatalog.FindObject(vm.SelectedModality, "us-multiframe");
                 vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
-                vm.PrivatePayloadMb = MainViewModel.DefaultPrivatePayloadMb;
-                vm.AddPrivatePayload = true;
+                vm.PrivatePayloadMb = 100;
 
                 var content = (FrameworkElement)window.Content;
                 window.Content = null;
@@ -1877,12 +1872,12 @@ namespace DCST4.Tests
                 var all = VisualDescendants(content).OfType<FrameworkElement>().ToList();
                 var objects = all.OfType<ComboBox>().SingleOrDefault(c => System.Windows.Data.BindingOperations.GetBinding(c, ComboBox.SelectedItemProperty)?.Path.Path == nameof(vm.SelectedImageObject));
                 var frames = all.OfType<TextBox>().SingleOrDefault(t => boundTo(t, nameof(vm.FramesPerImage)));
-                var tick = all.OfType<CheckBox>().SingleOrDefault(c => boundTo(c, nameof(vm.AddPrivatePayload)));
+                var noTick = !all.OfType<CheckBox>().Any(c => System.Windows.Data.BindingOperations.GetBinding(c, System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty)?.Path.Path.Contains("Payload") == true);
                 var size = all.OfType<TextBox>().SingleOrDefault(t => boundTo(t, nameof(vm.PrivatePayloadMb)));
                 var examTabs = all.OfType<TabControl>().First(t => t.Items.OfType<TabItem>().Any(i => (string)i.Header == "Exam"));
 
-                check("Exam tab: Object, Frames per image, the payload box and its size are drawn", objects != null && frames != null && tick != null && size != null
-                    && objects.ActualHeight > 0 && frames.ActualHeight > 0 && tick.ActualHeight > 0 && size.ActualWidth > 0, null);
+                check("Exam tab: Object, Frames per image and the payload size are drawn, with no check box for the payload", objects != null && frames != null && size != null && noTick
+                    && objects.ActualHeight > 0 && frames.ActualHeight > 0 && size.ActualWidth > 0, null);
                 check("Exam tab: the Object list holds the three images of US, the cine loop selected", objects != null && objects.Items.Count == 3
                     && string.Join(" | ", objects.Items.OfType<object>().Select(o => o.ToString())) == "Single frame | Multi-frame (cine loop) | Enhanced US Volume"
                     && objects.SelectedItem?.ToString() == "Multi-frame (cine loop)", objects == null ? null : string.Join(" | ", objects.Items.OfType<object>().Select(o => o.ToString())));
@@ -1891,13 +1886,13 @@ namespace DCST4.Tests
                     var corner = element.TransformToAncestor(examTabs).Transform(new Point(0, 0));
                     return corner.X >= 0 && corner.Y >= 0 && corner.X + element.ActualWidth <= examTabs.ActualWidth && corner.Y + element.ActualHeight <= examTabs.ActualHeight;
                 };
-                check("Exam tab: they fit inside the tab at the smallest window size", objects != null && frames != null && tick != null && size != null && inside(objects) && inside(frames) && inside(tick) && inside(size),
+                check("Exam tab: they fit inside the tab at the smallest window size", objects != null && frames != null && size != null && inside(objects) && inside(frames) && inside(size),
                     examTabs.ActualWidth + " x " + examTabs.ActualHeight);
-                check("Exam tab: Frames is on for a multi-frame object and shows its 30 frames, and the size is on when the box is ticked", frames != null && frames.IsEnabled && frames.Text == "30" && size != null && size.IsEnabled && size.Text == "100", frames?.Text);
+                check("Exam tab: Frames is on for a multi-frame object and shows its 30 frames, and the payload size shows its value", frames != null && frames.IsEnabled && frames.Text == "30" && size != null && size.IsEnabled && size.Text == "100", frames?.Text);
                 vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
-                vm.AddPrivatePayload = false;
+                vm.PrivatePayloadMb = 0;
                 await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
-                check("Exam tab: with CT, Frames shows 1 and is off, and so is the size while the box is not ticked", frames != null && !frames.IsEnabled && frames.Text == "1" && size != null && !size.IsEnabled, frames?.Text);
+                check("Exam tab: with CT, Frames shows 1 and is off, and the payload size shows 0, none", frames != null && !frames.IsEnabled && frames.Text == "1" && size != null && size.IsEnabled && size.Text == "0", frames?.Text + " " + size?.Text);
                 check("Exam tab: the Object list follows the modality", objects != null && objects.Items.Count == 2 && objects.SelectedItem?.ToString() == "Single frame", objects?.SelectedItem?.ToString());
                 vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CR");
                 await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
@@ -1958,7 +1953,7 @@ namespace DCST4.Tests
                     vm.SelectedTransferSyntax = TransferSyntaxOption.JpegBaseline;
                     vm.SendImages = true;
                     vm.SaveImages = false;
-                    vm.AddPrivatePayload = true;
+                    vm.PrivatePayloadMb = 100;
                     var waited = Stopwatch.StartNew();
                     while (vm.EstimatedSizeText == "calculating..." && waited.Elapsed < TimeSpan.FromSeconds(30)) await Task.Delay(50);
                     await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);

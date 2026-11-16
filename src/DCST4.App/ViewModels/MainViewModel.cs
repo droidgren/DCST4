@@ -243,21 +243,15 @@ namespace DCST4.ViewModels
             }
         }
 
-        private bool _addPrivatePayload;
+        private int _privatePayloadMb;
         /// <summary>
-        /// Adds a private binary value to every image. Never saved: it is off at each start, so that a payload of hundreds of
-        /// megabytes is not sent because it was on the last time.
+        /// The size of a private binary value added to every image, in megabytes. 0, the default, adds none. Never saved: it is
+        /// 0 at each start, so that a payload of hundreds of megabytes is not sent because it was set the last time.
         /// </summary>
-        public bool AddPrivatePayload { get => _addPrivatePayload; set { _addPrivatePayload = value; OnPropertyChanged(); RefreshSizeEstimate(); } }
+        public int PrivatePayloadMb { get => _privatePayloadMb; set { _privatePayloadMb = value; OnPropertyChanged(); RefreshSizeEstimate(); } }
 
-        private int _privatePayloadMb = DefaultPrivatePayloadMb;
-        /// <summary>The size of the payload in megabytes per image. Used when <see cref="AddPrivatePayload"/> is on.</summary>
-        public int PrivatePayloadMb { get => _privatePayloadMb; set { _privatePayloadMb = value; OnPropertyChanged(); Settings.Default.PrivatePayloadMb = value; RefreshSizeEstimate(); } }
-
-        public const int DefaultPrivatePayloadMb = 100;
-
-        /// <summary>The payload of the request: 0 when it is off, and the entered size as it is when on, so that the validator names a bad one.</summary>
-        private long PrivatePayloadBytes => _addPrivatePayload && HasPixelData ? _privatePayloadMb * PrivatePayload.BytesPerMegabyte : 0;
+        /// <summary>The payload of the request: none for 0 or a negative size, which the run refuses, and the entered size as it is otherwise, so that the validator names one too large.</summary>
+        private long PrivatePayloadBytes => _privatePayloadMb > 0 && HasPixelData ? _privatePayloadMb * PrivatePayload.BytesPerMegabyte : 0;
 
         private ExamPreset _selectedPreset;
         public ExamPreset SelectedPreset
@@ -804,8 +798,7 @@ namespace DCST4.ViewModels
             SelectedImageObject = ModalityCatalog.FindObject(_selectedModality, savedObject) ?? ImageObjects[0];
             SelectedPreset = Generating.Presets.FirstOrDefault(p => p.Name == s.ExamType) ?? Generating.Presets[0];
             _framesPerImage = !IsMultiFrame ? 1 : s.FramesPerImage > 0 ? s.FramesPerImage : Generating.DefaultFrames;
-            _privatePayloadMb = s.PrivatePayloadMb > 0 ? s.PrivatePayloadMb : DefaultPrivatePayloadMb;
-            _addPrivatePayload = false;
+            _privatePayloadMb = 0;
 
             _seriesCount = Math.Max(1, s.SeriesCount);
             // 0 means never set: use the modality's and exam type's own defaults.
@@ -1225,7 +1218,7 @@ namespace DCST4.ViewModels
             if (request.Identity != null && request.Identity.StudyDateTimeIsAuto) request.Identity.StudyDateTime = DateTime.Now;
             if (request.Identity == null && IdentityMessage != null) problems.Add(IdentityMessage);
             else problems.AddRange(ExamValidator.Validate(request));
-            if (_addPrivatePayload && _privatePayloadMb < 1) problems.Add("The private payload must be at least 1 MB. Untick Add private payload to send none.");
+            if (_privatePayloadMb < 0 && HasPixelData) problems.Add($"The private payload must be 0 for none, or 1 to {PrivatePayload.MaxMegabytes} MB.");
             if (CompressionProblem != null) problems.Add(CompressionProblem);
             if (problems.Count == 0) problems.AddRange(ExamValidator.SyntaxProblems(request, options.TransferSyntax));
             var optionsProblem = options.Validate();

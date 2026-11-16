@@ -118,7 +118,7 @@ namespace DCST4.Tests
             vm.SaveImages = false;
             vm.SaveFolder = string.Empty;
             vm.AllowFallback = false;
-            vm.AddPrivatePayload = false;
+            vm.PrivatePayloadMb = 0;
             vm.BurnInText = false;
             vm.NewValuesAfterRun = false;
             vm.MinAge = 0;
