@@ -185,6 +185,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
@@ -240,16 +241,40 @@
                             <Label Grid.Row="5" Content="Object:"/>
                             <ComboBox Grid.Row="5" Grid.Column="1" ItemsSource="{Binding ImageObjects}" SelectedItem="{Binding SelectedImageObject, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="Which image of the modality to generate, named after its IOD. US, XA, RF, CT, MR and MG also have multi-frame images. OT is Secondary Capture, DOC an Encapsulated PDF, and SR a Basic Text SR or Enhanced SR report. DOC and SR have no pixels, so the matrix, bits, frames and private payload do not apply to them.&#x0a;&#x0a;Default: the modality's ordinary image."/>
-                            <Label Grid.Row="5" Grid.Column="3" Content="Frames per image:"/>
-                            <TextBox Grid.Row="5" Grid.Column="4" Text="{Binding FramesPerImage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsMultiFrame}" VerticalAlignment="Center" Margin="0,2"
+                            <Label Grid.Row="6" Grid.Column="3" Content="Frames per image:"/>
+                            <TextBox Grid.Row="6" Grid.Column="4" Text="{Binding FramesPerImage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsMultiFrame}" VerticalAlignment="Center" Margin="0,2"
                                      ToolTip="How many frames each image has, 1 to 10000. Only for a multi-frame object: Ultrasound Multi-frame, Enhanced CT, Enhanced MR and Breast Tomosynthesis. An ultrasound cine loop has 30 frames per second.&#x0a;&#x0a;Without compression an image holds less than 4 GB of pixels. A long cine loop needs JPEG Baseline or JPEG Lossless, and its frames are then encoded before the image is sent.&#x0a;&#x0a;Default: 30 for a cine loop, 8 for the others." ToolTipService.ShowOnDisabled="True"/>
-                            <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="5" Orientation="Horizontal" Margin="5,6,0,0" IsEnabled="{Binding HasPixelData}">
-                                <CheckBox Content="Add private payload of" IsChecked="{Binding AddPrivatePayload, Mode=TwoWay}" VerticalAlignment="Center"
+                            <Label Grid.Row="6" Content="Realistic images:" Visibility="{Binding RealismApplies, Converter={StaticResource BoolToVisibility}}"/>
+                            <ComboBox Grid.Row="6" Grid.Column="1" ItemsSource="{Binding RealismLevelChoices}" SelectedItem="{Binding SelectedRealism, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
+                                      Visibility="{Binding RealismApplies, Converter={StaticResource BoolToVisibility}}">
+                                <ComboBox.ToolTip>
+                                    <TextBlock MaxWidth="420" TextWrapping="Wrap">
+                                        <Run Text="Off draws the flat test pattern, which compresses far better than a real image. Low, Normal and High draw the modality's shape and tissue texture under the overlays, with the modality's own noise: Normal is about what the modality gives, Low half and High twice. For this modality:"/>
+                                        <Run Text="{Binding RealismDescription, Mode=OneWay}"/><Run Text="."/>
+                                        <LineBreak/><LineBreak/>
+                                        <Run Text="The same setting as in File &gt; Settings &gt; Images, which the Tests and Performance tabs also use. Not shown for Secondary Capture, documents and reports, which are always flat."/>
+                                        <LineBreak/><LineBreak/>
+                                        <Run Text="Default: Off."/>
+                                    </TextBlock>
+                                </ComboBox.ToolTip>
+                            </ComboBox>
+
+                            <Label Grid.Row="5" Grid.Column="3" Content="{Binding CompressionLabel}" Visibility="{Binding CompressionVisible, Converter={StaticResource BoolToVisibility}}"/>
+                            <DockPanel Grid.Row="5" Grid.Column="4" Visibility="{Binding CompressionVisible, Converter={StaticResource BoolToVisibility}}"
+                                       ToolTip="How hard the selected lossy syntax compresses, in its encoder's own unit: the JPEG quality, 1 to 100, for JPEG Baseline and Extended; the JPEG 2000 ratio, 2 to 200 as N:1; or the H.264 bitrate, 0.1 to 50 Mbit/s. Empty puts the encoder's default back. A value other than the default is written in Derivation Description.&#x0a;&#x0a;HTJ2K (lossy) has no setting, since its encoder does not reach a ratio it is asked for. JPEG XL is written lossless by DCST4.&#x0a;&#x0a;The same settings as in File &gt; Settings &gt; Images, which the Tests and Performance tabs also use.&#x0a;&#x0a;Default: the encoder's, JPEG quality 90, JPEG 2000 20:1, H.264 from the picture size and frame rate.">
+                                <TextBox DockPanel.Dock="Left" Width="48" Text="{Binding CompressionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,6,2"
+                                         Visibility="{Binding CompressionEditable, Converter={StaticResource BoolToVisibility}}"/>
+                                <TextBlock Text="{Binding CompressionHint}" Foreground="#FF505050" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            </DockPanel>
+
+                            <Label Grid.Row="7" Grid.Column="3" Content="Private payload:" IsEnabled="{Binding HasPixelData}" ToolTip="Adds a private sequence with one large binary value to every image, as some ultrasound systems do with their raw data. The value is random bytes under the private creator DCST4 TEST, in (0099,1020). Use it to find out whether a PACS takes images with large private data.&#x0a;&#x0a;It is off every time DCST4 starts. The size is remembered.&#x0a;&#x0a;Default: off."/>
+                            <DockPanel Grid.Row="7" Grid.Column="4" IsEnabled="{Binding HasPixelData}">
+                                <CheckBox DockPanel.Dock="Left" Margin="0,4,4,0" IsChecked="{Binding AddPrivatePayload, Mode=TwoWay}" VerticalAlignment="Center"
                                           ToolTip="Adds a private sequence with one large binary value to every image, as some ultrasound systems do with their raw data. The value is random bytes under the private creator DCST4 TEST, in (0099,1020). Use it to find out whether a PACS takes images with large private data.&#x0a;&#x0a;It is off every time DCST4 starts. The size is remembered.&#x0a;&#x0a;Default: off."/>
-                                <TextBox Text="{Binding PrivatePayloadMb, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding AddPrivatePayload}" Width="50" Margin="6,0,4,0" VerticalAlignment="Center"
+                                <TextBox DockPanel.Dock="Left" Text="{Binding PrivatePayloadMb, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding AddPrivatePayload}" Width="36" Margin="0,2,6,2" VerticalAlignment="Center"
                                          ToolTip="The size of the private payload in megabytes, for each image: 1 to 2000.&#x0a;&#x0a;Default: 100." ToolTipService.ShowOnDisabled="True"/>
-                                <TextBlock Text="MB per image" VerticalAlignment="Center"/>
-                            </StackPanel>
+                                <TextBlock Text="MB/image" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            </DockPanel>
                         </Grid>
                     </TabItem>
 

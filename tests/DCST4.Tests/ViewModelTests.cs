@@ -160,6 +160,85 @@ namespace DCST4.Tests
                 settings["TestPatientNaming"] = "RegistrySwedishName";
                 vm.ProfileName = "Something";
 
+                // ------------------------------------------------ Settings > Images, read at each run
+                // Settings.Default reads the real user.config, so the defaults are read from the declarations and then set.
+                Func<string, string> declared = name => settings.Properties[name]?.DefaultValue as string;
+                check("Images: by default flat and at the encoders' defaults", declared("RealismLevel") == "Off" && declared("JpegQuality") == "0" && declared("Jpeg2000Ratio") == "0"
+                    && declared("JpegLsNear") == "0" && declared("H264Mbps") == string.Empty, declared("RealismLevel"));
+                settings["RealismLevel"] = "Off";
+                settings["JpegQuality"] = 0;
+                settings["Jpeg2000Ratio"] = 0;
+                settings["JpegLsNear"] = 0;
+                settings["H264Mbps"] = string.Empty;
+                check("Images: at the defaults, nothing is passed on", vm.Realism == Core.Generation.Realism.RealismLevel.Off && vm.Lossy == null && vm.SelectedRealism == Core.Generation.Realism.RealismLevel.Off, null);
+                settings["RealismLevel"] = "Normal";
+                settings["JpegQuality"] = 75;
+                settings["Jpeg2000Ratio"] = 12;
+                settings["H264Mbps"] = "2,5";
+                var told = new List<string>();
+                vm.PropertyChanged += (s, e) => told.Add(e.PropertyName);
+                vm.ImageSettingsChanged();
+                var testOptions = vm.BuildTestRunOptions();
+                check("Images: the level and the values reach the Tests and Performance tabs", testOptions.Realism == Core.Generation.Realism.RealismLevel.Normal
+                    && testOptions.Lossy.JpegQuality == 75 && testOptions.Lossy.Jpeg2000Ratio == 12 && testOptions.Lossy.JpegLsNear == null && testOptions.Lossy.H264Mbps == 2.5, testOptions.Lossy?.Describe());
+                check("Images: the Exam tab is told after the dialog", told.Contains(nameof(vm.SelectedRealism)) && told.Contains(nameof(vm.CompressionText)) && vm.SelectedRealism == Core.Generation.Realism.RealismLevel.Normal, string.Join(",", told));
+                settings["H264Mbps"] = "fast";
+                settings["Jpeg2000Ratio"] = 0;
+                settings["JpegQuality"] = 0;
+                settings["RealismLevel"] = "Extreme";
+                check("Images: unreadable saved values count as the defaults", vm.Lossy == null && vm.Realism == Core.Generation.Realism.RealismLevel.Off, vm.Lossy?.Describe());
+                settings["H264Mbps"] = string.Empty;
+
+                // ------------------------------------------------ the Exam tab's Compression box and Realistic images list
+                vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
+                check("Compression: not shown for an uncompressed syntax", !vm.CompressionVisible, null);
+                vm.SelectedTransferSyntax = TransferSyntaxOption.JpegBaseline;
+                check("Compression: JPEG Baseline shows the encoder's quality, 90, as the default", vm.CompressionVisible && vm.CompressionEditable && vm.CompressionText == "90"
+                    && vm.CompressionLabel == "JPEG quality:" && vm.CompressionHint == "(default)", vm.CompressionText + " " + vm.CompressionHint);
+                vm.CompressionText = "75";
+                check("Compression: typing 75 sets the shared JPEG quality, which the Tests tab also gets", (int)settings["JpegQuality"] == 75 && vm.BuildTestRunOptions().Lossy?.JpegQuality == 75
+                    && vm.CompressionHint == string.Empty, vm.CompressionHint);
+                vm.SelectedTransferSyntax = TransferSyntaxOption.JpegExtended;
+                check("Compression: JPEG Extended shares the JPEG quality", vm.CompressionText == "75", vm.CompressionText);
+                vm.CompressionText = string.Empty;
+                check("Compression: emptied, the default is back and shown", (int)settings["JpegQuality"] == 0 && vm.CompressionText == "90" && vm.CompressionHint == "(default)", vm.CompressionText);
+                vm.SelectedTransferSyntax = TransferSyntaxOption.Jpeg2000;
+                check("Compression: JPEG 2000 (lossy) shows its ratio, 20 by default", vm.CompressionEditable && vm.CompressionText == "20" && vm.CompressionHint == ":1 (default)" && vm.CompressionLabel == "JPEG 2000 ratio:", vm.CompressionText + " " + vm.CompressionHint);
+                vm.CompressionText = "10";
+                check("Compression: typing 10 sets the JPEG 2000 ratio", (int)settings["Jpeg2000Ratio"] == 10 && vm.Lossy?.Jpeg2000Ratio == 10, null);
+                vm.SelectedTransferSyntax = TransferSyntaxOption.H264HighProfile;
+                check("Compression: H.264 is empty by default, with its unit", vm.CompressionEditable && vm.CompressionText == string.Empty && vm.CompressionHint == "(auto)" && vm.CompressionLabel == "H.264 Mbit/s:", vm.CompressionHint);
+                vm.CompressionText = "2.5";
+                check("Compression: typing 2.5 sets the H.264 bitrate", (string)settings["H264Mbps"] == "2.5" && vm.Lossy?.H264Mbps == 2.5, (string)settings["H264Mbps"]);
+                vm.SelectedTransferSyntax = TransferSyntaxOption.Htj2k;
+                var htj2k = vm.CompressionVisible && !vm.CompressionEditable && vm.CompressionHint == "no setting" && vm.CompressionLabel == "Compression:";
+                vm.SelectedTransferSyntax = TransferSyntaxOption.JpegXl;
+                check("Compression: HTJ2K (lossy) and JPEG XL say why there is no box", htj2k && vm.CompressionVisible && !vm.CompressionEditable && vm.CompressionHint == "written lossless", vm.CompressionHint);
+                vm.SelectedTransferSyntax = TransferSyntaxOption.JpegBaseline;
+                vm.CompressionText = "abc";
+                check("Compression: text that is no value is kept in the box and not saved", vm.CompressionText == "abc" && (int)settings["JpegQuality"] == 0, null);
+                h.Messages.Clear();
+                var storesBefore = Scp.StoreCount;
+                await h.Execute(vm.RunCommand);
+                check("Compression: a run is refused with a message while it is there", h.Messages.Any(m => m.Contains("JPEG quality must be")) && Scp.StoreCount == storesBefore, string.Join("; ", h.Messages));
+                vm.SelectedTransferSyntax = TransferSyntaxOption.JpegExtended;
+                check("Compression: another syntax drops the bad text", vm.CompressionText == "90" && vm.CompressionProblem == null, vm.CompressionText);
+                vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
+
+                vm.SelectedRealism = Core.Generation.Realism.RealismLevel.Low;
+                check("Realistic images: the list sets the shared level", (string)settings["RealismLevel"] == "Low" && vm.BuildTestRunOptions().Realism == Core.Generation.Realism.RealismLevel.Low, (string)settings["RealismLevel"]);
+                var applies = new List<string>();
+                foreach (var code in new[] { "CT", "US", "MR", "OT", "DOC", "SR" })
+                {
+                    vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find(code);
+                    if (vm.RealismApplies) applies.Add(code);
+                }
+                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
+                check("Realistic images: shown for the imaging modalities, not for OT, DOC and SR", string.Join(",", applies) == "CT,US,MR" && vm.RealismDescription.Contains("Speckle"), string.Join(",", applies));
+                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
+                settings["RealismLevel"] = "High";
+                settings["JpegLsNear"] = 9;
+
                 h.ConfirmAnswer = false;
                 var savesBefore = h.Saves;
                 vm.ResetSettings();
@@ -175,6 +254,7 @@ namespace DCST4.Tests
                     && vm.TestSuite.SelectedStoreSyntax == vm.TestSuite.StoreSyntaxChoices[0] && vm.TestSuite.Choices.All(c => !c.IsSelected), vm.TestSuite.ResultsFolder);
                 check("Confirmed: the Performance tab is the defaults", vm.Performance.SelectedMode == vm.Performance.Modes[0] && vm.Performance.Associations == Core.Performance.LoadSettings.DefaultAssociations, vm.Performance.Associations.ToString());
                 check("Confirmed: the exam and File > Settings are the defaults", vm.SelectedModality.Code == "CT" && vm.SeriesCount == 1 && !vm.BurnInText && (string)settings["TestPatientNaming"] == "MarkedTestName" && (int)settings["ResponseTimeoutSeconds"] == 60, (string)settings["TestPatientNaming"]);
+                check("Confirmed: Settings > Images is the defaults", (string)settings["RealismLevel"] == "Off" && (int)settings["JpegLsNear"] == 0 && vm.Lossy == null && vm.Realism == Core.Generation.Realism.RealismLevel.Off, (string)settings["RealismLevel"]);
                 check("Confirmed: the comparison threshold is the default", thresholdBefore == "25" && vm.Comparison.ThresholdText == "10" && (double)settings["CompareThresholdPercent"] == 10, vm.Comparison.ThresholdText);
                 check("Confirmed: only the HTML report is written, and nothing is deleted", !vm.WriteResultJson && !vm.WriteResultCsv && vm.WriteResultHtml && !vm.WriteResultSeries && vm.ResultsKeepDays == 0
                     && !(bool)settings["WriteResultJson"] && !(bool)settings["WriteResultCsv"] && (bool)settings["WriteResultHtml"] && !(bool)settings["WriteResultSeries"] && (int)settings["ResultsKeepDays"] == 0, null);
@@ -1057,7 +1137,7 @@ namespace DCST4.Tests
             help.UpdateLayout();
             try
             {
-                check("All the topics are listed", help.Topics.Count == 22 && help.Topics.Any(t => t.Title == "Limits and faults") && help.Topics.Any(t => t.Title == "Performance") && help.Topics.Any(t => t.Title == "Reports and comparison")
+                check("All the topics are listed", help.Topics.Count == 23 && help.Topics.Any(t => t.Title == "Realistic images and lossy compression") && help.Topics.Any(t => t.Title == "Limits and faults") && help.Topics.Any(t => t.Title == "Performance") && help.Topics.Any(t => t.Title == "Reports and comparison")
                     && help.Topics.Any(t => t.Title == "Transfer syntaxes"), help.Topics.Count.ToString());
                 check("Topic titles are unique", help.Topics.Select(t => t.Title).Distinct().Count() == help.Topics.Count, null);
 
@@ -1822,8 +1902,47 @@ namespace DCST4.Tests
                 vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CR");
                 await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
                 check("Exam tab: a modality with one object shows that one", objects != null && objects.Items.Count == 1 && objects.SelectedItem?.ToString() == "Single frame", objects?.SelectedItem?.ToString());
+
+                // Realistic images and the Compression box, both shown with CR in JPEG Baseline.
+                var syntaxBefore = vm.SelectedTransferSyntax;
+                vm.SelectedTransferSyntax = TransferSyntaxOption.JpegBaseline;
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+                var drawn = VisualDescendants(content).OfType<FrameworkElement>().ToList();
+                var realism = drawn.OfType<ComboBox>().SingleOrDefault(c => System.Windows.Data.BindingOperations.GetBinding(c, ComboBox.SelectedItemProperty)?.Path.Path == nameof(vm.SelectedRealism));
+                var compression = drawn.OfType<TextBox>().SingleOrDefault(t => boundTo(t, nameof(vm.CompressionText)));
+                var hint = drawn.OfType<TextBlock>().SingleOrDefault(t => System.Windows.Data.BindingOperations.GetBinding(t, TextBlock.TextProperty)?.Path.Path == nameof(vm.CompressionHint));
+                // The window is not shown, so IsVisible is false everywhere: what decides is the Visibility of the element and its parents.
+                Func<FrameworkElement, bool> shown = element =>
+                {
+                    for (DependencyObject at = element; at != null && at != examTabs; at = VisualTreeHelper.GetParent(at))
+                    {
+                        if (at is UIElement ui && ui.Visibility != Visibility.Visible) return false;
+                    }
+                    return element.ActualWidth > 0 && element.ActualHeight > 0;
+                };
+                Func<TextBlock, double> needed = block =>
+                {
+                    block.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    return block.DesiredSize.Width;
+                };
+                // The longest hint beside the box is that of JPEG 2000.
+                vm.SelectedTransferSyntax = TransferSyntaxOption.Jpeg2000;
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+                var hintNeeds = hint == null ? 0 : needed(hint);
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+                check("Exam tab: Realistic images and the Compression box are drawn and fit at the smallest window size", realism != null && compression != null && hint != null && shown(realism) && shown(compression)
+                    && inside(realism) && inside(compression) && inside(hint) && hint.ActualWidth + 0.5 >= hintNeeds,
+                    realism == null || compression == null || hint == null ? "not found" : $"{examTabs.ActualWidth} x {examTabs.ActualHeight}, hint {hint.ActualWidth:0} of {hintNeeds:0}");
+                check("Exam tab: the Compression box shows the JPEG 2000 ratio", compression != null && compression.Text == vm.CompressionText && compression.Text.Length > 0, compression?.Text);
+                vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
+                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("OT");
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+                check("Exam tab: neither is shown for Secondary Capture in Explicit VR", realism != null && compression != null && !shown(realism) && !shown(compression), null);
+                vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CR");
+                vm.SelectedTransferSyntax = syntaxBefore;
+
                 var problems = listener.Errors.Where(e => e.Contains("FramesPerImage") || e.Contains("IsMultiFrame") || e.Contains("PrivatePayload") || e.Contains("MixDescription")
-                    || e.Contains("ImageObject")).ToList();
+                    || e.Contains("ImageObject") || e.Contains("Realism") || e.Contains("Compression")).ToList();
                 check("Exam tab: every new binding resolves", problems.Count == 0, string.Join("\n", problems));
 
                 if (pngPath != null)

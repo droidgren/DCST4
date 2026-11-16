@@ -48,24 +48,26 @@ namespace DCST4.Core.Codecs.Video
 
         /// <summary>
         /// Encodes the frames, which <paramref name="rgbFrame"/> gives one at a time as 8-bit RGB, interleaved, row by row.
-        /// Returns the MP4 file. <paramref name="frameEncoded"/> is told the frames done and the total.
+        /// Returns the MP4 file. <paramref name="frameEncoded"/> is told the frames done and the total. <paramref name="bitrate"/>
+        /// is the average in bit/s. Null works it out from the picture size and rate.
         /// </summary>
         public static byte[] EncodeMp4(int columns, int rows, int frames, double framesPerSecond, Func<int, byte[]> rgbFrame,
-            CancellationToken token = default(CancellationToken), Action<int, int> frameEncoded = null)
+            CancellationToken token = default(CancellationToken), Action<int, int> frameEncoded = null, int? bitrate = null)
         {
             var problem = LimitProblem(columns, rows, framesPerSecond);
             if (problem != null) throw new ArgumentException(problem);
             if (frames < 1) throw new ArgumentOutOfRangeException(nameof(frames));
 
             var rateNumerator = (int)Math.Round(framesPerSecond * FrameRateDenominator);
-            var bitrate = (int)Math.Max(MinBitrate, Math.Min(MaxBitrate, (double)columns * rows * framesPerSecond * BitsPerPixel));
+            if (bitrate <= 0 || bitrate > MaxBitrate) throw new ArgumentOutOfRangeException(nameof(bitrate), $"The H.264 bitrate must be above 0 and at most {MaxBitrate / 1000000} Mbit/s.");
+            var averageBitrate = bitrate ?? (int)Math.Max(MinBitrate, Math.Min(MaxBitrate, (double)columns * rows * framesPerSecond * BitsPerPixel));
             var path = TempFile();
 
             MediaFoundation.Check(MediaFoundation.MFStartup(MediaFoundation.Version, MediaFoundation.StartupLite), "start");
             IMFSinkWriter writer = null;
             try
             {
-                writer = CreateWriter(path, columns, rows, rateNumerator, bitrate, out var stream);
+                writer = CreateWriter(path, columns, rows, rateNumerator, averageBitrate, out var stream);
                 writer.BeginWriting();
 
                 var nv12 = new byte[columns * rows * 3 / 2];

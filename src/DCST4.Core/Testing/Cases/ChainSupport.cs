@@ -71,6 +71,8 @@ namespace DCST4.Core.Testing.Cases
                 TransferSyntax = syntax,
                 CharacterSet = characterSet,
                 EdgeCases = edgeCases,
+                Realism = context.Session.Options.Realism,
+                Lossy = context.Session.Options.Lossy,
             };
 
         /// <summary>Sends a source and keeps what was sent in <paramref name="folder"/>.</summary>

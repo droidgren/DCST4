@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DCST4.Core.Generation.Realism;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -26,6 +27,8 @@ namespace DCST4.Core.Generation
         public int SamplesPerPixel { get; set; } = 1;
         /// <summary>Greater than 0: drawn as a binary strip, since frames at the same distance from the middle would otherwise be identical.</summary>
         public int FrameNumber { get; set; }
+        /// <summary>Null, or a level of Off, draws the flat test pattern.</summary>
+        public RealismSpec Realism { get; set; }
     }
 
     public sealed class RenderedPixels
@@ -46,6 +49,8 @@ namespace DCST4.Core.Generation
 
         public static RenderedPixels Render(PixelRenderSpec spec)
         {
+            if (spec.Realism?.Profile != null && spec.Realism.Level != RealismLevel.Off) return RenderRealistic(spec);
+
             using (var bitmap = new Bitmap(spec.Columns, spec.Rows, PixelFormat.Format24bppRgb))
             {
                 using (var g = Graphics.FromImage(bitmap))
@@ -63,6 +68,44 @@ namespace DCST4.Core.Generation
                     if (spec.FrameNumber > 0) DrawFrameNumber(g, spec);
                 }
                 return spec.SamplesPerPixel > 1 ? ToRgb(bitmap, spec) : ToPixels(bitmap, spec);
+            }
+        }
+
+        /// <summary>
+        /// The overlays are drawn alone, on a transparent bitmap, in the order the flat pattern draws them. The composer puts
+        /// them over the realistic image.
+        /// </summary>
+        private static RenderedPixels RenderRealistic(PixelRenderSpec spec)
+        {
+            using (var bitmap = new Bitmap(spec.Columns, spec.Rows, PixelFormat.Format32bppArgb))
+            {
+                using (var g = Graphics.FromImage(bitmap))
+                {
+                    g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    g.Clear(Color.Transparent);
+
+                    DrawGrayscaleBar(g, spec);
+                    if (spec.SamplesPerPixel > 1) DrawColorPatches(g, spec);
+                    DrawWatermark(g, spec);
+                    DrawTextBlock(g, spec);
+                    if (spec.FrameNumber > 0) DrawFrameNumber(g, spec);
+                }
+
+                var overlay = new byte[spec.Rows * spec.Columns * 4];
+                var locked = bitmap.LockBits(new Rectangle(0, 0, spec.Columns, spec.Rows), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                try
+                {
+                    for (var y = 0; y < spec.Rows; y++)
+                    {
+                        Marshal.Copy(IntPtr.Add(locked.Scan0, y * locked.Stride), overlay, y * spec.Columns * 4, spec.Columns * 4);
+                    }
+                }
+                finally
+                {
+                    bitmap.UnlockBits(locked);
+                }
+                return RealisticComposer.Render(spec, overlay);
             }
         }
 

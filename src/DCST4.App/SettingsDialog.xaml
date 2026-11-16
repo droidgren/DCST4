@@ -81,6 +81,60 @@
                 </StackPanel>
             </TabItem>
 
+            <TabItem Header="Images" x:Name="ImagesTab">
+                <StackPanel Margin="5">
+                    <DockPanel>
+                        <Label DockPanel.Dock="Left" Content="Realistic images:" Width="200"/>
+                        <ComboBox x:Name="RealismLevelBox" SelectedValuePath="Tag" HorizontalAlignment="Left" MinWidth="200" VerticalAlignment="Center"
+                                  ToolTip="Off draws the flat test pattern, which compresses far better than a real image. Low, Normal and High draw the modality's shape and tissue texture under the overlays, and add the modality's own noise: Normal is about what the modality gives, Low half as much and High twice. The TEST IMAGE watermark, the text box and the gray bar stay on top, without noise. Applies to Generate &amp; Send, the Tests tab and the Performance tab.&#x0a;&#x0a;Default: Off.">
+                            <ComboBoxItem Tag="Off" Content="Off, the flat test pattern (default)"/>
+                            <ComboBoxItem Tag="Low" Content="Low noise"/>
+                            <ComboBoxItem Tag="Normal" Content="Normal noise"/>
+                            <ComboBoxItem Tag="High" Content="High noise"/>
+                        </ComboBox>
+                    </DockPanel>
+                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#FF505050"
+                               Text="For file sizes and compression ratios like those of real images. US: speckle in a sector. CR, DX and MG: quantum noise. XA and RF: quantum noise in a round field. CT: noise in HU set by the kernel, in a round field of view, opening in a soft-tissue window. MR: Rician noise. PT and NM: counting noise. In a cine loop part of the noise stays from frame to frame. Secondary Capture and Segmentation are always flat. The noise follows from the UIDs, so the same object is drawn the same way each time."/>
+
+                    <TextBlock Margin="0,14,0,4" FontWeight="SemiBold" Text="Lossy compression"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="200"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Label Grid.Row="0" Content="JPEG Baseline and Extended quality:"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" x:Name="JpegQualityBox" VerticalAlignment="Center" Margin="0,2"
+                                 ToolTip="The JPEG quality factor, 1 to 100. Higher is better and larger. Empty uses the encoder's default.&#x0a;&#x0a;Default: empty, which is quality 90."/>
+                        <Label Grid.Row="0" Grid.Column="2" Content="1-100, empty = default (90)"/>
+
+                        <Label Grid.Row="1" Content="JPEG 2000 (lossy) ratio:"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" x:Name="Jpeg2000RatioBox" VerticalAlignment="Center" Margin="0,2"
+                                 ToolTip="The compression ratio the encoder aims at, N for N:1, 2 to 200. Lossy Image Compression Ratio in the image says what it reached.&#x0a;&#x0a;Default: empty, which is 20:1."/>
+                        <Label Grid.Row="1" Grid.Column="2" Content=":1, 2-200, empty = default (20:1)"/>
+
+                        <Label Grid.Row="2" Content="JPEG-LS Near-Lossless NEAR:"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" x:Name="JpegLsNearBox" VerticalAlignment="Center" Margin="0,2"
+                                 ToolTip="The largest difference allowed in a sample, 1 to 255. It is held to half the largest value of the bit depth, 127 for 8 bits.&#x0a;&#x0a;Default: empty, which is 3."/>
+                        <Label Grid.Row="2" Grid.Column="2" Content="1-255, empty = default (3)"/>
+
+                        <Label Grid.Row="3" Content="H.264 bitrate:"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" x:Name="H264MbpsBox" VerticalAlignment="Center" Margin="0,2"
+                                 ToolTip="The average bitrate of the video, 0.1 to 50 Mbit/s.&#x0a;&#x0a;Default: empty, which is 0.2 bits per pixel and frame, at least 1 Mbit/s."/>
+                        <Label Grid.Row="3" Grid.Column="2" Content="Mbit/s, 0.1-50, empty = from the size and frame rate"/>
+                    </Grid>
+                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#FF505050"
+                               Text="Each value applies to its own transfer syntax only, wherever images are made: Generate &amp; Send, the Tests tab and the Performance tab. A value other than the default is written in Derivation Description. HTJ2K lossy has no setting, since its encoder does not reach a ratio it is asked for, and JPEG XL has none since DCST4 writes it lossless."/>
+                </StackPanel>
+            </TabItem>
+
             <TabItem Header="Additional tags">
                 <DockPanel Margin="5">
                     <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Common tags"/>

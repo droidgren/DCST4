@@ -124,6 +124,8 @@ namespace DCST4.Cli
             {
                 Seed = arguments.Seed,
                 SyntaxOverride = arguments.TransferSyntax,
+                Realism = arguments.Realism,
+                Lossy = arguments.Lossy,
                 IndexWaitSeconds = arguments.IndexWaitSeconds,
                 CommitLingerSeconds = arguments.CommitLingerSeconds,
                 CommitWaitSeconds = arguments.CommitWaitSeconds,

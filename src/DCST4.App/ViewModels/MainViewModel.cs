@@ -1,3 +1,4 @@
+using DCST4.Core.Generation.Realism;
 using DCST4.Core.Capability;
 using DCST4.Core.Generation;
 using DCST4.Core.Generation.Modalities;
@@ -202,6 +203,8 @@ namespace DCST4.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsMultiFrame));
                 OnPropertyChanged(nameof(HasPixelData));
+                OnPropertyChanged(nameof(RealismApplies));
+                OnPropertyChanged(nameof(RealismDescription));
                 Settings.Default.ImageObject = value.DatasetProfileId;
                 FillImageLists();
                 // Emptying the list of bit depths clears the box, which has to be told to show the value again.
@@ -265,6 +268,8 @@ namespace DCST4.ViewModels
                 if (value == null || ReferenceEquals(_selectedPreset, value)) return;
                 _selectedPreset = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(RealismApplies));
+                OnPropertyChanged(nameof(RealismDescription));
                 Settings.Default.ExamType = value.Name;
                 if (!_loading)
                 {
@@ -313,6 +318,8 @@ namespace DCST4.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(FallbackIsRelevant));
                 Settings.Default.TransferSyntax = value.Syntax.UID.UID;
+                _compressionInvalid = null;
+                RaiseCompressionChanged();
                 RefreshSizeEstimate();
             }
         }
@@ -360,6 +367,189 @@ namespace DCST4.ViewModels
 
         /// <summary>Read from the settings at each run, like <see cref="NewValuesAfterRun"/>.</summary>
         public bool BurnInText { get => Settings.Default.BurnInText; set => Settings.Default.BurnInText = value; }
+
+        /// <summary>Read from the settings at each run, like <see cref="BurnInText"/>.</summary>
+        public RealismLevel Realism => RealismLevels.Parse(Settings.Default.RealismLevel);
+
+        /// <summary>Read from the settings at each run. Null when every encoder is at its default.</summary>
+        public LossyCompressionSettings Lossy => ImageSettings.Lossy(Settings.Default);
+
+        /// <summary>The Realistic images list on the Exam tab. The same setting as in Settings &gt; Images, which the Tests and Performance tabs also use.</summary>
+        public RealismLevel SelectedRealism
+        {
+            get => Realism;
+            set
+            {
+                Settings.Default.RealismLevel = value.ToString();
+                OnPropertyChanged();
+                RefreshSizeEstimate();
+            }
+        }
+
+        public IReadOnlyList<RealismLevel> RealismLevelChoices { get; } = (RealismLevel[])Enum.GetValues(typeof(RealismLevel));
+
+        /// <summary>Whether the selected image has a realistic form. Secondary Capture, documents and reports do not.</summary>
+        public bool RealismApplies => Generating != null && _selectedPreset != null && Generating.Realism(_selectedPreset) != null;
+
+        /// <summary>What a realistic image of the selected modality looks like, for the tooltip.</summary>
+        public string RealismDescription => RealismApplies ? Generating.Realism(_selectedPreset).Description : string.Empty;
+
+        /// <summary>After the Settings dialog: the realism level and the lossy settings may have changed.</summary>
+        public void ImageSettingsChanged()
+        {
+            _compressionInvalid = null;
+            OnPropertyChanged(nameof(SelectedRealism));
+            RaiseCompressionChanged();
+            RefreshSizeEstimate();
+        }
+
+        private enum CompressionKind { None, JpegQuality, Jpeg2000Ratio, H264Mbps, NoSetting, Lossless }
+
+        private CompressionKind Compression
+        {
+            get
+            {
+                var syntax = _selectedTransferSyntax?.Syntax;
+                if (syntax == null) return CompressionKind.None;
+                if (LossyCompressionSettings.IsJpegLossy(syntax)) return CompressionKind.JpegQuality;
+                if (syntax == FellowOakDicom.DicomTransferSyntax.JPEG2000Lossy) return CompressionKind.Jpeg2000Ratio;
+                if (Core.Codecs.OwnCodecs.IsH264(syntax)) return CompressionKind.H264Mbps;
+                if (syntax == FellowOakDicom.DicomTransferSyntax.HTJ2K) return CompressionKind.NoSetting;
+                if (_selectedTransferSyntax == TransferSyntaxOption.JpegXl) return CompressionKind.Lossless;
+                return CompressionKind.None;
+            }
+        }
+
+        /// <summary>Text in the Compression box that is not a value it takes. A run is refused while it is there.</summary>
+        private string _compressionInvalid;
+
+        /// <summary>The Compression row of the Exam tab is shown for a lossy transfer syntax.</summary>
+        public bool CompressionVisible => Compression != CompressionKind.None;
+
+        /// <summary>False for a lossy syntax with no setting: HTJ2K, whose encoder does not reach a ratio, and JPEG XL, written lossless.</summary>
+        public bool CompressionEditable => Compression == CompressionKind.JpegQuality || Compression == CompressionKind.Jpeg2000Ratio || Compression == CompressionKind.H264Mbps;
+
+        /// <summary>
+        /// The value of the selected syntax: the saved one, or the encoder's default when none is saved. Empty for H.264, whose
+        /// default follows from the picture. Shared with Settings &gt; Images.
+        /// </summary>
+        public string CompressionText
+        {
+            get
+            {
+                if (_compressionInvalid != null) return _compressionInvalid;
+                var s = Settings.Default;
+                switch (Compression)
+                {
+                    case CompressionKind.JpegQuality: return Int(s.JpegQuality > 0 ? s.JpegQuality : LossyCompressionSettings.DefaultJpegQuality);
+                    case CompressionKind.Jpeg2000Ratio: return Int(s.Jpeg2000Ratio > 0 ? s.Jpeg2000Ratio : LossyCompressionSettings.DefaultJpeg2000Ratio);
+                    case CompressionKind.H264Mbps: return ImageSettings.FormatMbps(ImageSettings.ParseMbps(s.H264Mbps));
+                    default: return string.Empty;
+                }
+            }
+            set
+            {
+                var text = (value ?? string.Empty).Trim();
+                var s = Settings.Default;
+                _compressionInvalid = null;
+                switch (Compression)
+                {
+                    case CompressionKind.JpegQuality:
+                        if (TryWhole(text, LossyCompressionSettings.MinJpegQuality, LossyCompressionSettings.MaxJpegQuality, out var quality))
+                        {
+                            s.JpegQuality = quality == LossyCompressionSettings.DefaultJpegQuality ? 0 : quality;
+                        }
+                        else _compressionInvalid = text;
+                        break;
+                    case CompressionKind.Jpeg2000Ratio:
+                        if (TryWhole(text, LossyCompressionSettings.MinJpeg2000Ratio, LossyCompressionSettings.MaxJpeg2000Ratio, out var ratio))
+                        {
+                            s.Jpeg2000Ratio = ratio == LossyCompressionSettings.DefaultJpeg2000Ratio ? 0 : ratio;
+                        }
+                        else _compressionInvalid = text;
+                        break;
+                    case CompressionKind.H264Mbps:
+                        var mbps = ImageSettings.ParseMbps(text);
+                        if (text.Length == 0) s.H264Mbps = string.Empty;
+                        else if (mbps >= LossyCompressionSettings.MinH264Mbps && mbps <= LossyCompressionSettings.MaxH264Mbps) s.H264Mbps = ImageSettings.FormatMbps(mbps);
+                        else _compressionInvalid = text;
+                        break;
+                    default:
+                        return;
+                }
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(CompressionHint));
+                RefreshSizeEstimate();
+            }
+        }
+
+        /// <summary>Empty is the default, 0.</summary>
+        private static bool TryWhole(string text, int min, int max, out int value)
+        {
+            value = 0;
+            if (text.Length == 0) return true;
+            return int.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out value) && value >= min && value <= max;
+        }
+
+        private static string Int(int value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        /// <summary>The unit beside the box, and whether it is the default, or why there is no box. Short, since the column is narrow; the tooltip has the ranges.</summary>
+        public string CompressionHint
+        {
+            get
+            {
+                var s = Settings.Default;
+                switch (Compression)
+                {
+                    case CompressionKind.JpegQuality: return s.JpegQuality > 0 ? string.Empty : "(default)";
+                    case CompressionKind.Jpeg2000Ratio: return ":1" + (s.Jpeg2000Ratio > 0 ? string.Empty : " (default)");
+                    case CompressionKind.H264Mbps: return ImageSettings.ParseMbps(s.H264Mbps) != null ? string.Empty : "(auto)";
+                    case CompressionKind.NoSetting: return "no setting";
+                    case CompressionKind.Lossless: return "written lossless";
+                    default: return string.Empty;
+                }
+            }
+        }
+
+        /// <summary>The label of the Compression row, which names the value and its unit.</summary>
+        public string CompressionLabel
+        {
+            get
+            {
+                switch (Compression)
+                {
+                    case CompressionKind.JpegQuality: return "JPEG quality:";
+                    case CompressionKind.Jpeg2000Ratio: return "JPEG 2000 ratio:";
+                    case CompressionKind.H264Mbps: return "H.264 Mbit/s:";
+                    default: return "Compression:";
+                }
+            }
+        }
+
+        /// <summary>Why a run cannot start with what is in the Compression box. Null if it can.</summary>
+        public string CompressionProblem
+        {
+            get
+            {
+                if (_compressionInvalid == null) return null;
+                switch (Compression)
+                {
+                    case CompressionKind.JpegQuality: return $"JPEG quality must be a whole number between {LossyCompressionSettings.MinJpegQuality} and {LossyCompressionSettings.MaxJpegQuality}, or empty for the default.";
+                    case CompressionKind.Jpeg2000Ratio: return $"The JPEG 2000 ratio must be a whole number between {LossyCompressionSettings.MinJpeg2000Ratio} and {LossyCompressionSettings.MaxJpeg2000Ratio}, or empty for the default.";
+                    case CompressionKind.H264Mbps: return string.Format(System.Globalization.CultureInfo.InvariantCulture, "The H.264 bitrate must be a number between {0} and {1} Mbit/s, or empty for the default.", LossyCompressionSettings.MinH264Mbps, LossyCompressionSettings.MaxH264Mbps);
+                    default: return null;
+                }
+            }
+        }
+
+        private void RaiseCompressionChanged()
+        {
+            OnPropertyChanged(nameof(CompressionVisible));
+            OnPropertyChanged(nameof(CompressionEditable));
+            OnPropertyChanged(nameof(CompressionText));
+            OnPropertyChanged(nameof(CompressionHint));
+            OnPropertyChanged(nameof(CompressionLabel));
+        }
 
         /// <summary>The saved selection of tags to burn in, as <see cref="BurnedInTagCatalog.Format"/> writes it.</summary>
         public string BurnInTags { get => Settings.Default.BurnInTags; set => Settings.Default.BurnInTags = value; }
@@ -1020,7 +1210,7 @@ namespace DCST4.ViewModels
         /// <summary>What the size of a compressed image depends on. The number of images is not part of it.</summary>
         private static string SizeKey(ExamRequest request, FellowOakDicom.DicomTransferSyntax syntax) => string.Join("|",
             request.Modality.DisplayName, request.Rows, request.Columns, request.BitsStored, request.FramesPerImage, request.PrivatePayloadBytes, syntax.UID.UID,
-            request.BurnedInTags == null ? string.Empty : string.Join(",", request.BurnedInTags));
+            request.BurnedInTags == null ? string.Empty : string.Join(",", request.BurnedInTags), request.Realism, request.Lossy?.Key ?? string.Empty);
         #endregion
 
         #region Run
@@ -1036,6 +1226,7 @@ namespace DCST4.ViewModels
             if (request.Identity == null && IdentityMessage != null) problems.Add(IdentityMessage);
             else problems.AddRange(ExamValidator.Validate(request));
             if (_addPrivatePayload && _privatePayloadMb < 1) problems.Add("The private payload must be at least 1 MB. Untick Add private payload to send none.");
+            if (CompressionProblem != null) problems.Add(CompressionProblem);
             if (problems.Count == 0) problems.AddRange(ExamValidator.SyntaxProblems(request, options.TransferSyntax));
             var optionsProblem = options.Validate();
             if (optionsProblem != null) problems.Add(optionsProblem);
@@ -1117,6 +1308,8 @@ namespace DCST4.ViewModels
             BurnedInTags = Settings.Default.BurnInText ? BurnedInTagCatalog.Parse(Settings.Default.BurnInTags) : null,
             FramesPerImage = IsMultiFrame ? _framesPerImage : 1,
             PrivatePayloadBytes = PrivatePayloadBytes,
+            Realism = Realism,
+            Lossy = Lossy,
         };
 
         private const int EncodingProgressEvery = 10;
@@ -1142,6 +1335,7 @@ namespace DCST4.ViewModels
             AllowFallback = _allowFallback,
             Endpoint = BuildEndpoint(),
             Network = BuildNetworkOptions(),
+            Lossy = Lossy,
         };
         #endregion
 
@@ -1169,6 +1363,8 @@ namespace DCST4.ViewModels
             IdleWaitSeconds = _limitIdleWaitSeconds,
             ArtimWaitSeconds = _limitArtimWaitSeconds,
             FaultSettleSeconds = _faultSettleSeconds,
+            Realism = Realism,
+            Lossy = Lossy,
         };
 
         /// <summary>Saves the current destination fields for use with DCST4.Cli.exe.</summary>

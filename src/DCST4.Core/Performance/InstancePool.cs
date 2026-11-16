@@ -1,3 +1,5 @@
+using DCST4.Core.Pipeline;
+using DCST4.Core.Generation.Realism;
 using DCST4.Core.Generation;
 using DCST4.Core.Generation.Datasets;
 using DCST4.Core.TestData;
@@ -64,9 +66,11 @@ namespace DCST4.Core.Performance
 
         /// <summary>
         /// Generates the pool. Every object type uses the same seed, so they share one patient from the test personnummer
-        /// list. Throws <see cref="PoolUnavailableException"/> if the encoder cannot produce the mix here.
+        /// list. Throws <see cref="PoolUnavailableException"/> if the encoder cannot produce the mix here. The noise of a
+        /// realistic image is drawn once per object in the pool, not again for every send.
         /// </summary>
-        public static InstancePool Build(DataMix mix, int seed, string uidRoot, TestPatientNaming naming, CancellationToken token)
+        public static InstancePool Build(DataMix mix, int seed, string uidRoot, TestPatientNaming naming, CancellationToken token,
+            RealismLevel realism = RealismLevel.Off, LossyCompressionSettings lossy = null)
         {
             if (mix == null) throw new ArgumentNullException(nameof(mix));
             var instances = new List<PoolInstance>();
@@ -86,6 +90,8 @@ namespace DCST4.Core.Performance
                     Frames = entry.Frames,
                     TransferSyntax = mix.Syntax,
                     PrivatePayloadBytes = entry.PrivatePayloadBytes,
+                    Realism = realism,
+                    Lossy = lossy,
                 };
                 var problems = request.Validate();
                 if (problems.Count > 0) throw new ArgumentException($"Mix {mix.Id}: " + string.Join(" ", problems));

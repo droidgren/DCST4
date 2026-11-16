@@ -1,3 +1,4 @@
+using DCST4.Core.Generation.Realism;
 using FellowOakDicom;
 using System;
 using System.Collections.Generic;
@@ -318,6 +319,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "CT";
         public override string DisplayName => "Enhanced CT";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Ct(preset?.ConvolutionKernel);
         public override DicomUID SopClass => DicomUID.EnhancedCTImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 16 };
         public override int DefaultBitDepth => 16;
@@ -343,6 +345,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "MR";
         public override string DisplayName => "Enhanced MR";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Mr();
         public override DicomUID SopClass => DicomUID.EnhancedMRImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -381,6 +384,7 @@ namespace DCST4.Core.Generation.Modalities
 
         public override string Code => "MG";
         public override string DisplayName => "Breast Tomosynthesis";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Mammography();
         public override DicomUID SopClass => DicomUID.BreastTomosynthesisImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 14;
@@ -493,6 +497,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "XA";
         public override string DisplayName => "Enhanced XA";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Fluoroscopy(0.2);
         public override DicomUID SopClass => DicomUID.EnhancedXAImageStorage;
         protected override string Flavour => "ANGIO";
         /// <summary>Coronary artery, from CID 3010, which CID 4042 includes.</summary>
@@ -509,6 +514,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "RF";
         public override string DisplayName => "Enhanced XRF";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Fluoroscopy(0.2);
         public override DicomUID SopClass => DicomUID.EnhancedXRFImageStorage;
         protected override string Flavour => "FLUOROSCOPY";
         /// <summary>Stomach, from CID 4031, which CID 4042 includes.</summary>
@@ -531,6 +537,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "US";
         public override string DisplayName => "Enhanced US Volume";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Ultrasound(0.5, 0.25);
         public override DicomUID SopClass => DicomUID.EnhancedUSVolumeStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8 };
         public override int DefaultBitDepth => 8;

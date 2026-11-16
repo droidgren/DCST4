@@ -340,6 +340,12 @@ namespace DCST4.Core.Reporting
                 var a = before.Performance;
                 var b = now.Performance;
                 var settings = SettingsThatDiffer(a, b);
+                // The pool is made with the run's image settings, which change the size and content of what is sent.
+                if ((baseline.Realism ?? "Off") != (run.Realism ?? "Off")) settings.Add($"realism {baseline.Realism ?? "Off"} and {run.Realism ?? "Off"}");
+                if ((baseline.LossyCompression ?? string.Empty) != (run.LossyCompression ?? string.Empty))
+                {
+                    settings.Add($"lossy compression {baseline.LossyCompression ?? "-"} and {run.LossyCompression ?? "-"}");
+                }
                 var comparable = settings.Count == 0;
                 if (!comparable)
                 {

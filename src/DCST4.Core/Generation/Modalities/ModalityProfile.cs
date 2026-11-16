@@ -1,3 +1,4 @@
+using DCST4.Core.Generation.Realism;
 using DCST4.Core.TestData;
 using FellowOakDicom;
 using System;
@@ -160,6 +161,9 @@ namespace DCST4.Core.Generation.Modalities
         public virtual int FramesPerSecond => 0;
 
         public virtual string[] ImageType(ExamPreset preset) => new[] { "ORIGINAL", "PRIMARY" };
+
+        /// <summary>How a realistic image of this modality looks and what noise it has. Null if it is always drawn flat, as a screen capture or a mask is.</summary>
+        public virtual RealismProfile Realism(ExamPreset preset) => null;
 
         public abstract void AddModalityTags(DicomDataset dataset, ExamPreset preset, ImageContext context);
 

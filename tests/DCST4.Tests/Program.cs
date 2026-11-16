@@ -2,6 +2,7 @@ using DCST4.Core;
 using DCST4.Core.Generation;
 using DCST4.Core.Generation.Datasets;
 using DCST4.Core.Generation.Modalities;
+using DCST4.Core.Generation.Realism;
 using DCST4.Core.Network;
 using DCST4.Core.Pipeline;
 using DCST4.Core.TestData;
@@ -148,7 +149,7 @@ namespace DCST4.Tests
                 return _fail == 0 ? 0 : 1;
             }
 
-            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit" || args[0] == "report" || args[0] == "multiframe" || args[0] == "syntaxes"))
+            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit" || args[0] == "report" || args[0] == "multiframe" || args[0] == "syntaxes" || args[0] == "realism"))
             {
                 try
                 {
@@ -156,6 +157,7 @@ namespace DCST4.Tests
                     {
                         if (args[0] == "multiframe") MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "syntaxes") TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                        if (args[0] == "realism") RealismTests.Run(temp, Check);
                         if (args[0] == "report") ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve") RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve" || args[0] == "commit") CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
@@ -207,6 +209,7 @@ namespace DCST4.Tests
                     TestDataTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                    RealismTests.Run(temp, Check);
                     RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                     CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
@@ -2295,6 +2298,32 @@ namespace DCST4.Tests
                 var uncompressed = read.Dataset.InternalTransferSyntax == DicomTransferSyntax.JPEGProcess14SV1 ? read.Clone(DicomTransferSyntax.ExplicitVRLittleEndian) : read;
                 WritePng(uncompressed.Dataset, Path.Combine(folder, s.Name + ".png"));
                 Console.WriteLine($"{s.Name}: name in file = {read.Dataset.GetString(DicomTag.PatientName)}, charset = {read.Dataset.GetString(DicomTag.SpecificCharacterSet)}");
+            }
+
+            // The same modalities with realistic images, and US, which the flat pattern above leaves out.
+            var realistic = new[]
+            {
+                new { Modality = "CT", Rows = 512, Columns = 512, Bits = 12, Images = 20, Index = 10 },
+                new { Modality = "MR", Rows = 256, Columns = 256, Bits = 12, Images = 24, Index = 8 },
+                new { Modality = "CR", Rows = 1024, Columns = 1024, Bits = 12, Images = 1, Index = 0 },
+                new { Modality = "XA", Rows = 1024, Columns = 1024, Bits = 12, Images = 1, Index = 0 },
+                new { Modality = "MG", Rows = 2294, Columns = 1914, Bits = 14, Images = 1, Index = 0 },
+                new { Modality = "PT", Rows = 256, Columns = 256, Bits = 16, Images = 20, Index = 10 },
+                new { Modality = "US", Rows = 600, Columns = 800, Bits = 8, Images = 1, Index = 0 },
+            };
+            foreach (var s in realistic)
+            {
+                var name = s.Modality.ToLowerInvariant() + "_realistic_normal";
+                var request = MakeRequest(s.Modality, images: s.Images, rows: s.Rows, columns: s.Columns, bits: s.Bits, overrides: overrides);
+                request.BurnedInTags = BurnedInTagCatalog.Default;
+                request.Realism = RealismLevel.Normal;
+                var clock = Stopwatch.StartNew();
+                var image = new ExamGenerator(request).GetImages(CancellationToken.None).Skip(s.Index).First();
+                var dicomPath = Path.Combine(folder, name + ".dcm");
+                image.File.Save(dicomPath);
+                WritePng(image.File.Dataset, Path.Combine(folder, name + ".png"));
+                var lossless = TransferSyntaxConverter.Convert(DicomFile.Open(dicomPath), DicomTransferSyntax.JPEGLSLossless);
+                Console.WriteLine($"{name}: {clock.ElapsedMilliseconds} ms, JPEG-LS lossless ratio {lossless.Dataset.GetSingleValueOrDefault(DicomTag.LossyImageCompressionRatio, "-")} / {(double)TransferSyntaxConverter.PixelBytes(image.File.Dataset) / TransferSyntaxConverter.PixelBytes(lossless.Dataset):0.00}");
             }
         }
 

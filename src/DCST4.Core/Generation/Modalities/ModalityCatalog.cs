@@ -1,3 +1,4 @@
+using DCST4.Core.Generation.Realism;
 using DCST4.Core.Generation.Objects;
 using FellowOakDicom;
 using System;
@@ -109,6 +110,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "CT";
         public override string DisplayName => "CT";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Ct(preset?.ConvolutionKernel);
         public override DicomUID SopClass => DicomUID.CTImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 16;
@@ -148,6 +150,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "MR";
         public override string DisplayName => "MR";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Mr();
         public override DicomUID SopClass => DicomUID.MRImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 12;
@@ -189,6 +192,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "CR";
         public override string DisplayName => "CR";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Radiography();
         public override DicomUID SopClass => DicomUID.ComputedRadiographyImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -220,6 +224,7 @@ namespace DCST4.Core.Generation.Modalities
 
         public override string Code => "US";
         public override string DisplayName => "US";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Ultrasound(0.7, 0.03);
         public override DicomUID SopClass => DicomUID.UltrasoundImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8 };
         public override int DefaultBitDepth => 8;
@@ -270,6 +275,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "DX";
         public override string DisplayName => "DX";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Radiography();
         public override DicomUID SopClass => DicomUID.DigitalXRayImageStorageForPresentation;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -301,6 +307,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "XA";
         public override string DisplayName => "XA";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Fluoroscopy(0.2);
         public override DicomUID SopClass => DicomUID.XRayAngiographicImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -331,6 +338,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "RF";
         public override string DisplayName => "RF";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Fluoroscopy(0.2);
         public override DicomUID SopClass => DicomUID.XRayRadiofluoroscopicImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 12, 16 };
         public override int DefaultBitDepth => 12;
@@ -357,6 +365,7 @@ namespace DCST4.Core.Generation.Modalities
     {
         public override string Code => "MG";
         public override string DisplayName => "MG";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.Mammography();
         public override DicomUID SopClass => DicomUID.DigitalMammographyXRayImageStorageForPresentation;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 12, 14, 16 };
         public override int DefaultBitDepth => 14;
@@ -396,6 +405,7 @@ namespace DCST4.Core.Generation.Modalities
 
         public override string Code => "PT";
         public override string DisplayName => "PT";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.NuclearMedicine();
         public override DicomUID SopClass => DicomUID.PositronEmissionTomographyImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 16 };
         public override int DefaultBitDepth => 16;
@@ -446,6 +456,7 @@ namespace DCST4.Core.Generation.Modalities
 
         public override string Code => "NM";
         public override string DisplayName => "NM";
+        public override RealismProfile Realism(ExamPreset preset) => RealismProfile.NuclearMedicine();
         public override DicomUID SopClass => DicomUID.NuclearMedicineImageStorage;
         public override IReadOnlyList<int> BitDepths { get; } = new[] { 8, 16 };
         public override int DefaultBitDepth => 16;

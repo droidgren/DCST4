@@ -170,8 +170,9 @@ namespace DCST4.Core.Testing
         /// 2: added the capability matrix and the association number on protocol events. 3: added the seed, the chain summary,
         /// the integrity report and the query report. 4: added the commitment report and the committed step of the chain.
         /// 5: added the limits section of the limit, fault and TLS tests. 6: added the performance section of the load tests.
+        /// 7: added the realism level and the lossy compression settings of the generated data.
         /// </summary>
-        public const int CurrentSchemaVersion = 6;
+        public const int CurrentSchemaVersion = 7;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ToolVersion { get; set; }
@@ -187,6 +188,12 @@ namespace DCST4.Core.Testing
         /// <summary>What the generated data of this run followed from. Null if the run generated none.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? Seed { get; set; }
+        /// <summary>The realism level of the generated images. Null if the run generated none, or drew them flat.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string Realism { get; set; }
+        /// <summary>The lossy settings of the generated data that differ from the encoders' defaults. Null if there are none.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string LossyCompression { get; set; }
         /// <summary>One row per object type that a store test handled. Null if there were none.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ChainRow> Chain { get; set; }

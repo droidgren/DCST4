@@ -101,6 +101,12 @@ namespace DCST4.Core.Generation.Datasets
         public string TransferSyntaxUid { get; set; }
         public string CharacterSetVariant { get; set; }
         public string EdgeCases { get; set; }
+        /// <summary>The realism level. Left out of the file when Off, as manifests were before the setting existed.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string Realism { get; set; }
+        /// <summary>The lossy settings that differ from the encoders' defaults. Left out of the file when there are none.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string LossyCompression { get; set; }
     }
 
     /// <summary>One generated object.</summary>

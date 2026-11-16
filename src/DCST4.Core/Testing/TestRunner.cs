@@ -75,7 +75,12 @@ namespace DCST4.Core.Testing
                 report.Summary[resultClass.ToString()] = report.Results.Count(r => r.Result == resultClass);
             }
 
-            if (session.SeedWasUsed) report.Seed = session.Seed;
+            if (session.SeedWasUsed)
+            {
+                report.Seed = session.Seed;
+                if (session.Options.Realism != Generation.Realism.RealismLevel.Off) report.Realism = session.Options.Realism.ToString();
+                if (session.Options.Lossy != null && !session.Options.Lossy.IsDefault) report.LossyCompression = session.Options.Lossy.Describe();
+            }
             if (session.Objects.Count > 0)
             {
                 report.Chain = session.BuildChain();

@@ -1,3 +1,5 @@
+using DCST4.Core.Generation.Realism;
+using DCST4.Core.Pipeline;
 using DCST4.Core.TestData;
 using System;
 using System.Collections.Generic;
@@ -58,6 +60,14 @@ namespace DCST4.Cli
             "  --tta-interval <seconds>         How often the sampled instances are queried. Default 2\n" +
             "  --tta-timeout <seconds>          How long a sampled instance may take to be found. Default 60\n" +
             "\n" +
+            "Options of run and generate for the images that are made:\n" +
+            "  --realism off|low|normal|high    Off (default) draws the flat test pattern. The others draw the modality's shape, texture\n" +
+            "                                   and noise, for file sizes like those of real images: low, normal or high noise\n" +
+            "  --jpeg-quality <1-100>           JPEG Baseline and Extended quality. Default: the encoder's, 90\n" +
+            "  --j2k-ratio <2-200>              JPEG 2000 (lossy) compression ratio, N for N:1. Default: the encoder's, 20\n" +
+            "  --jpegls-near <1-255>            JPEG-LS Near-Lossless NEAR. Default: the encoder's, 3\n" +
+            "  --h264-mbps <0.1-50>             H.264 bitrate in Mbit/s. Default: from the picture size and frame rate\n" +
+            "\n" +
             "Options of generate:\n" +
             "  --seed <n>  --uid-root <root>  --patients <n>  --studies <n>  --series <n>  --instances <n>\n" +
             "  --rows <n>  --columns <n>  --bits <n>  --frames <n>\n" +
@@ -91,6 +101,43 @@ namespace DCST4.Cli
         public int ArtimWaitSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultArtimWaitSeconds;
         public int FaultSettleSeconds { get; private set; } = DCST4.Core.Testing.TestRunOptions.DefaultFaultSettleSeconds;
         public DCST4.Core.Performance.LoadSettings Load { get; } = new DCST4.Core.Performance.LoadSettings();
+        public RealismLevel Realism { get; private set; } = RealismLevel.Off;
+        /// <summary>Null when every encoder is at its default.</summary>
+        public LossyCompressionSettings Lossy => _lossy.IsDefault ? null : _lossy;
+        private readonly LossyCompressionSettings _lossy = new LossyCompressionSettings();
+
+        /// <summary>
+        /// --realism and the lossy compression options, which run and generate share. Returns false with an error, true if
+        /// the option was one of them, null if it was not.
+        /// </summary>
+        internal static bool? TryImageOption(string name, string value, Action<RealismLevel> realism, LossyCompressionSettings lossy, out string error)
+        {
+            error = null;
+            int whole;
+            switch (name)
+            {
+                case "--realism":
+                    if (!RealismLevels.TryParse(value, out var level))
+                    {
+                        error = $"Unknown realism level '{value}'. Use one of: {RealismLevels.Names}.";
+                        return false;
+                    }
+                    realism(level);
+                    return true;
+                case "--jpeg-quality": if (!TryWhole(name, value, out whole, out error)) return false; lossy.JpegQuality = whole; break;
+                case "--j2k-ratio": if (!TryWhole(name, value, out whole, out error)) return false; lossy.Jpeg2000Ratio = whole; break;
+                case "--jpegls-near": if (!TryWhole(name, value, out whole, out error)) return false; lossy.JpegLsNear = whole; break;
+                case "--h264-mbps":
+                    if (!TryNumber(name, value, out var mbps, out error)) return false;
+                    lossy.H264Mbps = mbps;
+                    break;
+                default: return null;
+            }
+            var problems = lossy.Validate();
+            if (problems.Count == 0) return true;
+            error = problems[0];
+            return false;
+        }
 
         private static bool TryWhole(string name, string value, out int number, out string error)
         {
@@ -268,6 +315,9 @@ namespace DCST4.Cli
                         parsed.FaultSettleSeconds = settle;
                         break;
                     default:
+                        var image = TryImageOption(name.ToLowerInvariant(), value, level => parsed.Realism = level, parsed._lossy, out error);
+                        if (image == true) break;
+                        if (image == false) return null;
                         var load = parsed.TryLoadOption(name.ToLowerInvariant(), value, out error);
                         if (load == true) break;
                         if (load == null) error = $"Unknown option {name}.";
