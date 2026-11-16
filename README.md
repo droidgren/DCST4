@@ -41,7 +41,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Patient names:** `DCST4^TEST^<number>` by default, which is plainly not a person, with the Referring Physician `DCST4^REFERRING^<number>`, or Swedish names, chosen under **File > Settings**. About 40% of the Swedish names contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192. An empty Specific Character Set (Basic ASCII) is also available, and random names then lose their diacritics.
 - **Optional burned-in text:** turn on a text box in the pixels and choose which tags it shows, so you can compare them with the tags in the viewer. It is off by default.
 - **Configurable images:** number of series and images, matrix from 64 to 4096, 8 to 16 bits stored as the modality allows, and up to 10,000 frames in a multi-frame image.
-- **Private payload:** optionally, a large private binary value in every image, as some ultrasound systems send their raw data, to find out whether a PACS takes it. It is off by default and at every start. See [Multi-frame images and private payload](#multi-frame-images-and-private-payload).
+- **Private payload:** optionally, a large private binary value in every image, as some ultrasound systems send their raw data, to find out whether a PACS takes it. Its size is 0, none, by default and at every start. See [Multi-frame images and private payload](#multi-frame-images-and-private-payload).
 - **Estimated size:** the Exam box shows how much data the whole exam will be, and updates as you change the settings.
 - **Realistic images:** optionally, each modality's shape, tissue texture and noise under the overlays: speckle in an ultrasound sector, quantum noise in X-ray, noise in HU set by the CT kernel, Rician noise in MR and counting noise in PET and NM. Synthetic images otherwise compress far better than real ones, so file sizes and codec comparisons mean little without it. Off by default. See [Realistic images and lossy compression](#realistic-images-and-lossy-compression).
 - **Lossy compression settings:** JPEG quality, JPEG 2000 ratio, JPEG-LS NEAR and H.264 bitrate, each in the encoder's own unit, for Generate & Send, the tests and the command line. Each encoder runs at its default until set.
@@ -171,7 +171,7 @@ The frames are drawn as they are written and are never all in memory, so an obje
 
 Enhanced CT, Enhanced MR and Breast Tomosynthesis still lack some attributes that a strict validator names, see [Checking with another toolkit](#checking-with-another-toolkit). The cine loop, the cine run and the fluoro loop pass `dciodvfy` without errors, and the two enhanced X-ray objects pass with remarks that come from the validator's own tables.
 
-**Private payload ... MB/image**, under Frames per image on the Exam tab, adds one large private value to every image, the way some ultrasound systems send their raw data along with a cine loop, where it can be four times the size of the pixels. Use it to find out whether a PACS takes images with large private data, and whether it keeps it. It is unticked every time DCST4 starts. The size, 1 to 2,000 MB, is remembered.
+**Private payload ... MB/image**, under Frames per image on the Exam tab, adds one large private value to every image, the way some ultrasound systems send their raw data along with a cine loop, where it can be four times the size of the pixels. Use it to find out whether a PACS takes images with large private data, and whether it keeps it. The size is 1 to 2,000 MB, and 0, the default, adds none. It is set back to 0 every time DCST4 starts, so that a large payload is never sent because it was set the last time.
 
 | What is written | Where |
 | --------------- | ----- |
@@ -1095,7 +1095,8 @@ New:
 Changed:
 
 - Result files have schema version 7, for the two new fields. Earlier versions of DCST4 refuse to read a version 7 file
-- On the Exam tab, the private payload has moved under Frames per image, as **Private payload** with a check box and the size in MB per image, and Frames per image is one row lower to make room for the value of a lossy transfer syntax
+- On the Exam tab, the private payload has moved under Frames per image, as **Private payload ... MB/image**, and Frames per image is one row lower to make room for the value of a lossy transfer syntax
+- The private payload has no check box any more: a size of 0, the default, adds none. It is 0 at every start, as the box was unticked, and the size is no longer remembered
 - With every setting at its default, the images and files are the same as in 1.11.1, and a dataset with a fixed seed keeps its UIDs
 
 Fixed:

@@ -95,9 +95,6 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("0")]
         public int FramesPerImage { get => (int)this[nameof(FramesPerImage)]; set => this[nameof(FramesPerImage)] = value; }
 
-        /// <summary>The size of the private payload. Whether one is added is not saved: it is off at each start.</summary>
-        [UserScopedSetting, DefaultSettingValue("100")]
-        public int PrivatePayloadMb { get => (int)this[nameof(PrivatePayloadMb)]; set => this[nameof(PrivatePayloadMb)] = value; }
 
         [UserScopedSetting, DefaultSettingValue("ISO_IR 100")]
         public string CharacterSet{ get => (string)this[nameof(CharacterSet)]; set => this[nameof(CharacterSet)] = value; }
