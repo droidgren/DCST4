@@ -992,8 +992,18 @@ namespace DCST4.Tests
             help.UpdateLayout();
             try
             {
-                check("All the topics are listed", help.Topics.Count == 21 && help.Topics.Any(t => t.Title == "Limits and faults") && help.Topics.Any(t => t.Title == "Performance") && help.Topics.Any(t => t.Title == "Reports and comparison"), help.Topics.Count.ToString());
+                check("All the topics are listed", help.Topics.Count == 22 && help.Topics.Any(t => t.Title == "Limits and faults") && help.Topics.Any(t => t.Title == "Performance") && help.Topics.Any(t => t.Title == "Reports and comparison")
+                    && help.Topics.Any(t => t.Title == "Transfer syntaxes"), help.Topics.Count.ToString());
                 check("Topic titles are unique", help.Topics.Select(t => t.Title).Distinct().Count() == help.Topics.Count, null);
+
+                // Every syntax DCST4 sends in or probes is explained, by name and UID, so a new one cannot be left out.
+                var syntaxTopic = help.Topics.FirstOrDefault(t => t.Title == "Transfer syntaxes");
+                var syntaxText = syntaxTopic == null ? string.Empty : new System.Windows.Documents.TextRange(syntaxTopic.Section.ContentStart, syntaxTopic.Section.ContentEnd).Text;
+                Func<string, bool> hasUid = uid => System.Text.RegularExpressions.Regex.IsMatch(syntaxText, "(?<![0-9.])" + System.Text.RegularExpressions.Regex.Escape(uid) + "(?![0-9.])");
+                var unexplained = TransferSyntaxOption.All.Where(o => !syntaxText.Contains(o.Name) || !hasUid(o.Syntax.UID.UID)).Select(o => o.Name)
+                    .Concat(Core.Capability.CapabilityCatalog.TransferSyntaxes.Where(p => !syntaxText.Contains(p.ShortName) || !hasUid(p.Syntax.UID.UID)).Select(p => p.ShortName))
+                    .ToList();
+                check("Transfer syntaxes: every syntax in the list and in the probe is explained, with its UID and short name", syntaxTopic != null && unexplained.Count == 0, string.Join(", ", unexplained));
                 check("Estimated size is explained", new System.Windows.Documents.TextRange(help.Topics[2].Section.ContentStart, help.Topics[2].Section.ContentEnd).Text.Contains("Estimated size"), null);
 
                 var viewer = FindVisualChild<FlowDocumentScrollViewer>(help);

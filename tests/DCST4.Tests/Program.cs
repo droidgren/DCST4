@@ -104,6 +104,11 @@ namespace DCST4.Tests
                 return 0;
             }
 
+            if (args.Length == 2 && args[0] == "screenshots")
+            {
+                return Screenshots.Run(args[1]);
+            }
+
             if (args.Length >= 8 && args[0] == "send")
             {
                 return SendTo(args);

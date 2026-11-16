@@ -189,7 +189,7 @@
                             <TableRow><TableCell><Paragraph><Bold>Character set</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Specific Character Set. See <Italic>Character sets</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Transfer syntax</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>15 syntaxes under a heading for each codec family: Uncompressed, RLE, JPEG, JPEG-LS, JPEG 2000, HTJ2K, JPEG XL and Video. Lossy ones say so in their name. See <Italic>Transfer syntax and fallback</Italic>.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>15 syntaxes under a heading for each codec family: Uncompressed, RLE, JPEG, JPEG-LS, JPEG 2000, HTJ2K, JPEG XL and Video. Lossy ones say so in their name. See <Italic>Transfer syntaxes</Italic>, and <Italic>Transfer syntax and fallback</Italic> for what happens if the server does not accept one.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How much data the whole exam will be. It updates as you change the other fields.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Object</Bold></Paragraph></TableCell>
@@ -362,14 +362,192 @@
                         was really sent. JPEG XL and H.264 cannot fall back, since DCST4 has no decoder for them, so the
                         box is off for them.
                     </Paragraph>
-                    <Paragraph Style="{StaticResource H2}">The syntaxes</Paragraph>
-                    <List>
-                        <ListItem><Paragraph><Bold>Uncompressed:</Bold> Implicit VR, Explicit VR and Deflated Explicit VR Little Endian. Deflated compresses the whole dataset with deflate as it is written, and leaves the pixels as they are.</Paragraph></ListItem>
-                        <ListItem><Paragraph><Bold>RLE, JPEG, JPEG-LS, JPEG 2000 and HTJ2K</Bold> are encoded with PureCodecs. JPEG Baseline holds 8 bits and JPEG Extended at most 12. JPEG Baseline, JPEG Extended, JPEG 2000 and HTJ2K without "Lossless" are lossy.</Paragraph></ListItem>
-                        <ListItem><Paragraph><Bold>JPEG XL</Bold> is encoded by DCST4 itself, lossless in both syntaxes, one codestream per frame. It compresses less than other JPEG XL encoders.</Paragraph></ListItem>
-                        <ListItem><Paragraph><Bold>H.264 High Profile / Level 4.1</Bold> uses the H.264 encoder that comes with Windows. Windows N needs the Media Feature Pack for it. It is for <Bold>US</Bold> with <Bold>Multi-frame (cine loop)</Bold> only, since H.264 must be YBR_PARTIAL_420 and the XA and RF images must be MONOCHROME2. The whole loop is one stream in an MP4 container, at most 1080 rows of 1920, with an even number of each.</Paragraph></ListItem>
-                        <ListItem><Paragraph>A lossy syntax marks the image as lossy, with the ratio and the method, and as DERIVED.</Paragraph></ListItem>
-                    </List>
+                    <Paragraph>
+                        Every syntax, what it is and what it can hold, is described under <Italic>Transfer syntaxes</Italic>.
+                    </Paragraph>
+                </Section>
+
+                <!-- ===================================================================== -->
+                <Section Tag="Transfer syntaxes">
+                    <Paragraph Style="{StaticResource H1}">Transfer syntaxes</Paragraph>
+                    <Paragraph>
+                        A transfer syntax says how a DICOM object is encoded: the byte order, whether every element carries
+                        its VR (explicit) or the receiver must look it up (implicit), and whether and how the pixels are
+                        compressed. The two sides agree on one during association negotiation. DCST4 proposes it for the
+                        SOP class in a presentation context, and the server accepts or rejects that context. A server that
+                        accepts a syntax should also be able to decode it, to show the image or to convert it for a viewer.
+                    </Paragraph>
+                    <Paragraph>
+                        DCST4 knows 30 transfer syntaxes. The 15 under <Italic>Syntaxes DCST4 sends in</Italic> can be chosen
+                        in the <Bold>Transfer syntax</Bold> list on the Exam tab and in <Bold>Store tests send in</Bold>
+                        in <Bold>Test settings...</Bold> on the Tests tab, and DCST4 writes the images in them. The other 15 are only
+                        proposed by the negotiation probe, to find out what the destination supports, and nothing is sent in
+                        them. The short name is the column heading on the <Bold>Capabilities</Bold> tab.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Lossless and lossy</Paragraph>
+                    <Paragraph>
+                        A lossless syntax gives back exactly the pixels that were written. A lossy one discards detail to
+                        compress more. DCST4 then marks the image with Lossy Image Compression 01, the ratio and the method,
+                        and Image Type DERIVED. A PACS that converts a lossy image to another syntax should keep that
+                        marking. Encapsulated means that the pixels are stored as fragments, one or more per frame,
+                        rather than as one value. All the compressed syntaxes are encapsulated.
+                    </Paragraph>
+
+                    <Paragraph Style="{StaticResource H2}">Syntaxes DCST4 sends in</Paragraph>
+                    <Paragraph>
+                        In the order of the list, under the heading of their codec family. The bit limits are bits stored. An
+                        exam that a syntax cannot hold stops before anything is generated, with a message that says why.
+                    </Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="175"/>
+                            <TableColumn Width="165"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow Background="#FFF3F6FA"><TableCell><Paragraph><Bold>Name and short name</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph><Bold>UID</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph><Bold>What it is</Bold></Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>Uncompressed</Bold>, written by fo-dicom</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Implicit VR Little Endian</Bold><LineBreak/>Implicit</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2</Paragraph></TableCell>
+                                <TableCell><Paragraph>The DICOM default, which every storage SCP must accept. No VR is written, so the receiver looks each tag up in its dictionary, and a private tag it does not know is read as UN. fo-dicom always proposes it as well, in a context of its own, and it is what <Bold>Allow fallback to Implicit VR</Bold> sends in.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Explicit VR Little Endian</Bold><LineBreak/>Explicit LE</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.1</Paragraph></TableCell>
+                                <TableCell><Paragraph>Every element carries its VR, and the pixels are stored as they are. What most modalities send when they do not compress, and DCST4's default.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Deflated Explicit VR Little Endian (lossless)</Bold><LineBreak/>Deflated</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.1.99</Paragraph></TableCell>
+                                <TableCell><Paragraph>Explicit VR Little Endian with the whole dataset compressed with deflate, the method of ZIP, as it is written to a file or the network. The pixels are not encapsulated. Meant for objects without pixels, such as SR, and few PACS take it for images. DOC and SR can be sent in this one, Implicit or Explicit, and in no other.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>RLE</Bold>, encoded with PureCodecs</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>RLE Lossless</Bold><LineBreak/>RLE</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.5</Paragraph></TableCell>
+                                <TableCell><Paragraph>Run-length encoding, the simplest compressed syntax. Lossless, grayscale or colour, every bit depth DCST4 generates, one frame at a time. It does well on the flat areas of the test images and less well on real ones.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>JPEG</Bold>, encoded with PureCodecs</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG Baseline (Process 1, lossy)</Bold><LineBreak/>JPEG Base</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.50</Paragraph></TableCell>
+                                <TableCell><Paragraph>The classic lossy 8-bit JPEG, which ultrasound systems and cameras send. 8 bits only: both US objects, and CR, DX, XA, RF and NM at 8 bits stored. A colour image is stored as YBR_FULL_422. The slowest encoder in DCST4 for a long cine loop.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG Extended (Process 2 &amp; 4, lossy)</Bold><LineBreak/>JPEG Ext</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.51</Paragraph></TableCell>
+                                <TableCell><Paragraph>Lossy JPEG for at most 12 bits, such as 12-bit CT or MR. Fewer viewers decode it than Baseline.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG Lossless (Process 14 SV1)</Bold><LineBreak/>JPEG LL</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.70</Paragraph></TableCell>
+                                <TableCell><Paragraph>Lossless JPEG with prediction from the pixel to the left (selection value 1), up to 16 bits. The lossless syntax that nearly every PACS and viewer takes, and what many modalities use when they compress without loss.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>JPEG-LS</Bold>, encoded with PureCodecs</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG-LS Lossless</Bold><LineBreak/>JLS LL</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.80</Paragraph></TableCell>
+                                <TableCell><Paragraph>Lossless, up to 16 bits. Compresses better than JPEG Lossless and is still fast. Not every PACS takes it.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>JPEG 2000</Bold>, encoded with PureCodecs</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG 2000 Lossless</Bold><LineBreak/>J2K LL</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.90</Paragraph></TableCell>
+                                <TableCell><Paragraph>Wavelet compression with the reversible transform, so lossless, up to 16 bits. Compresses well but is slow to encode and decode. Common in PACS archives.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG 2000 (lossy)</Bold><LineBreak/>J2K</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.91</Paragraph></TableCell>
+                                <TableCell><Paragraph>JPEG 2000 Image Compression. The syntax allows lossy streams and is meant for them, so DCST4 marks the image lossy.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>HTJ2K</Bold>, encoded with PureCodecs</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>HTJ2K Lossless</Bold><LineBreak/>HTJ2K LL</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.201</Paragraph></TableCell>
+                                <TableCell><Paragraph>High-Throughput JPEG 2000: the same wavelets with a block coder that is many times faster. Lossless. A recent syntax that many PACS do not take yet.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>HTJ2K (lossy)</Bold><LineBreak/>HTJ2K</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.203</Paragraph></TableCell>
+                                <TableCell><Paragraph>HTJ2K that allows lossy streams and is meant for them, so DCST4 marks the image lossy.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>JPEG XL</Bold>, encoded by DCST4's own encoder</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG XL Lossless</Bold><LineBreak/>JXL LL</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.110</Paragraph></TableCell>
+                                <TableCell><Paragraph>The newest image codec in DICOM. DCST4 writes a lossless codestream per frame, 1 to 16 bits, grayscale or RGB. It compresses less than other JPEG XL encoders. DCST4 cannot decode it, so it cannot fall back to Implicit VR.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG XL (written lossless)</Bold><LineBreak/>JXL</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.112</Paragraph></TableCell>
+                                <TableCell><Paragraph>The syntax allows lossy and lossless streams. DCST4 writes the same lossless stream in it, so the image is not marked lossy. Tests whether a PACS takes the general JPEG XL syntax.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>Video</Bold>, encoded by the H.264 encoder of Windows</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>H.264 High Profile / Level 4.1 (lossy)</Bold><LineBreak/>H.264 4.1</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.102</Paragraph></TableCell>
+                                <TableCell><Paragraph>MPEG-4 AVC video: the whole loop as one stream in an MP4 container, not frame by frame. For <Bold>US</Bold> with <Bold>Multi-frame (cine loop)</Bold> only, since H.264 must be YBR_PARTIAL_420 and the XA and RF images must be MONOCHROME2. At most 1080 rows of 1920, an even number of each, and a frame rate that Level 4.1 allows at that size. Windows N needs the Media Feature Pack. It cannot fall back to Implicit VR.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph Style="{StaticResource Note}">
+                        DCST4.Cli can also write JPEG-LS Near-Lossless and HTJ2K Lossless RPCL, from the table below, with
+                        <Bold>--transfer-syntax</Bold>. <Bold>DCST4.Cli.exe list-codecs</Bold> shows which syntax and bit
+                        depth the encoders on this computer can produce.
+                    </Paragraph>
+
+                    <Paragraph Style="{StaticResource H2}">Syntaxes only the probe proposes</Paragraph>
+                    <Paragraph>
+                        The negotiation probe proposes these as well, to complete the picture of what the destination takes.
+                        DCST4 has no encoder for them, or they need a source it does not generate, such as a JPEG to
+                        recompress or stereo video. See <Italic>What the PACS supports</Italic>.
+                    </Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="175"/>
+                            <TableColumn Width="165"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow Background="#FFF3F6FA"><TableCell><Paragraph><Bold>Name and short name</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph><Bold>UID</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph><Bold>What it is</Bold></Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>Uncompressed</Bold></Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Explicit VR Big Endian</Bold><LineBreak/>Explicit BE</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.2</Paragraph></TableCell>
+                                <TableCell><Paragraph>Explicit VR with the most significant byte first. Retired from the standard, though some old systems still propose it. A PACS that rejects it does what is expected.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Encapsulated Uncompressed Explicit VR Little Endian</Bold><LineBreak/>Encap Unc</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.1.98</Paragraph></TableCell>
+                                <TableCell><Paragraph>Uncompressed pixels stored in fragments, one per frame, as a compressed syntax stores them. A single frame of a large multi-frame object can then be read without the rest.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Deflated Image Frame Compression</Bold><LineBreak/>Defl Frame</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.8.1</Paragraph></TableCell>
+                                <TableCell><Paragraph>Each frame compressed on its own with deflate. Meant for segmentations and floating-point pixels, where the image codecs do not apply.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>JPEG, JPEG-LS and HTJ2K</Bold></Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG Lossless, Non-Hierarchical (Process 14)</Bold><LineBreak/>JPEG P14</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.57</Paragraph></TableCell>
+                                <TableCell><Paragraph>Lossless JPEG with any of its seven predictors. JPEG Lossless SV1 above is the subset that nearly everyone uses.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG-LS Lossy (Near-Lossless)</Bold><LineBreak/>JLS NL</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.81</Paragraph></TableCell>
+                                <TableCell><Paragraph>JPEG-LS where each pixel may differ from the original by at most a set amount. Lossy.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>HTJ2K Lossless RPCL</Bold><LineBreak/>HTJ2K RPCL</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.202</Paragraph></TableCell>
+                                <TableCell><Paragraph>Lossless HTJ2K with the resolutions in order, lowest first, so a viewer can show a small version of the image before the whole stream has arrived.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>JPEG XL</Bold></Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG XL JPEG Recompression</Bold><LineBreak/>JXL JPEG</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.111</Paragraph></TableCell>
+                                <TableCell><Paragraph>A JPEG Baseline image repacked as JPEG XL. It is smaller, and the original JPEG can be restored from it bit for bit. Only for images that were JPEG first.</Paragraph></TableCell></TableRow>
+
+                            <TableRow Background="#FFE9EEF5"><TableCell ColumnSpan="3"><Paragraph><Bold>Video</Bold></Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>MPEG2 Main Profile / Main Level</Bold><LineBreak/>MPEG2 ML</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.100</Paragraph></TableCell>
+                                <TableCell><Paragraph>MPEG-2 video at standard definition, at most 720 x 576. Older endoscopy and video sources.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>MPEG2 Main Profile / High Level</Bold><LineBreak/>MPEG2 HL</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.101</Paragraph></TableCell>
+                                <TableCell><Paragraph>MPEG-2 video at high definition, at most 1920 x 1080.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>H.264 BD-compatible High Profile / Level 4.1</Bold><LineBreak/>H.264 BD</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.103</Paragraph></TableCell>
+                                <TableCell><Paragraph>H.264 limited to what a Blu-ray disc allows, so the video can be burned to a disc that plays in a Blu-ray player.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>H.264 High Profile / Level 4.2 For 2D Video</Bold><LineBreak/>H.264 2D</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.104</Paragraph></TableCell>
+                                <TableCell><Paragraph>H.264 at Level 4.2, which allows higher frame rates, such as 1080p at 60 frames per second.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>H.264 High Profile / Level 4.2 For 3D Video</Bold><LineBreak/>H.264 3D</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.105</Paragraph></TableCell>
+                                <TableCell><Paragraph>The same, for 3D video with the two views packed into each frame, such as from a stereo surgical microscope.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>H.264 Stereo High Profile / Level 4.2</Bold><LineBreak/>H.264 St</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.106</Paragraph></TableCell>
+                                <TableCell><Paragraph>Stereo video with the two views coded as separate streams within one.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>HEVC/H.265 Main Profile / Level 5.1</Bold><LineBreak/>H.265 Main</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.107</Paragraph></TableCell>
+                                <TableCell><Paragraph>HEVC video, 8 bits, up to 4K. About half the size of H.264 at the same quality.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>HEVC/H.265 Main 10 Profile / Level 5.1</Bold><LineBreak/>H.265 M10</Paragraph></TableCell>
+                                <TableCell><Paragraph>1.2.840.10008.1.2.4.108</Paragraph></TableCell>
+                                <TableCell><Paragraph>The same with 10 bits per sample, for finer shades and HDR video.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
                 </Section>
 
                 <!-- ===================================================================== -->
@@ -508,7 +686,8 @@
                         syntax in a presentation context of its own, split over several associations since one can hold
                         at most 128 contexts. The 30 transfer syntaxes cover uncompressed and Deflated, JPEG, JPEG-LS,
                         JPEG 2000, RLE, HTJ2K, JPEG XL, MPEG-2, H.264 and HEVC/H.265. They are only proposed, so a syntax
-                        DCST4 cannot encode can still be probed, and the store tests never send in one.
+                        DCST4 cannot encode can still be probed, and the store tests never send in one. Each is described
+                        under <Italic>Transfer syntaxes</Italic>.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">The Capabilities tab</Paragraph>
                     <Paragraph>

@@ -196,6 +196,10 @@ The **Transfer syntax** list on the Exam tab, and **Store tests send in** in the
 | JPEG XL      | JPEG XL Lossless, JPEG XL                                                             | DCST4's own                     |
 | Video        | H.264 High Profile / Level 4.1 (lossy)                                                | Windows, through Media Foundation |
 
+The Help has a topic, **Transfer syntaxes**, that explains each of the 30 syntaxes DCST4 knows: the 15 above, and the 15 that only the negotiation probe proposes (Explicit VR Big Endian, Encapsulated Uncompressed, Deflated Image Frame Compression, JPEG Process 14, JPEG-LS Near-Lossless, HTJ2K Lossless RPCL, JPEG XL JPEG Recompression, MPEG-2, the other H.264 profiles and HEVC). For each, it gives the name, the short name used on the Capabilities tab, the UID, lossless or lossy, the bit limits, the encoder and which objects it suits.
+
+![The Transfer syntaxes topic in Help](screenshots/help-transfer-syntaxes.png)
+
 A syntax that the exam cannot be written in stops the run with a message before anything is generated: JPEG Baseline holds 8 bits and JPEG Extended at most 12, and H.264 is for a colour cine loop only. A lossy syntax marks the image with Lossy Image Compression `01`, the ratio and the method, and Image Type `DERIVED`.
 
 **Deflated** is Explicit VR Little Endian compressed with deflate as it is written, to a file or on the network. The pixels are not changed, and the size estimate is measured, since how much it saves depends on the image.
@@ -920,6 +924,12 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe syntaxes
 
 # The Exam tab with a multi-frame object, drawn to a PNG at the window's smallest size
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe examtab C:\Temp\examtab.png
+
+# Retake the README pictures of the app windows (all but exam-multiframe, report and compare) into a folder.
+# The real windows are shown on screen against a mock SCP on port 11112 and copied from the screen, so the screen
+# must be unlocked and left alone for about a minute. Every setting is at its default, in memory only; user.config
+# is compared with a copy afterwards and put back if it changed. Results go to C:\Temp\DCST4-results.
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe screenshots C:\Temp\shots
 
 # Send one exam to any SCP: host, port, called AE, modality, images, bits, implicit|explicit|jpeg or a name that generate --transfer-syntax takes, optionally fallback
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe send 127.0.0.1 11112 MYSCP CT 60 16 jpeg
