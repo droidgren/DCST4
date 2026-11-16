@@ -3,7 +3,6 @@ using DCST4.Properties;
 using DCST4.ViewModels;
 using Serilog;
 using System;
-using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -37,20 +36,10 @@ namespace DCST4
             ContentRendered += ShowUpdateWindowIfNewVersion;
 
             // Keep the newest row and log line in view while a run is going.
-            ((INotifyCollectionChanged)_viewModel.Results).CollectionChanged += (s, e) =>
-            {
-                if (e.Action == NotifyCollectionChangedAction.Add) ResultsGrid.ScrollIntoView(e.NewItems[0]);
-            };
-            ((INotifyCollectionChanged)_viewModel.LogLines).CollectionChanged += (s, e) =>
-            {
-                if (e.Action == NotifyCollectionChangedAction.Add && LogList.IsVisible) LogList.ScrollIntoView(e.NewItems[0]);
-            };
-
             // The Tests tab follows the newest result as the run goes, as Results on the Generate tab does.
-            ((INotifyCollectionChanged)_viewModel.TestSuite.Rows).CollectionChanged += (s, e) =>
-            {
-                if (e.Action == NotifyCollectionChangedAction.Add) TestResultsGrid.ScrollIntoView(e.NewItems[0]);
-            };
+            FollowNewest.Attach(_viewModel.Results, ResultsGrid, ResultsGrid.ScrollIntoView, onlyWhenVisible: false);
+            FollowNewest.Attach(_viewModel.LogLines, LogList, LogList.ScrollIntoView, onlyWhenVisible: true);
+            FollowNewest.Attach(_viewModel.TestSuite.Rows, TestResultsGrid, TestResultsGrid.ScrollIntoView, onlyWhenVisible: false);
 
             _viewModel.TestSuite.Capabilities.ColumnsChanged += RebuildCapabilityColumns;
         }

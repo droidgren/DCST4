@@ -4,12 +4,14 @@ using DCST4.Core.Network;
 using DCST4.Core.Pipeline;
 using DCST4.Core.TestData;
 using DCST4.Core.Testing;
+using DCST4.Infrastructure;
 using DCST4.Models;
 using DCST4.ViewModels;
 using FellowOakDicom;
 using FellowOakDicom.Network;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -103,6 +105,7 @@ namespace DCST4.Tests
                         await RunSizeEstimate(port, check);
                         await RunMultiFrame(port, check);
                         RunHelpWindow(check);
+                        await RunFollowNewest(check);
                         await RunTestSuite(port, closedPort, temp, check);
                         await RunReports(port, temp, check);
                         await RunPerformanceTab(port, temp, check);
@@ -982,6 +985,68 @@ namespace DCST4.Tests
             await measured();
             vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
             check("Back to uncompressed: calculated at once", vm.EstimatedSizeText == "about " + ExamSizeEstimator.Format((ExamSizeEstimator.HeaderBytes + 256 * 512 * 2) * 80L), vm.EstimatedSizeText);
+        }
+
+        /// <summary>
+        /// The log list and the result grids follow the newest item. Scrolling from a CollectionChanged handler that runs before
+        /// the control's own one made WPF throw "ItemsControl is inconsistent with its items source" during a send, on every layout
+        /// pass after it. The old pattern is run too, so the check fails if this setup stops reproducing the crash.
+        /// </summary>
+        private static async Task RunFollowNewest(Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nFollow newest item");
+            var oldList = new ListBox();
+            var old = await FeedList(oldList, items => items.CollectionChanged += (s, e) =>
+            {
+                if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add) oldList.ScrollIntoView(e.NewItems[0]);
+            });
+            check("Follow newest: scrolling inside CollectionChanged reproduces the crash", old.Failure is InvalidOperationException, old.Failure?.GetType().Name ?? "no exception");
+
+            var logList = new ListBox();
+            var log = await FeedList(logList, items => FollowNewest.Attach(items, logList, logList.ScrollIntoView, onlyWhenVisible: true));
+            check("Follow newest: log list takes lines without a layout exception", log.Failure == null, log.Failure?.Message);
+            check("Follow newest: log list shows the newest line", log.AtEnd, null);
+
+            var grid = new DataGrid { IsReadOnly = true };
+            var rows = await FeedList(grid, items => FollowNewest.Attach(items, grid, grid.ScrollIntoView, onlyWhenVisible: false));
+            check("Follow newest: result grid takes rows without a layout exception", rows.Failure == null, rows.Failure?.Message);
+            check("Follow newest: result grid shows the newest row", rows.AtEnd, null);
+        }
+
+        /// <summary>
+        /// Shows an items control off screen, attaches <paramref name="follow"/> before the control binds to the collection, as
+        /// MainWindow does, and adds lines in bursts as the log timer does.
+        /// </summary>
+        private static async Task<(Exception Failure, bool AtEnd)> FeedList(ItemsControl control, Action<ObservableCollection<string>> follow)
+        {
+            var dispatcher = Dispatcher.CurrentDispatcher;
+            Exception failure = null;
+            DispatcherUnhandledExceptionEventHandler onUnhandled = (s, e) => { failure = failure ?? e.Exception; e.Handled = true; };
+            control.Height = 100;
+            var items = new ObservableCollection<string>();
+            var window = new Window { Content = control, Width = 300, Height = 160, WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000, ShowActivated = false, ShowInTaskbar = false };
+            dispatcher.UnhandledException += onUnhandled;
+            try
+            {
+                follow(items);
+                control.SetBinding(ItemsControl.ItemsSourceProperty, new System.Windows.Data.Binding { Source = items });
+                window.Show();
+                Func<Task> idle = async () => await dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                for (var tick = 0; tick < 20 && failure == null; tick++)
+                {
+                    try { for (var i = 0; i < 5; i++) items.Add("line " + items.Count); }
+                    catch (Exception ex) { failure = ex; }
+                    await idle();
+                }
+                var viewer = FindVisualChild<ScrollViewer>(control);
+                var atEnd = viewer != null && viewer.ExtentHeight > viewer.ViewportHeight && viewer.VerticalOffset + viewer.ViewportHeight >= viewer.ExtentHeight - 0.5;
+                return (failure, atEnd);
+            }
+            finally
+            {
+                window.Close();
+                dispatcher.UnhandledException -= onUnhandled;
+            }
         }
 
         private static void RunHelpWindow(Action<string, bool, string> check)
