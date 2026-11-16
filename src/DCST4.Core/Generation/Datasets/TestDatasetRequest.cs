@@ -1,3 +1,5 @@
+using DCST4.Core.Generation.Realism;
+using DCST4.Core.Pipeline;
 using DCST4.Core.TestData;
 using FellowOakDicom;
 using System;
@@ -57,6 +59,10 @@ namespace DCST4.Core.Generation.Datasets
         public EdgeCases EdgeCases { get; set; } = EdgeCases.None;
         /// <summary>The size of a private binary value added to each image. 0 adds none.</summary>
         public long PrivatePayloadBytes { get; set; }
+        /// <summary>Off draws the flat test pattern. The other levels add the modality's shape, texture and noise.</summary>
+        public RealismLevel Realism { get; set; } = RealismLevel.Off;
+        /// <summary>How hard a lossy encoder compresses. Null leaves every encoder at its default.</summary>
+        public LossyCompressionSettings Lossy { get; set; }
         /// <summary>Null means the embedded list.</summary>
         public TestPersonnummerRegistry Registry { get; set; }
 
@@ -108,6 +114,9 @@ namespace DCST4.Core.Generation.Datasets
 
             if (PrivatePayloadBytes < 0 || PrivatePayloadBytes > PrivatePayload.MaxBytes) problems.Add($"The private payload can be at most {PrivatePayload.MaxMegabytes} MB.");
             else if (PrivatePayloadBytes > 0 && !profile.IsImage) problems.Add($"{profile.DisplayName} is not an image, and only images get a private payload.");
+
+            if (!Enum.IsDefined(typeof(RealismLevel), Realism)) problems.Add("Unknown realism level.");
+            if (Lossy != null) problems.AddRange(Lossy.Validate());
 
             if (profile.IsImage) ValidateImage(problems, profile);
             return problems;

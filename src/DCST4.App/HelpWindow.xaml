@@ -192,6 +192,10 @@
                                 <TableCell><Paragraph>15 syntaxes under a heading for each codec family: Uncompressed, RLE, JPEG, JPEG-LS, JPEG 2000, HTJ2K, JPEG XL and Video. Lossy ones say so in their name. See <Italic>Transfer syntaxes</Italic>, and <Italic>Transfer syntax and fallback</Italic> for what happens if the server does not accept one.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How much data the whole exam will be. It updates as you change the other fields.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Realistic images</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Off draws the flat test pattern. Low, Normal and High draw the modality's shape, texture and noise, for file sizes like those of real images. Not shown for OT, DOC and SR. See <Italic>Realistic images and lossy compression</Italic>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG quality, JPEG 2000 ratio, H.264 Mbit/s</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Shown for a lossy transfer syntax: how hard it compresses, in its encoder's unit. Empty is the encoder's default.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Object</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Which image of the modality to generate: Single frame, or a multi-frame one where DCST4 has it. US has a cine loop and Enhanced US Volume, XA a cine run and Enhanced XA, RF a fluoro loop and Enhanced XRF, CT and MR their enhanced image and MG Breast Tomosynthesis. CR, DX, PT and NM have one image each. OT is Secondary Capture, DOC an Encapsulated PDF, and SR a Basic Text SR or Enhanced SR report. DOC and SR have no pixels, so the matrix, bits, frames and private payload are greyed out, and only Implicit VR, Explicit VR and Deflated can be chosen as transfer syntax.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Frames per image</Bold></Paragraph></TableCell>
@@ -229,7 +233,7 @@
                     <Paragraph Style="{StaticResource H2}">Private payload</Paragraph>
                     <Paragraph>
                         Some ultrasound systems send their raw data along with a cine loop, as one private value that can be
-                        several times the size of the pixels. <Bold>Add private payload of ... MB per image</Bold> does the
+                        several times the size of the pixels. <Bold>Private payload ... MB/image</Bold>, under Frames per image, does the
                         same, to find out whether a PACS takes images with large private data and keeps it: a private
                         sequence, (0099,1020) under the private creator DCST4 TEST, with one binary value of 1 to 2,000 MB.
                         The value is random bytes, so it does not compress away, and it is written as it is generated,
@@ -363,7 +367,8 @@
                         box is off for them.
                     </Paragraph>
                     <Paragraph>
-                        Every syntax, what it is and what it can hold, is described under <Italic>Transfer syntaxes</Italic>.
+                        Every syntax, what it is and what it can hold, is described under <Italic>Transfer syntaxes</Italic>,
+                        and the settings of the lossy encoders under <Italic>Realistic images and lossy compression</Italic>.
                     </Paragraph>
                 </Section>
 
@@ -548,6 +553,94 @@
                                 <TableCell><Paragraph>The same with 10 bits per sample, for finer shades and HDR video.</Paragraph></TableCell></TableRow>
                         </TableRowGroup>
                     </Table>
+                </Section>
+
+                <!-- ===================================================================== -->
+                <Section Tag="Realistic images and lossy compression">
+                    <Paragraph Style="{StaticResource H1}">Realistic images and lossy compression</Paragraph>
+                    <Paragraph>
+                        The test pattern is flat on purpose, so a test image is obvious at a glance. Flat areas compress far
+                        better than a real image, though, so file sizes, compression ratios and encoding times say little
+                        about real data. Both settings here are under <Bold>File &gt; Settings</Bold>, on the
+                        <Bold>Images</Bold> tab, and apply to Generate &amp; Send, the Tests tab, the Performance tab and the
+                        estimated size.
+                    </Paragraph>
+                    <Paragraph>
+                        The Exam tab has them too, and they are the same settings. <Bold>Realistic images</Bold> is under
+                        <Bold>Object</Bold>, for every modality that has a realistic form. A lossy transfer syntax shows its value
+                        under <Bold>Allow fallback to Implicit VR</Bold>: <Bold>JPEG quality</Bold>, <Bold>JPEG 2000 ratio</Bold> or <Bold>H.264 Mbit/s</Bold>, with
+                        <Italic>(default)</Italic> or <Italic>(auto)</Italic> while the encoder's default is used. Empty puts the
+                        default back. HTJ2K (lossy) says <Italic>no setting</Italic>, and JPEG XL <Italic>written lossless</Italic>.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Realistic images</Paragraph>
+                    <Paragraph>
+                        <Bold>Off</Bold> (the default) draws the flat pattern. <Bold>Low</Bold>, <Bold>Normal</Bold> and
+                        <Bold>High</Bold> draw the shape of what the modality images, smooth tissue texture and the modality's
+                        own noise, at the full bit depth. Normal is about what the modality gives, Low half of that and High
+                        twice. The TEST IMAGE watermark, the text box, the gray bar and the frame number stay on top, without
+                        noise.
+                    </Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="150"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>US</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Speckle in a sector, with depth attenuation and a dark cyst. The cine loop keeps 70 % of its speckle from frame to frame.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>CR, DX</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Quantum noise that grows with the signal, a body on a dark background and bright collimation borders.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>MG, tomosynthesis</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Quantum noise, a breast against the chest wall with a skin line.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>XA, RF</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Quantum noise in a round detector field. A cine run keeps 20 % of its noise from frame to frame.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>CT</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Noise in HU set by the kernel: 12 HU with a smooth one such as B31, 25 HU with a sharp one such as B70. A body in air in a round field of view, opening in a soft-tissue window.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>MR</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Rician noise, so the air around the body shows a noise floor.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>PT, NM</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Counting noise on few counts, smoothed as a reconstruction would.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Secondary Capture, Segmentation</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Always flat.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph>
+                        The noise follows from the Series Instance UID and the position of the image, so the same object is
+                        drawn the same way every time, and a test dataset with a fixed seed gives the same files.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Lossy compression</Paragraph>
+                    <Paragraph>
+                        Each value is in the unit of its own encoder and applies to its own transfer syntax only. Empty uses
+                        the encoder's default.
+                    </Paragraph>
+                    <Table>
+                        <Table.Columns>
+                            <TableColumn Width="150"/>
+                            <TableColumn/>
+                        </Table.Columns>
+                        <TableRowGroup>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG quality</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>JPEG Baseline and JPEG Extended, 1 to 100. Default 90.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG 2000 ratio</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>JPEG 2000 (lossy), 2 to 200, as N:1. Default 20:1.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>JPEG-LS NEAR</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>JPEG-LS Near-Lossless, the largest difference allowed in a sample, 1 to 255. Default 3.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>H.264 bitrate</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>H.264 High Profile, 0.1 to 50 Mbit/s. Default 0.2 bits per pixel and frame, at least 1 Mbit/s.</Paragraph></TableCell></TableRow>
+                        </TableRowGroup>
+                    </Table>
+                    <Paragraph>
+                        A value that is set is written in Derivation Description, beside Lossy Image Compression Ratio, which
+                        says what was reached. HTJ2K lossy has no setting, since its encoder does not reach a ratio it is asked
+                        for, and JPEG XL has none, since DCST4 writes it lossless.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Comparing codecs</Paragraph>
+                    <Paragraph>
+                        Set Realistic images to Normal, tick <Bold>Save to disk</Bold>, and send or save the same exam once in
+                        each transfer syntax. On the command line, a fixed <Italic>--seed</Italic> gives the same pixels in every
+                        run, for example <Italic>generate --dataset ct --realism normal --seed 7 --transfer-syntax jpeg2000-lossy
+                        --j2k-ratio 10</Italic>.
+                    </Paragraph>
                 </Section>
 
                 <!-- ===================================================================== -->
@@ -1044,6 +1137,10 @@
                                 <TableCell><Paragraph>A saved capability matrix to choose the transfer syntax from.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>--transfer-syntax</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Send everything in this syntax where the object type allows it.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>--realism</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>off, low, normal or high, for every object a test makes. Default off. Also on generate.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>--jpeg-quality, --j2k-ratio, --jpegls-near, --h264-mbps</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>The lossy compression settings. Default: each encoder's own. Also on generate.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>--index-wait</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How long an object may take to appear in a query, in seconds. Default 30.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>--commit-linger</Bold></Paragraph></TableCell>
@@ -1141,6 +1238,8 @@
                                 <TableCell><Paragraph>Whether to draw new Auto values after each run, and how an Auto patient name is made, in Generate &amp; Send and in the tests: DCST4^TEST^number (the default) or a Swedish name.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Burned-in text</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>See <Italic>Burned-in text</Italic>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Images</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Realistic images and the lossy compression settings. See <Italic>Realistic images and lossy compression</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Additional tags</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>See <Italic>Additional tags</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Test and Performance Results</Bold></Paragraph></TableCell>

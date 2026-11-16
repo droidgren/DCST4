@@ -87,6 +87,8 @@ namespace DCST4.Core.Pipeline
         public bool Save { get; set; }
         public string SaveFolder { get; set; }
         public DicomTransferSyntax TransferSyntax { get; set; } = DicomTransferSyntax.ExplicitVRLittleEndian;
+        /// <summary>How hard a lossy encoder compresses. Null leaves every encoder at its default.</summary>
+        public LossyCompressionSettings Lossy { get; set; }
         /// <summary>
         /// False (default): stop with an error if the SCP does not accept the selected syntax.
         /// True: send as Implicit VR LE instead, the way a real modality would, and flag it in the summary.
@@ -101,6 +103,7 @@ namespace DCST4.Core.Pipeline
         public string Validate()
         {
             if (!Send && !Save) return "Select Send, Save to disk, or both.";
+            if (Lossy != null && Lossy.Validate().Count > 0) return Lossy.Validate()[0];
             if (Save && string.IsNullOrWhiteSpace(SaveFolder)) return "Select a folder to save the images in.";
             return Send ? (Endpoint?.Validate() ?? (Endpoint == null ? "No destination is set." : null)) : null;
         }
@@ -270,7 +273,7 @@ namespace DCST4.Core.Pipeline
             foreach (var image in images)
             {
                 var current = ++number;
-                image.File = TransferSyntaxConverter.Convert(image.File, _options.TransferSyntax, token, (done, total) => FrameEncoded?.Invoke(current, done, total));
+                image.File = TransferSyntaxConverter.Convert(image.File, _options.TransferSyntax, token, (done, total) => FrameEncoded?.Invoke(current, done, total), _options.Lossy);
                 image.PixelBytes = PixelDataSize(image.File.Dataset);
 
                 if (_options.Save)

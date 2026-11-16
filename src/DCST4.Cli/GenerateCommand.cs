@@ -28,6 +28,7 @@ namespace DCST4.Cli
             var command = new GenerateCommand();
             var request = command.Request;
 
+            var lossy = new LossyCompressionSettings();
             for (var i = 1; i < args.Count; i += 2)
             {
                 var name = args[i];
@@ -87,11 +88,14 @@ namespace DCST4.Cli
                         request.EdgeCases = edgeCases;
                         break;
                     default:
-                        error = $"Unknown option {name}.";
+                        var image = CliArguments.TryImageOption(name.ToLowerInvariant(), value, level => request.Realism = level, lossy, out error);
+                        if (image == true) break;
+                        if (image == null) error = $"Unknown option {name}.";
                         return null;
                 }
             }
 
+            request.Lossy = lossy.IsDefault ? null : lossy;
             if (string.IsNullOrWhiteSpace(request.ProfileId)) error = "--dataset is required.";
             else if (string.IsNullOrWhiteSpace(command.OutputFolder)) error = "--out is required.";
             return error == null ? command : null;

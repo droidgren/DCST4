@@ -1,3 +1,4 @@
+using DCST4.Core.Generation.Realism;
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.TestData;
 using FellowOakDicom;
@@ -170,18 +171,20 @@ namespace DCST4.Core.Generation
 
             // Read here, after the additional tags, since one of those can replace a value that is shown.
             var lines = BurnedInText.Lines(dataset, request.BurnedInTags);
+            // A realistic image takes its noise from the series and the image, so that a frame drawn again is the same.
+            var seriesUid = dataset.GetSingleValueOrDefault(DicomTag.SeriesInstanceUID, string.Empty);
 
             // Only the text can say who the patient is: the watermark and the other graphics are the same for everybody.
             dataset.Add(DicomTag.BurnedInAnnotation, lines.Count > 0 ? "YES" : "NO");
 
-            var first = RenderFrame(request, imageIndex, 0, lines);
+            var first = RenderFrame(request, seriesUid, imageIndex, 0, lines);
             if (modality.IsBinaryMask)
             {
-                AddBinaryMask(dataset, request, imageIndex, lines, first);
+                AddBinaryMask(dataset, request, seriesUid, imageIndex, lines, first);
                 return;
             }
 
-            if (modality.SamplesPerPixel == 1) AddDisplayTags(dataset, modality, first);
+            if (modality.SamplesPerPixel == 1) AddDisplayTags(dataset, modality, first, request.Realism == RealismLevel.Off ? null : modality.Realism(request.Preset));
 
             dataset.AddOrUpdate(DicomTag.BitsAllocated, (ushort)request.BitsAllocated);
             var pixelData = DicomPixelData.Create(dataset, true);
@@ -196,7 +199,7 @@ namespace DCST4.Core.Generation
 
             if (modality.RendersFramesOnDemand)
             {
-                var frames = new RenderedFramesBuffer(request.FramesPerImage, first.Data.Length, frame => RenderFrame(request, imageIndex, frame, lines).Data);
+                var frames = new RenderedFramesBuffer(request.FramesPerImage, first.Data.Length, frame => RenderFrame(request, seriesUid, imageIndex, frame, lines).Data);
                 // OB for 8 bits allocated and OW for 16, as fo-dicom chooses for frames held in memory.
                 if (request.BitsAllocated <= BitsPerByte) dataset.AddOrUpdate(new DicomOtherByte(DicomTag.PixelData, frames));
                 else dataset.AddOrUpdate(new DicomOtherWord(DicomTag.PixelData, frames));
@@ -207,16 +210,17 @@ namespace DCST4.Core.Generation
             pixelData.AddFrame(new MemoryByteBuffer(first.Data));
             for (var frame = 1; frame < request.FramesPerImage; frame++)
             {
-                pixelData.AddFrame(new MemoryByteBuffer(RenderFrame(request, imageIndex, frame, lines).Data));
+                pixelData.AddFrame(new MemoryByteBuffer(RenderFrame(request, seriesUid, imageIndex, frame, lines).Data));
             }
 
             if (!modality.KeepsNumberOfFrames) dataset.Remove(DicomTag.NumberOfFrames);
         }
 
         /// <summary>A multi-frame image scrolls through its frames, as a single-frame stack does through its images.</summary>
-        private static RenderedPixels RenderFrame(ExamRequest request, int imageIndex, int frameIndex, IReadOnlyList<string> lines)
+        private static RenderedPixels RenderFrame(ExamRequest request, string seriesUid, int imageIndex, int frameIndex, IReadOnlyList<string> lines)
         {
             var multiFrame = request.FramesPerImage > 1;
+            var profile = request.Realism == RealismLevel.Off ? null : request.Modality.Realism(request.Preset);
             return PixelRenderer.Render(new PixelRenderSpec
             {
                 Rows = request.Rows,
@@ -228,23 +232,40 @@ namespace DCST4.Core.Generation
                 ImagesInSeries = multiFrame ? request.FramesPerImage : request.ImagesPerSeries,
                 FrameNumber = multiFrame ? frameIndex + 1 : 0,
                 Lines = lines,
+                Realism = profile == null ? null : new RealismSpec
+                {
+                    Profile = profile,
+                    Level = request.Realism,
+                    SeriesSeed = seriesUid,
+                    Instance = imageIndex,
+                    Frame = frameIndex,
+                    Frames = request.FramesPerImage,
+                },
             });
         }
 
-        private static void AddDisplayTags(DicomDataset dataset, ModalityProfile modality, RenderedPixels pixels)
+        private static void AddDisplayTags(DicomDataset dataset, ModalityProfile modality, RenderedPixels pixels, RealismProfile realism)
         {
             // The window comes from the pixels actually stored, or a viewer could open the image too dark to see it.
-            // Every frame holds the same gray bar, so the first frame's range holds for all of them.
+            // Every frame holds the same gray bar, so the first frame's range holds for all of them. A realistic image
+            // whose modality is read in a window of its own, such as CT in a soft-tissue window, opens in that one.
             var intercept = modality.RescaleIntercept ?? 0;
             var low = pixels.MinValue + intercept;
             var high = pixels.MaxValue + intercept;
 
-            var window = new DicomDataset
-            {
-                { DicomTag.WindowCenter, ModalityProfile.Ds((low + high + 1) / 2) },
-                { DicomTag.WindowWidth, ModalityProfile.Ds(Math.Max(1, high - low + 1)) },
-                { DicomTag.WindowCenterWidthExplanation, "FULL RANGE" },
-            };
+            var window = realism?.WindowWidth != null
+                ? new DicomDataset
+                {
+                    { DicomTag.WindowCenter, ModalityProfile.Ds(realism.WindowCenter.Value) },
+                    { DicomTag.WindowWidth, ModalityProfile.Ds(realism.WindowWidth.Value) },
+                    { DicomTag.WindowCenterWidthExplanation, realism.WindowExplanation },
+                }
+                : new DicomDataset
+                {
+                    { DicomTag.WindowCenter, ModalityProfile.Ds((low + high + 1) / 2) },
+                    { DicomTag.WindowWidth, ModalityProfile.Ds(Math.Max(1, high - low + 1)) },
+                    { DicomTag.WindowCenterWidthExplanation, "FULL RANGE" },
+                };
 
             DicomDataset rescale = null;
             if (modality.RescaleIntercept != null)
@@ -270,7 +291,7 @@ namespace DCST4.Core.Generation
         }
 
         /// <summary>One bit per pixel, packed with the first pixel in the lowest bit, continuing from one frame to the next (PS3.5 8.1.1).</summary>
-        private static void AddBinaryMask(DicomDataset dataset, ExamRequest request, int imageIndex, IReadOnlyList<string> lines, RenderedPixels first)
+        private static void AddBinaryMask(DicomDataset dataset, ExamRequest request, string seriesUid, int imageIndex, IReadOnlyList<string> lines, RenderedPixels first)
         {
             var frames = request.FramesPerImage;
             var pixelsPerFrame = request.Rows * request.Columns;
@@ -278,7 +299,7 @@ namespace DCST4.Core.Generation
 
             for (var frame = 0; frame < frames; frame++)
             {
-                var rendered = frame == 0 ? first : RenderFrame(request, imageIndex, frame, lines);
+                var rendered = frame == 0 ? first : RenderFrame(request, seriesUid, imageIndex, frame, lines);
                 for (var pixel = 0; pixel < pixelsPerFrame; pixel++)
                 {
                     if (!IsInBinaryMask(rendered.Data[pixel])) continue;

@@ -1,3 +1,5 @@
+using DCST4.Core.Pipeline;
+using DCST4.Core.Generation.Realism;
 using DCST4.Core.Capability;
 using DCST4.Core.Generation.Datasets;
 using DCST4.Core.Network;
@@ -24,6 +26,10 @@ namespace DCST4.Core.Testing
         public CapabilityMatrix Matrix { get; set; }
         /// <summary>Send every object type in this syntax where the type allows it. Null chooses per type.</summary>
         public DicomTransferSyntax SyntaxOverride { get; set; }
+        /// <summary>How realistic the generated images are. Off draws the flat test pattern.</summary>
+        public RealismLevel Realism { get; set; } = RealismLevel.Off;
+        /// <summary>How hard a lossy encoder compresses the generated data. Null leaves every encoder at its default.</summary>
+        public LossyCompressionSettings Lossy { get; set; }
         /// <summary>Where originals and retrieved files go, and stay. Null uses a temporary folder that is deleted after the run.</summary>
         public string WorkFolder { get; set; }
         /// <summary>How long a stored object may take to appear in a query.</summary>

@@ -439,6 +439,15 @@ namespace DCST4.Tests
             Check("Other settings: shown, not comparable and not a regression", otherSettings.Regressions == 0 && otherSettings.Runs[0].Findings.Single().Kind == FindingKind.NotComparable
                 && otherSettings.Runs[0].Findings.Single().Note.Contains("associations 4 and 1") && otherSettings.Runs[0].Performance.Any(p => p.Worse && !p.Regression), Findings(otherSettings));
 
+            var realistic = Report(Load(100, 20));
+            realistic.Realism = "Normal";
+            var otherImages = Compare(Report(Load(100, 20)), realistic);
+            Check("Flat images against realistic ones: not comparable, and it says why", otherImages.Regressions == 0 && otherImages.Runs[0].Findings.Single().Kind == FindingKind.NotComparable
+                && otherImages.Runs[0].Findings.Single().Note.Contains("realism Off and Normal"), Findings(otherImages));
+            var lossier = Report(Load(100, 20));
+            lossier.LossyCompression = "JPEG quality 50";
+            Check("Other lossy settings: not comparable", Compare(Report(Load(100, 20)), lossier).Runs[0].Findings.Single().Note.Contains("lossy compression - and JPEG quality 50"), null);
+
             // Every custom mix has the id "custom", so its description decides whether two runs sent the same thing.
             Func<string, TestResult> custom = description =>
             {
@@ -542,8 +551,8 @@ namespace DCST4.Tests
                 if (content != null) File.WriteAllText(file, content, new UTF8Encoding(false));
                 try { RunFile.Load(file); return null; } catch (RunFileException ex) { return ex.Message; }
             };
-            var newer = refused("newer.json", ResultFileWriter.ToJson(report).Replace("\"schemaVersion\": 6", "\"schemaVersion\": 7"));
-            Check("A newer schema version is refused, and the message says which", newer != null && newer.Contains("schema version 7") && newer.Contains("up to 6"), newer);
+            var newer = refused("newer.json", ResultFileWriter.ToJson(report).Replace("\"schemaVersion\": 7", "\"schemaVersion\": 8"));
+            Check("A newer schema version is refused, and the message says which", newer != null && newer.Contains("schema version 8") && newer.Contains("up to 7"), newer);
             Check("A file that is not JSON is refused", (refused("text.json", "not json at all") ?? string.Empty).Contains("is not a DCST4 result file"), null);
             Check("A capability matrix file is refused as a run", (refused("matrix.json", Matrix(CapabilityResult.Accepted).ToJson()) ?? string.Empty).Contains("is not a DCST4 result file"), refused("matrix.json", null));
             Check("A profile file is refused as a run", (refused("profile.json", "{ \"name\": \"x\", \"endpoint\": { \"host\": \"h\", \"port\": 104 } }") ?? string.Empty).Contains("is not a DCST4 result file"), null);

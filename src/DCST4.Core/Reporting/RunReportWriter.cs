@@ -109,6 +109,8 @@ namespace DCST4.Core.Reporting
             html.Pair("Ended", ReportFormat.Time(report.EndedUtc));
             html.Pair("Duration", ReportFormat.Duration(report.DurationMs));
             html.Pair("Seed", report.Seed?.ToString(CultureInfo.InvariantCulture));
+            if (report.Realism != null) html.Pair("Realism", report.Realism);
+            if (report.LossyCompression != null) html.Pair("Lossy compression", report.LossyCompression);
             if (report.Cancelled) html.Pair("Cancelled", "yes, the run was cancelled before it finished");
             html.Close("table").Close("section").Line();
         }

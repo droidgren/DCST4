@@ -126,7 +126,11 @@ namespace DCST4
         private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new SettingsDialog(new ResultSettingsViewModel(_viewModel)) { Owner = this };
-            if (dialog.ShowDialog() == true) _viewModel.ReloadAdditionalTags();
+            if (dialog.ShowDialog() == true)
+            {
+                _viewModel.ReloadAdditionalTags();
+                _viewModel.ImageSettingsChanged();
+            }
             else if (dialog.ResetRequested) _viewModel.ResetSettings();
         }
 

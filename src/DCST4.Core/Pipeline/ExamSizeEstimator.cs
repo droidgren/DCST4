@@ -70,11 +70,12 @@ namespace DCST4.Core.Pipeline
                 Uids = request.Uids,
                 FramesPerImage = frames,
                 SourceImage = request.SourceImage,
+                Realism = request.Realism,
             };
 
             var image = new ExamGenerator(sample).GetImages(cancellationToken).First();
             cancellationToken.ThrowIfCancellationRequested();
-            var file = TransferSyntaxConverter.Convert(image.File, syntax, cancellationToken);
+            var file = TransferSyntaxConverter.Convert(image.File, syntax, cancellationToken, lossy: request.Lossy);
 
             using (var stream = new MemoryStream())
             {

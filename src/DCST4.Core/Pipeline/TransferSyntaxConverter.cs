@@ -22,6 +22,8 @@ namespace DCST4.Core.Pipeline
         /// <summary>DS holds at most 16 characters.</summary>
         private const string RatioFormat = "0.####";
         private const string ImageTypeDerived = "DERIVED";
+        /// <summary>The start of Derivation Description when a lossy setting other than the default was used.</summary>
+        public const string DerivationPrefix = "Lossy compressed by DCST4: ";
         /// <summary>The tag and length in front of each fragment. The Basic Offset Table counts them.</summary>
         private const uint FragmentItemHeaderBytes = 8;
         /// <summary>A frame of 4096 x 4096 at 16 bits is 32 MB as drawn, so this many are at most half a gigabyte.</summary>
@@ -32,8 +34,10 @@ namespace DCST4.Core.Pipeline
         /// <summary>
         /// <paramref name="frameEncoded"/> is told the number of frames done and the total, for an image whose frames are
         /// encoded one at a time. Such an image can take minutes, so it also follows <paramref name="token"/>.
+        /// <paramref name="lossy"/> sets how hard a lossy encoder compresses. Null leaves every encoder at its default.
         /// </summary>
-        public static DicomFile Convert(DicomFile file, DicomTransferSyntax syntax, CancellationToken token = default(CancellationToken), Action<int, int> frameEncoded = null)
+        public static DicomFile Convert(DicomFile file, DicomTransferSyntax syntax, CancellationToken token = default(CancellationToken), Action<int, int> frameEncoded = null,
+            LossyCompressionSettings lossy = null)
         {
             // An object without Pixel Data has nothing to compress, so a JPEG run sends it uncompressed.
             if (syntax.IsEncapsulated && !file.Dataset.Contains(DicomTag.PixelData)) return file;
@@ -47,7 +51,10 @@ namespace DCST4.Core.Pipeline
             // DCST4's own encoders read native samples, so an object that is already compressed is decoded first.
             var ownEncoder = OwnCodecs.IsH264(syntax) || OwnCodecs.IsJpegXl(syntax);
             if (ownEncoder && file.Dataset.InternalTransferSyntax.IsEncapsulated) file = file.Clone(DicomTransferSyntax.ExplicitVRLittleEndian);
-            if (OwnCodecs.IsH264(syntax)) return EncodeVideo(file, syntax, token, frameEncoded);
+            if (OwnCodecs.IsH264(syntax)) return EncodeVideo(file, syntax, token, frameEncoded, lossy);
+
+            var bitsStored = file.Dataset.GetSingleValueOrDefault<ushort>(DicomTag.BitsStored, 8);
+            var codecParams = lossy?.CodecParams(syntax, bitsStored);
 
             var uncompressedSize = syntax.IsLossy ? PixelBytes(file.Dataset) : 0;
             var rendered = syntax.IsEncapsulated ? (file.Dataset.GetDicomItem<DicomElement>(DicomTag.PixelData)?.Buffer as RenderedFramesBuffer) : null;
@@ -60,7 +67,11 @@ namespace DCST4.Core.Pipeline
             else if (rendered != null)
             {
                 converted = EncodeFrameByFrame(file, rendered.Frames, rendered.ReadFrame, syntax, token, frameEncoded,
-                    (single, target) => new DicomTranscoder(single.InternalTransferSyntax, target).Transcode(single));
+                    (single, target) => new DicomTranscoder(single.InternalTransferSyntax, target, null, codecParams).Transcode(single));
+            }
+            else if (codecParams != null)
+            {
+                converted = new DicomTranscoder(file.Dataset.InternalTransferSyntax, syntax, null, codecParams).Transcode(file);
             }
             else
             {
@@ -70,7 +81,7 @@ namespace DCST4.Core.Pipeline
             if (!file.Dataset.Contains(DicomTag.NumberOfFrames)) converted.Dataset.Remove(DicomTag.NumberOfFrames);
             UseOtherByteForEncapsulatedPixelData(converted.Dataset);
             PadOddFragments(converted.Dataset);
-            if (syntax.IsLossy) MarkLossy(converted.Dataset, syntax, uncompressedSize);
+            if (syntax.IsLossy) MarkLossy(converted.Dataset, syntax, uncompressedSize, lossy);
             return converted;
         }
 
@@ -183,9 +194,11 @@ namespace DCST4.Core.Pipeline
 
         /// <summary>
         /// fo-dicom writes Lossy Image Compression and the method, but works out the ratio from the first frame alone. Image Type
-        /// value 1 is not ORIGINAL once a lossy step has been applied (PS3.3 C.7.6.1.1.2).
+        /// value 1 is not ORIGINAL once a lossy step has been applied (PS3.3 C.7.6.1.1.2). A setting other than the encoder's
+        /// default goes in Derivation Description, so that the PACS shows how the image was made. An object with functional
+        /// groups leaves it out, since its IOD has it only inside the Derivation Image Sequence.
         /// </summary>
-        private static void MarkLossy(DicomDataset dataset, DicomTransferSyntax syntax, long uncompressedSize)
+        private static void MarkLossy(DicomDataset dataset, DicomTransferSyntax syntax, long uncompressedSize, LossyCompressionSettings lossy)
         {
             var compressedSize = PixelBytes(dataset);
             var ratio = compressedSize > 0 ? (double)uncompressedSize / compressedSize : 0;
@@ -197,6 +210,12 @@ namespace DCST4.Core.Pipeline
             if (dataset.TryGetValues<string>(DicomTag.ImageType, out var imageType) && imageType.Length > 0 && imageType[0] != ImageTypeDerived)
             {
                 dataset.AddOrUpdate(DicomTag.ImageType, new[] { ImageTypeDerived }.Concat(imageType.Skip(1)).ToArray());
+            }
+
+            var setting = lossy?.Describe(syntax);
+            if (setting != null && !dataset.Contains(DicomTag.SharedFunctionalGroupsSequence))
+            {
+                dataset.AddOrUpdate(DicomTag.DerivationDescription, DerivationPrefix + setting);
             }
         }
 
@@ -227,7 +246,7 @@ namespace DCST4.Core.Pipeline
         /// The whole loop as one H.264 stream in an MP4 container, in one fragment (PS3.5 8.2.7, Non-Fragmentable). The
         /// Basic Offset Table is empty, since the frames are not separate in the stream.
         /// </summary>
-        private static DicomFile EncodeVideo(DicomFile file, DicomTransferSyntax syntax, CancellationToken token, Action<int, int> frameEncoded)
+        private static DicomFile EncodeVideo(DicomFile file, DicomTransferSyntax syntax, CancellationToken token, Action<int, int> frameEncoded, LossyCompressionSettings lossy)
         {
             var source = file.Dataset;
             var rows = source.GetSingleValue<ushort>(DicomTag.Rows);
@@ -247,7 +266,7 @@ namespace DCST4.Core.Pipeline
             Func<int, byte[]> rgb = frame => planar == 0 ? frames.Item2(frame) : Interleave(frames.Item2(frame), rows * columns);
             var uncompressed = (long)rows * columns * 3 * frames.Item1;
 
-            var mp4 = H264Encoder.EncodeMp4(columns, rows, frames.Item1, fps, rgb, token, frameEncoded);
+            var mp4 = H264Encoder.EncodeMp4(columns, rows, frames.Item1, fps, rgb, token, frameEncoded, lossy?.H264Bitrate);
             if (mp4.Length % 2 != 0) Array.Resize(ref mp4, mp4.Length + 1);
 
             var result = new DicomDataset(syntax);
@@ -267,7 +286,7 @@ namespace DCST4.Core.Pipeline
             var fragments = new DicomOtherByteFragment(DicomTag.PixelData);
             fragments.Fragments.Add(new MemoryByteBuffer(mp4));
             result.AddOrUpdate(fragments);
-            MarkLossy(result, syntax, uncompressed);
+            MarkLossy(result, syntax, uncompressed, lossy);
             return WithFileMeta(file, result);
         }
 

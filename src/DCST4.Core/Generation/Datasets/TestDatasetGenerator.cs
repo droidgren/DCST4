@@ -1,3 +1,4 @@
+using DCST4.Core.Generation.Realism;
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Generation.Objects;
 using DCST4.Core.Pipeline;
@@ -119,6 +120,7 @@ namespace DCST4.Core.Generation.Datasets
                 SeriesNumberOffset = source != null ? 1 : 0,
                 SourceImage = source,
                 PrivatePayloadBytes = _request.PrivatePayloadBytes,
+                Realism = _request.Realism,
             };
 
             foreach (var image in new ExamGenerator(request, () => _request.ReferenceDate).GetImages(cancellationToken))
@@ -206,7 +208,7 @@ namespace DCST4.Core.Generation.Datasets
             }
 
             var frameHashes = ManifestHashes.FrameHashes(file.Dataset);
-            var finished = TransferSyntaxConverter.Convert(file, _request.TransferSyntax);
+            var finished = TransferSyntaxConverter.Convert(file, _request.TransferSyntax, lossy: _request.Lossy);
 
             // fo-dicom puts the computer's name here. The file meta header of a converted file is new, so this comes last.
             finished.FileMetaInfo.SourceApplicationEntityTitle = FileMetaSourceAe;
@@ -323,7 +325,17 @@ namespace DCST4.Core.Generation.Datasets
             "charset=" + request.CharacterSet,
             "edge=" + (int)request.EdgeCases + (request.PrivatePayloadBytes > 0 ? "/payload=" + request.PrivatePayloadBytes.ToString(CultureInfo.InvariantCulture) : string.Empty),
             "counts=" + Int(request.Patients) + "/" + Int(request.StudiesPerPatient) + "/" + Int(request.SeriesPerStudy) + "/" + Int(request.InstancesPerSeries),
-        });
+        }) + Extras(request);
+
+        /// <summary>Settings added after the context above was fixed. Each is left out at its default, so that older datasets keep their UIDs.</summary>
+        private static string Extras(TestDatasetRequest request)
+        {
+            var extras = string.Empty;
+            if (request.Realism != RealismLevel.Off) extras += "|realism=" + request.Realism;
+            var lossy = request.Lossy?.Key;
+            if (!string.IsNullOrEmpty(lossy)) extras += "|lossy=" + lossy;
+            return extras;
+        }
 
         // ---------------------------------------------------------------- manifest
 
@@ -349,6 +361,8 @@ namespace DCST4.Core.Generation.Datasets
                 TransferSyntaxUid = _request.TransferSyntax.UID.UID,
                 CharacterSetVariant = _request.CharacterSet.ToString(),
                 EdgeCases = _request.EdgeCases.ToString(),
+                Realism = _request.Realism == RealismLevel.Off ? null : _request.Realism.ToString(),
+                LossyCompression = _request.Lossy == null || _request.Lossy.IsDefault ? null : _request.Lossy.Describe(),
             },
         };
 

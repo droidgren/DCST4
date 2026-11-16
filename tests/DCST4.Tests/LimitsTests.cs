@@ -409,7 +409,7 @@ namespace DCST4.Tests
             _check("Status bar: the test, what it is doing and the seconds", MainViewModel.FormatTestStatus("Test 2 of 2: ARTIM", "Waiting up to 60 s", 23) == "Test 2 of 2: ARTIM. Waiting up to 60 s (23 s)"
                 && MainViewModel.FormatTestStatus("Test 1 of 2: C-ECHO", null, 0) == "Test 1 of 2: C-ECHO (0 s)", null);
             var json = ResultFileWriter.ToJson(first);
-            _check("JSON: schema version 6 with a limits section", json.Contains("\"schemaVersion\": 6") && json.Contains("\"limits\"") && json.Contains("\"associationLimit\": 3") && json.Contains("\"reason\": \"LocalLimitExceeded\"") && json.Contains("\"endedAfterMs\""), null);
+            _check("JSON: schema version 7 with a limits section", json.Contains("\"schemaVersion\": 7") && json.Contains("\"limits\"") && json.Contains("\"associationLimit\": 3") && json.Contains("\"reason\": \"LocalLimitExceeded\"") && json.Contains("\"endedAfterMs\""), null);
             _check("JSON: a test fills only its own part", !json.Contains("\"fault\"") && !json.Contains("\"pduAttempts\"") && !json.Contains("\"tls\""), null);
 
             Scp.Reset();

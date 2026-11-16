@@ -1,4 +1,7 @@
 using DCST4.Core.Generation;
+using DCST4.Core.Generation.Realism;
+using DCST4.Core.Pipeline;
+using DCST4.Infrastructure;
 using DCST4.Core.TestData;
 using DCST4.Models;
 using DCST4.Properties;
@@ -57,6 +60,11 @@ namespace DCST4
             TestPatientNaming.SelectedValue = patientNaming.ToString();
             BurnInText.IsChecked = s.BurnInText;
             ShowUpdateWindowAtStartup.IsChecked = s.ShowUpdateWindowAtStartup;
+            RealismLevelBox.SelectedValue = RealismLevels.Parse(s.RealismLevel).ToString();
+            JpegQualityBox.Text = Optional(s.JpegQuality);
+            Jpeg2000RatioBox.Text = Optional(s.Jpeg2000Ratio);
+            JpegLsNearBox.Text = Optional(s.JpegLsNear);
+            H264MbpsBox.Text = ImageSettings.FormatMbps(ImageSettings.ParseMbps(s.H264Mbps));
 
             var burnedIn = BurnedInTagCatalog.Parse(s.BurnInTags);
             _burnInTags = BurnedInTagCatalog.All.Select(t => new BurnInTagChoice { Tag = t, IsChecked = burnedIn.Contains(t) }).ToList();
@@ -92,6 +100,18 @@ namespace DCST4
             if (!TryRead(ConnectionTimeoutBox, "Connection timeout", 1, 3600, out var connection)) return;
             if (!TryRead(AssociationTimeoutBox, "Association timeout", 1, 3600, out var association)) return;
             if (!TryRead(ResponseTimeoutBox, "Response timeout", 0, 86400, out var response)) return;
+            if (!TryReadOptional(JpegQualityBox, "JPEG quality", LossyCompressionSettings.MinJpegQuality, LossyCompressionSettings.MaxJpegQuality, out var jpegQuality)) return;
+            if (!TryReadOptional(Jpeg2000RatioBox, "The JPEG 2000 ratio", LossyCompressionSettings.MinJpeg2000Ratio, LossyCompressionSettings.MaxJpeg2000Ratio, out var jpeg2000Ratio)) return;
+            if (!TryReadOptional(JpegLsNearBox, "JPEG-LS NEAR", LossyCompressionSettings.MinJpegLsNear, LossyCompressionSettings.MaxJpegLsNear, out var jpegLsNear)) return;
+            var mbps = ImageSettings.ParseMbps(H264MbpsBox.Text);
+            if (!string.IsNullOrWhiteSpace(H264MbpsBox.Text) && (mbps == null || mbps < LossyCompressionSettings.MinH264Mbps || mbps > LossyCompressionSettings.MaxH264Mbps))
+            {
+                ImagesTab.IsSelected = true;
+                MessageBox.Show(this, string.Format(CultureInfo.InvariantCulture, "The H.264 bitrate must be a number between {0} and {1} Mbit/s, or empty for the default.",
+                    LossyCompressionSettings.MinH264Mbps, LossyCompressionSettings.MaxH264Mbps), "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                H264MbpsBox.Focus();
+                return;
+            }
             var problem = _results.Apply();
             if (problem != null)
             {
@@ -110,6 +130,11 @@ namespace DCST4
             s.TestPatientNaming = (string)TestPatientNaming.SelectedValue;
             s.BurnInText = BurnInText.IsChecked == true;
             s.ShowUpdateWindowAtStartup = ShowUpdateWindowAtStartup.IsChecked == true;
+            s.RealismLevel = (string)RealismLevelBox.SelectedValue ?? RealismLevel.Off.ToString();
+            s.JpegQuality = jpegQuality;
+            s.Jpeg2000Ratio = jpeg2000Ratio;
+            s.JpegLsNear = jpegLsNear;
+            s.H264Mbps = ImageSettings.FormatMbps(mbps);
             s.BurnInTags = BurnedInTagCatalog.Format(_burnInTags.Where(c => c.IsChecked).Select(c => c.Tag));
             s.AdditionalTags = AdditionalTagSetting.Serialize(
                 _commonTags.Where(c => c.IsChecked).Select(c => c.Common.Tag).Concat(_customTags).Select(AdditionalTagSetting.From));
@@ -211,6 +236,20 @@ namespace DCST4
             VrBox.SelectedItem = tag.VrCode;
             CreatorBox.Text = tag.PrivateCreator ?? string.Empty;
             ValueBox.Text = tag.DefaultValue;
+        }
+
+        private static string Optional(int value) => value > 0 ? value.ToString(CultureInfo.InvariantCulture) : string.Empty;
+
+        /// <summary>Empty is 0, the encoder's default.</summary>
+        private bool TryReadOptional(TextBox box, string name, int min, int max, out int value)
+        {
+            value = 0;
+            if (string.IsNullOrWhiteSpace(box.Text)) return true;
+            if (int.TryParse(box.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value) && value >= min && value <= max) return true;
+            ImagesTab.IsSelected = true;
+            MessageBox.Show(this, $"{name} must be a whole number between {min} and {max}, or empty for the default.", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+            box.Focus();
+            return false;
         }
 
         private bool TryRead(TextBox box, string name, int min, int max, out int value)

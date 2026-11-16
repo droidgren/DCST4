@@ -1,4 +1,6 @@
 using DCST4.Core.Generation.Modalities;
+using DCST4.Core.Generation.Realism;
+using DCST4.Core.Pipeline;
 using DCST4.Core.TestData;
 using FellowOakDicom;
 using System;
@@ -64,6 +66,10 @@ namespace DCST4.Core.Generation
         public ReferencedImage SourceImage { get; set; }
         /// <summary>The size of a private binary value added to each image, as raw data from a modality would be. 0 adds none.</summary>
         public long PrivatePayloadBytes { get; set; }
+        /// <summary>Off draws the flat test pattern. The other levels add the modality's shape, texture and noise.</summary>
+        public RealismLevel Realism { get; set; } = RealismLevel.Off;
+        /// <summary>How hard a lossy encoder compresses. Null leaves every encoder at its default.</summary>
+        public LossyCompressionSettings Lossy { get; set; }
 
         public int BitsAllocated => BitsStored <= 8 ? 8 : 16;
         public int TotalImages => SeriesCount * ImagesPerSeries;
@@ -105,6 +111,8 @@ namespace DCST4.Core.Generation
             if (request.FramesPerImage > MaxFrames) errors.Add($"Frames per image must be at most {MaxFrames}.");
             if (request.Modality != null && request.FramesPerImage > 1 && !request.Modality.IsMultiFrame) errors.Add($"{request.Modality.DisplayName} images have one frame.");
             if (request.PrivatePayloadBytes < 0 || request.PrivatePayloadBytes > PrivatePayload.MaxBytes) errors.Add($"The private payload can be at most {PrivatePayload.MaxMegabytes} MB.");
+            if (!Enum.IsDefined(typeof(RealismLevel), request.Realism)) errors.Add("Unknown realism level.");
+            if (request.Lossy != null) errors.AddRange(request.Lossy.Validate());
             if (request.Modality != null && !request.Modality.HasPixelData)
             {
                 // A document or report: the matrix and bits on the Exam tab do not apply to it.

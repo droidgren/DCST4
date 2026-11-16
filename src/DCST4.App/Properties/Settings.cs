@@ -135,6 +135,26 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue(Core.Generation.BurnedInTagCatalog.DefaultKeywords)]
         public string BurnInTags { get => (string)this[nameof(BurnInTags)]; set => this[nameof(BurnInTags)] = value; }
 
+        /// <summary>How realistic the generated images are, as a RealismLevel name: Off, Low, Normal or High.</summary>
+        [UserScopedSetting, DefaultSettingValue("Off")]
+        public string RealismLevel { get => (string)this[nameof(RealismLevel)]; set => this[nameof(RealismLevel)] = value; }
+
+        /// <summary>JPEG Baseline and Extended quality, 1-100. 0 = the encoder's default.</summary>
+        [UserScopedSetting, DefaultSettingValue("0")]
+        public int JpegQuality { get => (int)this[nameof(JpegQuality)]; set => this[nameof(JpegQuality)] = value; }
+
+        /// <summary>JPEG 2000 (lossy) compression ratio, N for N:1. 0 = the encoder's default.</summary>
+        [UserScopedSetting, DefaultSettingValue("0")]
+        public int Jpeg2000Ratio { get => (int)this[nameof(Jpeg2000Ratio)]; set => this[nameof(Jpeg2000Ratio)] = value; }
+
+        /// <summary>JPEG-LS Near-Lossless NEAR. 0 = the encoder's default.</summary>
+        [UserScopedSetting, DefaultSettingValue("0")]
+        public int JpegLsNear { get => (int)this[nameof(JpegLsNear)]; set => this[nameof(JpegLsNear)] = value; }
+
+        /// <summary>H.264 bitrate in Mbit/s, written with a dot. Empty = the encoder's own choice.</summary>
+        [UserScopedSetting, DefaultSettingValue("")]
+        public string H264Mbps { get => (string)this[nameof(H264Mbps)]; set => this[nameof(H264Mbps)] = value; }
+
         /// <summary>Check GitHub at startup and open a window if there is a new version. Off: nothing is sent at startup.</summary>
         [UserScopedSetting, DefaultSettingValue("True")]
         public bool ShowUpdateWindowAtStartup { get => (bool)this[nameof(ShowUpdateWindowAtStartup)]; set => this[nameof(ShowUpdateWindowAtStartup)] = value; }

@@ -697,6 +697,19 @@ namespace DCST4.Tests
             var named = await RunCli("run", "--profile", profilePath, "--tests", "c-echo", "--out", Path.Combine(folder, "named"), "--log-dir", logs, "--patient-naming", "MarkedTestName");
             check("--patient-naming is accepted on run", named.ExitCode == 0 && named.Output.Contains("c-echo: PASS"), named.Output);
             refused("Unknown --patient-naming: exit code 2", await RunCli("run", "--profile", profilePath, "--tests", "c-echo", "--out", folder, "--patient-naming", "Bad"), "Bad");
+
+            // Realistic images and lossy settings, on run and generate.
+            var realistic = await RunCli("run", "--profile", profilePath, "--tests", "store-ct", "--out", Path.Combine(folder, "realistic"), "--log-dir", logs, "--seed", "4",
+                "--realism", "normal", "--transfer-syntax", "jpeg-extended", "--jpeg-quality", "70");
+            var realisticJson = Directory.GetFiles(Path.Combine(folder, "realistic"), "DCST4-run-*.json").Select(File.ReadAllText).FirstOrDefault() ?? string.Empty;
+            check("--realism and --jpeg-quality on run: used, and in the result file", realistic.ExitCode == 0 && realisticJson.Contains("\"realism\": \"Normal\"") && realisticJson.Contains("\"lossyCompression\": \"JPEG quality 70\""),
+                realistic.ExitCode + " " + realistic.Output);
+            refused("Unknown --realism: exit code 2, with the levels", await RunCli("run", "--profile", profilePath, "--tests", "c-echo", "--out", folder, "--realism", "extreme"), "off, low, normal, high");
+            refused("--jpeg-quality out of range: exit code 2", await RunCli("run", "--profile", profilePath, "--tests", "c-echo", "--out", folder, "--jpeg-quality", "0"), "JPEG quality");
+            refused("--h264-mbps not a number: exit code 2", await RunCli("generate", "--dataset", "cr", "--out", folder, "--h264-mbps", "fast"), "--h264-mbps");
+            var generated = await RunCli("generate", "--dataset", "cr", "--out", Path.Combine(folder, "generated"), "--log-dir", logs, "--realism", "low", "--jpegls-near", "4", "--transfer-syntax", "jpeg-ls-near");
+            var generatedManifest = File.Exists(Path.Combine(folder, "generated", "manifest.json")) ? File.ReadAllText(Path.Combine(folder, "generated", "manifest.json")) : string.Empty;
+            check("--realism and --jpegls-near on generate: in the manifest", generated.ExitCode == 0 && generatedManifest.Contains("\"realism\": \"Low\"") && generatedManifest.Contains("\"lossyCompression\": \"JPEG-LS NEAR 4\""), generated.Output);
             refused("Missing --profile: exit code 2", await RunCli("run", "--tests", "c-echo", "--out", folder), "--profile");
             refused("Option without a value: exit code 2", await RunCli("run", "--profile"), "--profile");
             refused("Missing profile file: exit code 2", await RunCli("run", "--profile", Path.Combine(folder, "none.json"), "--tests", "c-echo", "--out", folder, "--log-dir", logs), "Could not read");
