@@ -103,6 +103,7 @@ namespace DCST4.Tests
                     {
                         await RunAll(port, check);
                         await RunSizeEstimate(port, check);
+                        await RunImagePreview(port, check);
                         await RunMultiFrame(port, check);
                         RunHelpWindow(check);
                         await RunFollowNewest(check);
@@ -819,6 +820,7 @@ namespace DCST4.Tests
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("US");
             check("US: its three objects, and the single-frame image to begin with", objectList() == "Single frame | Multi-frame (cine loop) | Enhanced US Volume" && vm.SelectedImageObject.DatasetProfileId == "us"
                 && !vm.IsMultiFrame && vm.FramesPerImage == 1 && vm.ImagesPerSeries == vm.SelectedPreset.DefaultImages, objectList() + " " + vm.SelectedImageObject);
+            check("A single-frame object has as many frames in total as images", vm.TotalFramesText == ((long)vm.SeriesCount * vm.ImagesPerSeries) + " frames in total", vm.TotalFramesText);
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CR");
             check("CR: one object, the single-frame image", objectList() == "Single frame" && !vm.IsMultiFrame, objectList());
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("XA");
@@ -838,6 +840,8 @@ namespace DCST4.Tests
             check("The cine loop: 30 frames of 600 x 800 at 8 bits, and the Frames field is on", vm.IsMultiFrame && vm.FramesPerImage == 30 && vm.Rows == 600 && vm.Columns == 800 && vm.BitsStored == 8
                 && notified.Contains(nameof(vm.IsMultiFrame)) && notified.Contains(nameof(vm.FramesPerImage)), vm.FramesPerImage + " " + vm.Rows + "x" + vm.Columns);
             check("A multi-frame object starts with one image per series, whatever the exam type says for single images", vm.ImagesPerSeries == 1 && vm.SelectedPreset.DefaultImages == 8, vm.ImagesPerSeries.ToString());
+            check("The total of frames counts every frame of the exam, and is notified", vm.TotalFramesText == ((long)vm.SeriesCount * vm.ImagesPerSeries * 30) + " frames in total"
+                && notified.Contains(nameof(vm.TotalFramesText)), vm.TotalFramesText);
             check("The exam type is kept when the object changes", vm.SelectedPreset.Name == "Abdomen", vm.SelectedPreset.Name);
             check("Estimated size counts the frames and the three samples", vm.EstimatedSizeText == "about " + ExamSizeEstimator.Format(ExamSizeEstimator.HeaderBytes + 600L * 800 * 3 * 30), vm.EstimatedSizeText);
 
@@ -1011,6 +1015,49 @@ namespace DCST4.Tests
         }
 
         /// <summary>The Tests tab, and that it gives the same result files as the command line.</summary>
+        /// <summary>The Image preview button of the Exam tab. The window is replaced, so nothing is shown.</summary>
+        private static async Task RunImagePreview(int port, Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nImage preview button");
+            var h = new Harness(port);
+            var vm = h.Vm;
+            var shown = new List<PreviewImage>();
+            vm.ShowImagePreview = image => shown.Add(image);
+
+            vm.Rows = 96;
+            vm.Columns = 128;
+            check("CT: the button is enabled", vm.ImagePreviewCommand.CanExecute(null), null);
+            await h.Execute(vm.ImagePreviewCommand);
+            check("CT: one preview at the matrix of the Exam tab, and no message", shown.Count == 1 && shown[0].Width == 128 && shown[0].Height == 96 && h.Messages.Count == 0,
+                shown.Count + " " + string.Join(" | ", h.Messages));
+            check("CT: idle again, and the status says what was shown", !vm.IsBusy && vm.StatusText.StartsWith("Image preview: CT", StringComparison.Ordinal), vm.StatusText);
+
+            var window = new PreviewWindow();
+            window.SetImage(shown[0]);
+            var source = (BitmapSource)((Image)window.FindName("PreviewImageControl")).Source;
+            check("The window shows the image at its own size", source.PixelWidth == 128 && source.PixelHeight == 96 && source.IsFrozen, null);
+            window.Close();
+
+            vm.SelectedTransferSyntax = TransferSyntaxOption.Jpeg2000;
+            await h.Execute(vm.ImagePreviewCommand);
+            check("JPEG 2000 (lossy): compressed and decoded", shown.Count == 2 && shown[1].Note == null && shown[1].Description.Contains("JPEG 2000"), shown.Count > 1 ? shown[1].Description : null);
+            vm.SelectedTransferSyntax = TransferSyntaxOption.JpegXlLossless;
+            await h.Execute(vm.ImagePreviewCommand);
+            check("JPEG XL: shown before compression, with a note", shown.Count == 3 && shown[2].Note != null, shown.Count > 2 ? shown[2].Note : null);
+            vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
+
+            vm.Rows = 10;
+            await h.Execute(vm.ImagePreviewCommand);
+            check("Invalid rows: a message and no preview", shown.Count == 3 && h.Messages.Count == 1 && vm.StatusText.StartsWith("Image preview not made", StringComparison.Ordinal), vm.StatusText);
+            vm.Rows = 96;
+
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("SR");
+            check("SR: the button is disabled", !vm.ImagePreviewCommand.CanExecute(null), null);
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("DOC");
+            check("DOC: the button is disabled", !vm.ImagePreviewCommand.CanExecute(null), null);
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
+        }
+
         private static async Task RunSizeEstimate(int port, Action<string, bool, string> check)
         {
             Console.WriteLine("\nEstimated size");
@@ -1889,6 +1936,25 @@ namespace DCST4.Tests
                 check("Exam tab: they fit inside the tab at the smallest window size", objects != null && frames != null && size != null && inside(objects) && inside(frames) && inside(size),
                     examTabs.ActualWidth + " x " + examTabs.ActualHeight);
                 check("Exam tab: Frames is on for a multi-frame object and shows its 30 frames, and the payload size shows its value", frames != null && frames.IsEnabled && frames.Text == "30" && size != null && size.IsEnabled && size.Text == "100", frames?.Text);
+
+                // Frames per image sits under Images per series, and the payload in the left column, as wide as Series.
+                var seriesBox = all.OfType<TextBox>().SingleOrDefault(t => boundTo(t, nameof(vm.SeriesCount)));
+                var imagesBox = all.OfType<TextBox>().SingleOrDefault(t => boundTo(t, nameof(vm.ImagesPerSeries)));
+                var totalFrames = all.OfType<TextBlock>().SingleOrDefault(t => System.Windows.Data.BindingOperations.GetBinding(t, TextBlock.TextProperty)?.Path.Path == nameof(vm.TotalFramesText));
+                Func<FrameworkElement, Point> cornerOf = element => element.TransformToAncestor(examTabs).Transform(new Point(0, 0));
+                check("Exam tab: Frames per image is right under Images per series, with the same width, and room for a number", imagesBox != null && frames != null
+                    && Math.Abs(cornerOf(frames).X - cornerOf(imagesBox).X) < 1 && cornerOf(frames).Y > cornerOf(imagesBox).Y && cornerOf(frames).Y - cornerOf(imagesBox).Y < imagesBox.ActualHeight + 12
+                    && Math.Abs(frames.ActualWidth - imagesBox.ActualWidth) < 1 && frames.ActualWidth >= 47, imagesBox == null || frames == null ? null : cornerOf(imagesBox) + " / " + cornerOf(frames));
+                var expectedFrames = (long)vm.SeriesCount * vm.ImagesPerSeries * 30;
+                check("Exam tab: the frames of the whole exam are shown next to Frames per image", totalFrames != null && totalFrames.Text == expectedFrames + " frames in total", totalFrames?.Text);
+                vm.ImagesPerSeries = 3;
+                check("Exam tab: the total of frames follows Images per series", vm.TotalFramesText == ((long)vm.SeriesCount * 3 * 30) + " frames in total", vm.TotalFramesText);
+                check("Exam tab: the payload size is in the left column and fills it, as Series does", seriesBox != null && size != null
+                    && Math.Abs(cornerOf(size).X - cornerOf(seriesBox).X) < 1 && cornerOf(size).Y > cornerOf(seriesBox).Y && size.ActualWidth > seriesBox.ActualWidth / 2, seriesBox == null || size == null ? null : seriesBox.ActualWidth + " / " + size.ActualWidth);
+                var estimate = all.OfType<TextBlock>().SingleOrDefault(t => System.Windows.Data.BindingOperations.GetBinding(t, TextBlock.TextProperty)?.Path.Path == nameof(vm.EstimatedSizeText));
+                check("Exam tab: without a lossy syntax, Estimated size is in the right column, under Allow fallback, and inside the tab", estimate != null && imagesBox != null && frames != null
+                    && Math.Abs(cornerOf(estimate).X - cornerOf(imagesBox).X) < 1 && cornerOf(estimate).Y > cornerOf(frames).Y + 3 * frames.ActualHeight && inside(estimate),
+                    estimate == null ? null : cornerOf(estimate).ToString());
                 vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
                 vm.PrivatePayloadMb = 0;
                 await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
@@ -1928,6 +1994,28 @@ namespace DCST4.Tests
                 check("Exam tab: Realistic images and the Compression box are drawn and fit at the smallest window size", realism != null && compression != null && hint != null && shown(realism) && shown(compression)
                     && inside(realism) && inside(compression) && inside(hint) && hint.ActualWidth + 0.5 >= hintNeeds,
                     realism == null || compression == null || hint == null ? "not found" : $"{examTabs.ActualWidth} x {examTabs.ActualHeight}, hint {hint.ActualWidth:0} of {hintNeeds:0}");
+                var bitsBox = drawn.OfType<ComboBox>().SingleOrDefault(c => System.Windows.Data.BindingOperations.GetBinding(c, ComboBox.SelectedItemProperty)?.Path.Path == nameof(vm.BitsStored));
+                // With a lossy syntax the size sits at the right edge of the column, which the Bits stored list fills.
+                Func<bool> estimateAtRight = () => estimate != null && bitsBox != null
+                    && Math.Abs(cornerOf(estimate).X + estimate.ActualWidth - (cornerOf(bitsBox).X + bitsBox.ActualWidth)) < 1.5;
+                Func<bool> estimateOnCompressionRow = () => estimate != null && hint != null && compression != null
+                    && cornerOf(estimate).X > cornerOf(hint).X + hint.ActualWidth
+                    && Math.Abs(cornerOf(estimate).Y + estimate.ActualHeight / 2 - (cornerOf(compression).Y + compression.ActualHeight / 2)) < 3;
+                Func<string> estimateAt = () => estimate == null || compression == null ? null
+                    : $"estimate {cornerOf(estimate)}, box {cornerOf(compression)}, width {estimate.ActualWidth:0.0} of {needed(estimate):0.0}, tab {examTabs.ActualWidth:0}";
+                // At the smallest window there is no room beside the value, so the size goes to the line below it.
+                var estimatePanel = estimate == null ? null : (FrameworkElement)System.Windows.Media.VisualTreeHelper.GetParent(estimate);
+                var wrapped = estimatePanel != null && compression != null
+                    && cornerOf(estimate).Y >= cornerOf(compression).Y + compression.ActualHeight - 1;
+                check("Exam tab: with a lossy syntax, Estimated size is at the right, after the compression value or under it, whole and inside the tab, at the smallest window size",
+                    estimate != null && (estimateOnCompressionRow() || wrapped) && estimateAtRight() && inside(estimate) && estimate.ActualWidth + 0.5 >= needed(estimate), estimateAt());
+                content.Measure(new Size(1400, height));
+                content.Arrange(new Rect(0, 0, 1400, height));
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+                check("Exam tab: in a wide window, Estimated size is on the compression row, at its right edge", estimateOnCompressionRow() && estimateAtRight() && inside(estimate), estimateAt());
+                content.Measure(new Size(width, height));
+                content.Arrange(new Rect(0, 0, width, height));
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
                 check("Exam tab: the Compression box shows the JPEG 2000 ratio", compression != null && compression.Text == vm.CompressionText && compression.Text.Length > 0, compression?.Text);
                 vm.SelectedTransferSyntax = TransferSyntaxOption.ExplicitVrLe;
                 vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("OT");

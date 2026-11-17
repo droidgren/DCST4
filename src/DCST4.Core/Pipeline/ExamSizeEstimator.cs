@@ -55,7 +55,20 @@ namespace DCST4.Core.Pipeline
 
         private static long MeasureSample(ExamRequest request, int frames, DicomTransferSyntax syntax, CancellationToken cancellationToken)
         {
-            var sample = new ExamRequest
+            var image = new ExamGenerator(SampleRequest(request, frames)).GetImages(cancellationToken).First();
+            cancellationToken.ThrowIfCancellationRequested();
+            var file = TransferSyntaxConverter.Convert(image.File, syntax, cancellationToken, lossy: request.Lossy);
+
+            using (var stream = new MemoryStream())
+            {
+                file.Save(stream);
+                return stream.Length;
+            }
+        }
+
+        /// <summary>One image of the exam, with <paramref name="frames"/> frames and without the private payload, which only adds bytes.</summary>
+        internal static ExamRequest SampleRequest(ExamRequest request, int frames) =>
+            new ExamRequest
             {
                 Modality = request.Modality,
                 Preset = request.Preset,
@@ -72,17 +85,6 @@ namespace DCST4.Core.Pipeline
                 SourceImage = request.SourceImage,
                 Realism = request.Realism,
             };
-
-            var image = new ExamGenerator(sample).GetImages(cancellationToken).First();
-            cancellationToken.ThrowIfCancellationRequested();
-            var file = TransferSyntaxConverter.Convert(image.File, syntax, cancellationToken, lossy: request.Lossy);
-
-            using (var stream = new MemoryStream())
-            {
-                file.Save(stream);
-                return stream.Length;
-            }
-        }
 
         /// <summary>As Windows Explorer counts, so that the figure matches what the folder shows: 850 KB, 52.4 MB, 1.3 GB.</summary>
         public static string Format(long bytes)

@@ -1,4 +1,5 @@
 using FellowOakDicom;
+using FellowOakDicom.Imaging;
 using FellowOakDicom.Imaging.Codec;
 using FellowOakDicom.PureCodecs;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,7 +15,8 @@ namespace DCST4.Core
             new DicomSetupBuilder()
                 .RegisterServices(services =>
                 {
-                    services.AddFellowOakDicom().AddTranscoderManager<PureTranscoderManager>();
+                    // RawImageManager renders to bytes without WPF or WinForms, for the image preview.
+                    services.AddFellowOakDicom().AddTranscoderManager<PureTranscoderManager>().AddImageManager<RawImageManager>();
                     registerServices?.Invoke(services);
                 })
                 .Build();
