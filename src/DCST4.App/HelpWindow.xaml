@@ -687,9 +687,9 @@
                         <Bold>Send files</Bold>, or <Bold>Save files</Bold> with only Save to disk ticked.
                     </Paragraph>
                     <List MarkerStyle="Decimal">
-                        <ListItem><Paragraph>Enter a folder, or click <Bold>...</Bold> for a folder or <Bold>DICOMDIR...</Bold> for a DICOMDIR file, as on a CD or a USB export. Choosing one reads it at once, and <Bold>Read</Bold> reads it again.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Enter a folder, or click <Bold>...</Bold> for a folder or <Bold>DICOMDIR...</Bold> for a DICOMDIR file, as on a CD or a USB export. Choosing one reads it at once; a typed path is read when Enter is pressed or the box is left, and at the latest when the files are sent.</Paragraph></ListItem>
                         <ListItem><Paragraph>DCST4 reads the headers and shows the files, series, studies and patients, the transfer syntaxes and the modalities. <Bold>Skipped</Bold> lists the files that will not be sent, and why. Nothing is written.</Paragraph></ListItem>
-                        <ListItem><Paragraph>A question asks whether to <Bold>Re-identify as test patients</Bold>, the default and the answer to Enter, or <Bold>Send unchanged</Bold>, and says what each does to these files. The answer is the choice on the tab, which can be changed before sending.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Choose <Bold>Re-identify as test patients</Bold>, the default, or <Bold>Send unchanged</Bold>. The tab says what the choice does to these files. Each folder that is read starts at Re-identify again.</Paragraph></ListItem>
                         <ListItem><Paragraph>Choose the transfer syntax. <Bold>As in the files</Bold>, the default, sends each file in its own syntax with its own compressed pixel data. Another syntax decodes and encodes the files first, which DCST4 cannot do from JPEG XL or H.264.</Paragraph></ListItem>
                         <ListItem><Paragraph>Click <Bold>Send files</Bold>. The <Bold>Source file</Bold> column of Results shows where each image came from.</Paragraph></ListItem>
                     </List>
@@ -704,12 +704,12 @@
                         <ListItem><Paragraph>Other patient identifiers, such as Other Patient IDs, the address and Patient Comments, are removed. Accession Number and Study ID are new for each study, and every other name of a person becomes DCST4^PERSON.</Paragraph></ListItem>
                         <ListItem><Paragraph>Every UID gets a new one under the UID root of Test settings, in private tags too, and a reference from one file to another still points at the right file. A second send of the same folder gets other UIDs, so it is never a duplicate. SOP classes and the other UIDs that DICOM defines are kept.</Paragraph></ListItem>
                         <ListItem><Paragraph>Manufacturer becomes DCST4, and an image gets the project's address in Image Comments. Private tags are kept.</Paragraph></ListItem>
-                        <ListItem><Paragraph>Uncompressed pixels get the TEST IMAGE watermark. <Bold>Compressed pixel data is sent as it is in the file and has no watermark</Bold>: drawing it would mean decoding and encoding again, which would replace the modality's compressed stream that is being tested. The question says how many files that is.</Paragraph></ListItem>
-                        <ListItem><Paragraph>A file with Burned In Annotation YES may show the patient in its pixels, which re-identifying does not change. The question warns about it.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Uncompressed pixels get the TEST IMAGE watermark. <Bold>Compressed pixel data is sent as it is in the file and has no watermark</Bold>: drawing it would mean decoding and encoding again, which would replace the modality's compressed stream that is being tested. The tab says how many files that is.</Paragraph></ListItem>
+                        <ListItem><Paragraph>A file with Burned In Annotation YES may show the patient in its pixels, which re-identifying does not change. The tab warns about it.</Paragraph></ListItem>
                     </List>
                     <Paragraph>
                         <Bold>Send unchanged</Bold> sends the files exactly as they are, with their real patient names and IDs and
-                        their own UIDs, and asks again before it sends, with the destination in the question. Use it only for
+                        their own UIDs, and asks before it sends, with the destination in the question. Use it only for
                         data that may be sent there. The log names the test patients, never the real ones.
                     </Paragraph>
                     <Paragraph>

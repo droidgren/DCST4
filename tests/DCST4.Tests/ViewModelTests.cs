@@ -1479,18 +1479,16 @@ namespace DCST4.Tests
                 vm.Performance.SelectedMix = vm.Performance.Mixes.First(m => m.IsCustom);
                 check("Custom mix before a folder is read: says so", vm.Performance.MixDescription.StartsWith("From the Files tab: nothing to send yet", StringComparison.Ordinal), vm.Performance.MixDescription);
 
+                vm.Files.Folder = string.Empty;
                 Scp.Reset();
                 await h.Execute(vm.RunCommand);
                 check("Send files before a folder is read: refused with a message, nothing sent", Scp.StoreCount == 0 && h.Messages.Any(m => m.Contains("no files to send")), string.Join("; ", h.Messages));
                 h.Messages.Clear();
 
-                string asked = null;
-                vm.AskReidentify = question => { asked = question; return true; };
                 vm.Files.Folder = fixture.Folder;
                 await h.Execute(vm.ReadFilesCommand);
-                check("Read: the files are found, and the question is asked with what was found", vm.Files.HasFiles && vm.Files.Scan.Files.Count == 6 && asked != null && asked.Contains("6 files")
-                    && asked.Contains(Core.Files.FilesQuestion.ReidentifyButton), asked);
-                check("Read: re-identify, the answer, is chosen, and the tab says what it does", vm.Files.Reidentify && !vm.Files.KeepUnchanged && vm.Files.EffectText.Contains("test patient")
+                check("Read: the files are found, with no message", vm.Files.HasFiles && vm.Files.Scan.Files.Count == 6 && vm.Files.IsScanCurrent && h.Messages.Count == 0, string.Join("; ", h.Messages));
+                check("Read: re-identify is chosen, and the tab says what it does", vm.Files.Reidentify && !vm.Files.KeepUnchanged && vm.Files.EffectText.Contains("test patient")
                     && vm.Files.SkippedHeader == "Skipped: 2" && vm.Files.Skipped.Count == 2, vm.Files.EffectText);
                 check("Read: As in the files is the transfer syntax", vm.Files.SelectedSyntax.Syntax == null && vm.Files.SelectedSyntax.Name == FilesViewModel.AsInFilesName, null);
                 check("Custom mix: made of the files while the Files tab is selected", vm.Performance.MixDescription.StartsWith("From the Files tab: Files of vm-files: 6 files", StringComparison.Ordinal), vm.Performance.MixDescription);
@@ -1502,9 +1500,8 @@ namespace DCST4.Tests
                     && received.All(r => Core.TestData.TestPersonnummerRegistry.Default.Contains(r.Dataset.GetString(DicomTag.PatientID))), vm.StatusText);
                 check("Send files: each result names its source file", vm.Results.All(r => r.SourcePath != null && r.SourcePath.StartsWith(fixture.Folder, StringComparison.OrdinalIgnoreCase)), null);
 
-                vm.AskReidentify = question => false;
-                await h.Execute(vm.ReadFilesCommand);
-                check("Read, answered Send unchanged: the choice follows", !vm.Files.Reidentify && vm.Files.KeepUnchanged && vm.Files.EffectText.Contains("real patient"), vm.Files.EffectText);
+                vm.Files.KeepUnchanged = true;
+                check("Send unchanged chosen: the tab says what it does", !vm.Files.Reidentify && vm.Files.EffectText.Contains("real patient"), vm.Files.EffectText);
                 var confirmations = new List<string>();
                 vm.Confirm = question => { confirmations.Add(question); return false; };
                 Scp.Reset();
@@ -1514,13 +1511,24 @@ namespace DCST4.Tests
                 await h.Execute(vm.RunCommand);
                 check("Send unchanged, confirmed: the original patients arrive", Scp.Received.Count(r => r.Dataset.GetString(DicomTag.PatientID) == "ORIG-A") == 5, null);
 
+                // A typed path that was never read is read by the Run button, and starts at re-identify again.
+                vm.Files.IncludeSubfolders = false;
+                check("Subfolders switched off: the scan is no longer current", !vm.Files.IsScanCurrent, null);
+                vm.Files.IncludeSubfolders = true;
+                vm.Files.Clear();
+                Scp.Reset();
+                await h.Execute(vm.RunCommand);
+                check("Send files with a typed path not yet read: read first, re-identified and sent", vm.Files.IsScanCurrent && vm.Files.Reidentify && Scp.StoreCount == 6
+                    && Scp.Received.All(r => Core.TestData.TestPersonnummerRegistry.Default.Contains(r.Dataset.GetString(DicomTag.PatientID))), vm.StatusText);
+
                 vm.Files.Folder = Path.Combine(temp, "vm-files-none");
                 Directory.CreateDirectory(vm.Files.Folder);
                 h.Messages.Clear();
-                asked = null;
-                vm.AskReidentify = question => { asked = question; return true; };
                 await h.Execute(vm.ReadFilesCommand);
-                check("Read an empty folder: a message, no question", asked == null && !vm.Files.HasFiles && h.Messages.Any(m => m.Contains("No DICOM files")), string.Join("; ", h.Messages));
+                check("Read an empty folder: said on the tab, no message", !vm.Files.HasFiles && h.Messages.Count == 0 && vm.Files.SummaryText.StartsWith("No DICOM files", StringComparison.Ordinal), vm.Files.SummaryText);
+                vm.Files.Folder = Path.Combine(temp, "vm-files-missing");
+                await h.Execute(vm.ReadFilesCommand);
+                check("Read a folder that is not there: said on the tab, no message", !vm.Files.HasFiles && h.Messages.Count == 0 && vm.Files.SummaryText.StartsWith("Could not be read", StringComparison.Ordinal), vm.Files.SummaryText);
 
                 vm.SelectedInputTab = 0;
                 check("Back on the Exam tab: the button and the custom mix are the Exam tab's again", vm.RunButtonText == "Generate & Send" && vm.Performance.MixDescription.StartsWith("From the Exam tab:", StringComparison.Ordinal), vm.Performance.MixDescription);
@@ -1982,7 +1990,7 @@ namespace DCST4.Tests
                 vm.SaveImages = false;
                 var fixture = FolderSourceTests.MakeFixture(Path.Combine(temp, "Export"));
                 vm.Files.Folder = fixture.Folder;
-                vm.Files.SetScan(Core.Files.FolderScanner.Scan(fixture.Folder, true, CancellationToken.None));
+                vm.Files.SetScan(Core.Files.FolderScanner.Scan(fixture.Folder, true, CancellationToken.None), fixture.Folder, true);
                 vm.SelectedInputTab = MainViewModel.FilesTabIndex;
 
                 var content = (FrameworkElement)window.Content;
@@ -1998,6 +2006,7 @@ namespace DCST4.Tests
                 var all = VisualDescendants(content).OfType<FrameworkElement>().ToList();
                 var tabs = all.OfType<TabControl>().First(t => t.Items.OfType<TabItem>().Any(i => (string)i.Header == "Files"));
                 var read = all.OfType<Button>().SingleOrDefault(b => (b.Content as string) == "Read");
+                var browse = all.OfType<Button>().SingleOrDefault(b => (b.Content as string) == "DICOMDIR...");
                 var syntax = all.OfType<ComboBox>().SingleOrDefault(c => System.Windows.Data.BindingOperations.GetBinding(c, ComboBox.SelectedItemProperty)?.Path.Path == nameof(FilesViewModel.SelectedSyntax));
                 var radios = all.OfType<RadioButton>().ToList();
                 Func<FrameworkElement, bool> inside = element =>
@@ -2005,9 +2014,9 @@ namespace DCST4.Tests
                     var corner = element.TransformToAncestor(tabs).Transform(new Point(0, 0));
                     return element.ActualWidth > 0 && corner.X >= 0 && corner.Y >= 0 && corner.X + element.ActualWidth <= tabs.ActualWidth + 0.5;
                 };
-                check("Files tab: selected, with Read, the syntax list and both answers drawn inside it", tabs.SelectedIndex == MainViewModel.FilesTabIndex && read != null && syntax != null && radios.Count == 2
-                    && inside(read) && inside(syntax) && radios.All(r => inside(r)), tabs.ActualWidth + " x " + tabs.ActualHeight);
-                check("Files tab: Read runs the main view model's command", read != null && read.Command == vm.ReadFilesCommand, null);
+                check("Files tab: selected, with the browse buttons, the syntax list and both answers drawn inside it", tabs.SelectedIndex == MainViewModel.FilesTabIndex && browse != null && syntax != null && radios.Count == 2
+                    && inside(browse) && inside(syntax) && radios.All(r => inside(r)), tabs.ActualWidth + " x " + tabs.ActualHeight);
+                check("Files tab: no Read button, since choosing a folder reads it", read == null, null);
                 check("Files tab: Re-identify is chosen, and the syntax list starts at As in the files", radios.Count == 2 && radios[0].IsChecked == true && radios[1].IsChecked == false
                     && syntax?.SelectedItem?.ToString() == FilesViewModel.AsInFilesName, syntax?.SelectedItem?.ToString());
                 var problems = listener.Errors.Where(e => e.Contains("Files") || e.Contains("Folder") || e.Contains("Reidentify") || e.Contains("KeepUnchanged") || e.Contains("Syntax")

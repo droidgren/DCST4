@@ -11,12 +11,10 @@ namespace DCST4
     /// </summary>
     public partial class ConfirmDialog : Window
     {
-        public ConfirmDialog(string message, string title = "Confirm", string yesText = null, string noText = null)
+        public ConfirmDialog(string message, string title = "Confirm")
         {
             InitializeComponent();
             Title = title;
-            if (yesText != null) YesButton.Content = yesText;
-            if (noText != null) NoButton.Content = noText;
             MessageText.Text = message;
             MessageScroller.MaxWidth = SystemParameters.WorkArea.Width * 0.85;
             MessageScroller.MaxHeight = SystemParameters.WorkArea.Height * 0.7;
@@ -24,12 +22,10 @@ namespace DCST4
         }
 
         /// <summary>Asks over the main window, or over the active one when a dialog is open. True for Yes.</summary>
-        /// <param name="yesText">The default button, instead of Yes.</param>
-        /// <param name="noText">The other button, which Esc and closing the window also mean, instead of No.</param>
-        public static bool Ask(string message, string title = "Confirm", string yesText = null, string noText = null)
+        public static bool Ask(string message, string title = "Confirm")
         {
             var owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current?.MainWindow;
-            var dialog = new ConfirmDialog(message, title, yesText, noText);
+            var dialog = new ConfirmDialog(message, title);
             if (owner != null && owner.IsVisible) dialog.Owner = owner;
             else dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             return dialog.ShowDialog() == true;

@@ -365,14 +365,13 @@
 
                                 <Label Content="Folder:"/>
                                 <DockPanel Grid.Column="1" Margin="0,2">
-                                    <Button DockPanel.Dock="Right" Content="Read" Width="70" Margin="6,0,0,0" Command="{Binding DataContext.ReadFilesCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
-                                            ToolTip="Reads the headers of the files, then asks whether to re-identify them as test patients. Nothing is sent or changed. A file is read again, whole, when it is sent."/>
                                     <Button DockPanel.Dock="Right" Content="DICOMDIR..." Width="80" Margin="4,0,0,0" Click="BrowseDicomDirButton_Click" ToolTip="Select a DICOMDIR file, as on a CD or a USB export from a PACS"/>
                                     <Button DockPanel.Dock="Right" Content="..." Width="26" Margin="4,0,0,0" Click="BrowseFilesFolderButton_Click" ToolTip="Select the folder"/>
-                                    <TextBox Text="{Binding Folder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"
-                                             ToolTip="A folder of DICOM files, or a DICOMDIR. A folder with a DICOMDIR at its top is read through it; otherwise every file in it is tried, whatever its name.&#x0a;&#x0a;While this tab is selected, the Run button sends these files instead of a generated exam, and the custom mix on the Performance tab is made of them.&#x0a;&#x0a;Default: none."/>
+                                    <TextBox x:Name="FilesFolderBox" Text="{Binding Folder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"
+                                             KeyDown="FilesFolderBox_KeyDown" LostKeyboardFocus="FilesFolderBox_LostKeyboardFocus"
+                                             ToolTip="A folder of DICOM files, or a DICOMDIR. A folder with a DICOMDIR at its top is read through it; otherwise every file in it is tried, whatever its name.&#x0a;&#x0a;The headers are read as soon as a folder is chosen, or a typed path is confirmed with Enter. Nothing is sent or changed until the Run button is clicked.&#x0a;&#x0a;While this tab is selected, the Run button sends these files instead of a generated exam, and the custom mix on the Performance tab is made of them.&#x0a;&#x0a;Default: none."/>
                                 </DockPanel>
-                                <CheckBox Grid.Row="1" Grid.Column="1" Content="Include subfolders" IsChecked="{Binding IncludeSubfolders, Mode=TwoWay}" Margin="0,2,0,4"
+                                <CheckBox Grid.Row="1" Grid.Column="1" Content="Include subfolders" IsChecked="{Binding IncludeSubfolders, Mode=TwoWay}" Margin="0,2,0,4" Click="FilesIncludeSubfolders_Click"
                                           ToolTip="Also read the files of the folders in the folder. Not used when a DICOMDIR lists the files.&#x0a;&#x0a;Default: on."/>
 
                                 <Label Grid.Row="2" Content="Found:"/>

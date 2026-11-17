@@ -283,10 +283,12 @@ namespace DCST4.Tests
 
         private static void TestQuestion(FolderScan scan)
         {
-            var text = FilesQuestion.Text(scan);
-            Check("Question: counts, both answers, and the files without a watermark", text.Contains("6 files") && text.Contains(FilesQuestion.ReidentifyButton + " (default)") && text.Contains(FilesQuestion.KeepButton + ":")
-                && text.Contains("2 compressed files keep their original pixel data") && text.Contains("real patient names"), text);
-            Check("Question: names no patient", !text.Contains("ORIG"));
+            var reidentify = string.Join("\n", FilesDescription.Describe(scan, true));
+            var keep = string.Join("\n", FilesDescription.Describe(scan, false));
+            Check("Description: the patients, and the files with and without a watermark", reidentify.Contains("Each of the 2 patients") && reidentify.Contains("4 files with uncompressed pixels get")
+                && reidentify.Contains("2 compressed files keep their original pixel data"), reidentify);
+            Check("Description, unchanged: says real patients go", keep.Contains("real patient names"), keep);
+            Check("Description: names no patient", !reidentify.Contains("ORIG") && !keep.Contains("ORIG"));
         }
 
         // ---------------------------------------------------------------- send and save

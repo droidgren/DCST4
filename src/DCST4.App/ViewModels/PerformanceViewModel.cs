@@ -146,7 +146,7 @@ namespace DCST4.ViewModels
                 if (!IsCustomMix) return SelectedMix.Description;
                 var mix = _settings.MixOverride;
                 if (mix?.Files != null) return "From the Files tab: " + mix.Description;
-                return mix == null && _customFromFiles?.Invoke() == true ? "From the Files tab: nothing to send yet. Read a folder first" : "From the Exam tab: " + (mix?.Description ?? "nothing to send yet");
+                return mix == null && _customFromFiles?.Invoke() == true ? "From the Files tab: nothing to send yet. Select a folder first" : "From the Exam tab: " + (mix?.Description ?? "nothing to send yet");
             }
         }
 

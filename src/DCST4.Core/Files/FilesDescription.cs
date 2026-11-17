@@ -3,33 +3,9 @@ using System.Globalization;
 
 namespace DCST4.Core.Files
 {
-    /// <summary>The words the App asks with and the command line prints, about what sending a folder will do.</summary>
-    public static class FilesQuestion
+    /// <summary>What sending a folder will do to its files, as the Files tab shows it and the command line prints it.</summary>
+    public static class FilesDescription
     {
-        public const string Title = "Re-identify the files?";
-        public const string ReidentifyButton = "Re-identify as test patients";
-        public const string KeepButton = "Send unchanged";
-
-        /// <summary>The question shown after a folder has been read. Re-identifying is the default answer.</summary>
-        public static string Text(FolderScan scan)
-        {
-            var lines = new List<string>
-            {
-                (scan.DicomDirPath != null ? "Read through the DICOMDIR: " : "Read: ") + scan.Summary + ".",
-                "Transfer syntaxes: " + scan.SyntaxSummary + ".",
-            };
-            if (scan.Skipped.Count > 0) lines.Add(Count(scan.Skipped.Count, "file is", "files are") + " skipped, listed on the Files tab.");
-            lines.Add(string.Empty);
-            lines.Add(ReidentifyButton + " (default):");
-            foreach (var line in Describe(scan, true)) lines.Add("  " + line);
-            lines.Add(string.Empty);
-            lines.Add(KeepButton + ":");
-            foreach (var line in Describe(scan, false)) lines.Add("  " + line);
-            lines.Add(string.Empty);
-            lines.Add("The answer can be changed on the Files tab before anything is sent.");
-            return string.Join("\n", lines);
-        }
-
         /// <summary>What is done to the files, one sentence a line.</summary>
         public static IReadOnlyList<string> Describe(FolderScan scan, bool reidentify)
         {

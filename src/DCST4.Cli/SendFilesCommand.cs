@@ -111,7 +111,7 @@ namespace DCST4.Cli
                 return RunExitCodes.Usage;
             }
 
-            foreach (var line in FilesQuestion.Describe(scan, !KeepIdentity)) Console.WriteLine(line);
+            foreach (var line in FilesDescription.Describe(scan, !KeepIdentity)) Console.WriteLine(line);
 
             var source = new FolderImageSource(scan, new FolderSendOptions
             {

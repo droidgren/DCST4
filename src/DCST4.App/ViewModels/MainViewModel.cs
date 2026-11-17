@@ -659,10 +659,6 @@ namespace DCST4.ViewModels
         /// <summary>Asks the user a yes/no question.</summary>
         public Func<string, bool> Confirm { get; set; } = message => ConfirmDialog.Ask(message);
 
-        /// <summary>Asks, after a folder has been read, whether to re-identify its files. True, the default, re-identifies.</summary>
-        public Func<string, bool> AskReidentify { get; set; } = message =>
-            ConfirmDialog.Ask(message, FilesQuestion.Title, FilesQuestion.ReidentifyButton, FilesQuestion.KeepButton);
-
         /// <summary>Writes the settings to disk.</summary>
         public Action SaveSettings { get; set; } = () => Settings.Default.Save();
 
@@ -691,7 +687,7 @@ namespace DCST4.ViewModels
         public ICommand CancelCommand { get; }
         /// <summary>Shows the first image of the exam as it would be sent. Not for documents and reports, which have no pixels.</summary>
         public ICommand ImagePreviewCommand { get; }
-        /// <summary>Reads the folder or DICOMDIR of the Files tab, then asks whether to re-identify the files.</summary>
+        /// <summary>Reads the folder or DICOMDIR of the Files tab. Started when a folder is chosen, not by a button of its own.</summary>
         public ICommand ReadFilesCommand { get; }
 
         /// <summary>The Performance tab.</summary>
@@ -1426,15 +1422,16 @@ namespace DCST4.ViewModels
 
         #region Files
         /// <summary>
-        /// Reads the folder or DICOMDIR of the Files tab and asks whether to re-identify what it holds. The headers are read
-        /// on a background thread; nothing is written and nothing is sent.
+        /// Reads the folder or DICOMDIR of the Files tab. The headers are read on a background thread; nothing is written and
+        /// nothing is sent. Nothing is asked either: re-identifying is chosen, and the tab shows what that does. A problem is
+        /// shown on the tab and in the status bar, not in a message box.
         /// </summary>
         private async Task DoReadFilesAsync(CancellationToken token)
         {
             var path = Files.Folder?.Trim();
             if (string.IsNullOrEmpty(path))
             {
-                ShowMessage("Select a folder, or a DICOMDIR, first.", MessageBoxImage.Warning, null);
+                Files.Clear();
                 return;
             }
 
@@ -1457,31 +1454,38 @@ namespace DCST4.ViewModels
                 // A folder that cannot be read, or a broken DICOMDIR, is a local problem and must not take the program down.
                 _logger.Warning(ex, "Could not read {path}", path);
                 StatusText = "Could not read the files: " + ex.Message;
-                ShowMessage("The files could not be read:\n" + ex.Message, MessageBoxImage.Warning, null);
+                Files.SetReadProblem("Could not be read: " + ex.Message);
                 return;
             }
 
             // Let the progress queued by the background thread land before the summary replaces it.
             await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-            Files.SetScan(scan);
-            if (scan.Files.Count == 0)
-            {
-                StatusText = "No DICOM files found in " + path + ".";
-                ShowMessage($"No DICOM files were found in {path}." + (scan.Skipped.Count > 0 ? $" {scan.Skipped.Count} files were skipped, listed on the Files tab." : string.Empty), MessageBoxImage.Warning, null);
-                return;
-            }
+            Files.SetScan(scan, path, Files.IncludeSubfolders);
+            StatusText = scan.Files.Count == 0 ? "No DICOM files found in " + path + "." : "Read " + scan.Summary + ".";
+        }
 
-            Files.Reidentify = AskReidentify(FilesQuestion.Text(scan));
-            _logger.Information("Files of {path}: {choice}", path, Files.Reidentify ? "re-identify as test patients" : "send unchanged");
-            StatusText = "Read " + scan.Summary + (Files.Reidentify ? ". They will be re-identified as test patients." : ". They will be sent unchanged.");
+        /// <summary>Reads the folder again if it, or the subfolder choice, has changed since it was last read. For a typed path.</summary>
+        public void ReadFilesIfChanged()
+        {
+            if (Files.IsScanCurrent || string.IsNullOrWhiteSpace(Files.Folder) || !ReadFilesCommand.CanExecute(null)) return;
+            ReadFilesCommand.Execute(null);
         }
 
         /// <summary>Sends and/or saves the files of the Files tab, as the Run button does for a generated exam.</summary>
         private async Task DoSendFilesAsync(CancellationToken token)
         {
+            // A typed path that was never confirmed, or a changed subfolder choice, is read now, so what is sent is what is shown.
+            if (!Files.IsScanCurrent && !string.IsNullOrWhiteSpace(Files.Folder))
+            {
+                await DoReadFilesAsync(token);
+                if (token.IsCancellationRequested) return;
+            }
+
             var scan = Files.Scan;
             var problems = new List<string>();
-            if (!Files.HasFiles) problems.Add("There are no files to send. Select a folder or a DICOMDIR on the Files tab, and Read it.");
+            if (!Files.HasFiles) problems.Add(string.IsNullOrWhiteSpace(Files.Folder)
+                ? "There are no files to send. Select a folder or a DICOMDIR on the Files tab."
+                : "There are no files to send. " + Files.SummaryText);
             var options = BuildRunOptions();
             options.TransferSyntax = Files.SelectedSyntax.Syntax;
             options.AllowFallback = Files.AllowFallback;
@@ -1500,7 +1504,7 @@ namespace DCST4.ViewModels
                 return;
             }
 
-            // The question after reading warned already, but real patients are worth a second look before they leave.
+            // Real patients are worth a second look before they leave.
             if (!Files.Reidentify && _sendImages && !Confirm(FilesSendUnchangedQuestion(scan, options.Endpoint))) return;
 
             var source = new FolderImageSource(scan, new FolderSendOptions

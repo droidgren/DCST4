@@ -54,8 +54,18 @@ namespace DCST4.ViewModels
         public FolderScan Scan { get; private set; }
         public bool HasFiles => Scan != null && Scan.Files.Count > 0;
 
-        public string SummaryText => Scan == null ? "No folder read yet. Select a folder or a DICOMDIR, then Read."
+        public string SummaryText => _readProblem != null ? _readProblem
+            : Scan == null ? "No folder read yet. Select a folder or a DICOMDIR; it is read at once."
+            : Scan.Files.Count == 0 ? "No DICOM files found." + (Scan.Skipped.Count > 0 ? " The skipped files are listed below." : string.Empty)
             : (Scan.DicomDirPath != null ? "Through the DICOMDIR: " : string.Empty) + Scan.Summary + ".";
+
+        private string _readProblem;
+        private string _scannedFolder;
+        private bool _scannedSubfolders;
+
+        /// <summary>True when the scan is of the folder and the subfolder choice shown now, so it need not be read again.</summary>
+        public bool IsScanCurrent => Scan != null && string.Equals(_scannedFolder, (Folder ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase)
+            && _scannedSubfolders == IncludeSubfolders;
         public string SyntaxText => HasFiles ? Scan.SyntaxSummary : string.Empty;
         public string ModalityText => HasFiles ? string.Join(", ", Scan.Modalities) : string.Empty;
         public string SkippedHeader => Scan == null || Scan.Skipped.Count == 0 ? "Skipped: none" : $"Skipped: {Scan.Skipped.Count}";
@@ -73,7 +83,7 @@ namespace DCST4.ViewModels
         public bool KeepUnchanged { get => !_reidentify; set => Reidentify = !value; }
 
         /// <summary>What sending will do to these files, one sentence a line.</summary>
-        public string EffectText => HasFiles ? string.Join("\n", FilesQuestion.Describe(Scan, _reidentify)) : string.Empty;
+        public string EffectText => HasFiles ? string.Join("\n", FilesDescription.Describe(Scan, _reidentify)) : string.Empty;
 
         /// <summary>"As in the files" first, which keeps each file's own syntax and compressed pixel data, then every syntax a run can use.</summary>
         public IReadOnlyList<StoreSyntaxChoice> SyntaxChoices { get; } =
@@ -94,17 +104,30 @@ namespace DCST4.ViewModels
         /// <summary>The files as the custom mix of the Performance tab. Null before a folder with files is read.</summary>
         public DataMix BuildMix() => HasFiles ? DataMix.FromFiles(Scan, SelectedSyntax.Syntax, SelectedSyntax.Name) : null;
 
-        /// <summary>A new folder was read. The answer to the question is set separately, after it has been asked.</summary>
-        public void SetScan(FolderScan scan)
+        /// <summary>A new folder was read. Re-identifying is chosen again, since that is the default for every new folder.</summary>
+        public void SetScan(FolderScan scan, string folder, bool includeSubfolders)
         {
             Scan = scan;
+            _scannedFolder = (folder ?? string.Empty).Trim();
+            _scannedSubfolders = includeSubfolders;
+            _readProblem = null;
             _reidentify = true;
             RaiseAll();
+        }
+
+        /// <summary>The folder could not be read. The reason is shown on the tab instead of in a message box.</summary>
+        public void SetReadProblem(string problem)
+        {
+            Clear();
+            _readProblem = problem;
+            OnPropertyChanged(nameof(SummaryText));
         }
 
         public void Clear()
         {
             Scan = null;
+            _scannedFolder = null;
+            _readProblem = null;
             _reidentify = true;
             RaiseAll();
         }
