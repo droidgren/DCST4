@@ -1,3 +1,4 @@
+using DCST4.Core.Files;
 using DCST4.Core.Pipeline;
 using DCST4.Core.Generation.Realism;
 using DCST4.Core.Generation;
@@ -28,10 +29,11 @@ namespace DCST4.Core.Performance
     /// </summary>
     public sealed class PoolInstance
     {
-        internal PoolInstance(int entryIndex, string sopClassUid, DicomDataset header, byte[] tail, int headerBytes)
+        internal PoolInstance(int entryIndex, string sopClassUid, DicomTransferSyntax syntax, DicomDataset header, byte[] tail, int headerBytes)
         {
             EntryIndex = entryIndex;
             SopClassUid = sopClassUid;
+            TransferSyntax = syntax;
             Header = header;
             Tail = tail;
             HeaderBytes = headerBytes;
@@ -40,6 +42,8 @@ namespace DCST4.Core.Performance
         /// <summary>Which object type of the mix this is, counted from 0.</summary>
         public int EntryIndex { get; }
         public string SopClassUid { get; }
+        /// <summary>The syntax this object goes in: the mix's, or for files sent as they are, the file's own.</summary>
+        public DicomTransferSyntax TransferSyntax { get; }
         internal DicomDataset Header { get; }
         /// <summary>Pixel Data as it goes on the wire, shared by every send.</summary>
         public byte[] Tail { get; }
@@ -62,6 +66,12 @@ namespace DCST4.Core.Performance
         public DicomTransferSyntax Syntax => Mix.Syntax;
         public IReadOnlyList<PoolInstance> Instances { get; }
         public IReadOnlyList<string> SopClasses => Instances.Select(i => i.SopClassUid).Distinct().ToList();
+
+        /// <summary>One presentation context for each SOP class and syntax the pool sends: one syntax for a generated mix, any number for files.</summary>
+        public IReadOnlyList<PoolContext> Contexts => Instances.Select(i => new PoolContext(i.SopClassUid, i.TransferSyntax.UID.UID)).Distinct().ToList();
+
+        /// <summary>An association offers at most 128 presentation contexts.</summary>
+        public const int MaxContexts = 128;
         public long AverageWireBytes => Instances.Count == 0 ? 0 : (long)Instances.Average(i => (double)i.WireBytes);
 
         /// <summary>
@@ -73,6 +83,7 @@ namespace DCST4.Core.Performance
             RealismLevel realism = RealismLevel.Off, LossyCompressionSettings lossy = null)
         {
             if (mix == null) throw new ArgumentNullException(nameof(mix));
+            if (mix.Files != null) return BuildFromFiles(mix, seed, uidRoot, naming, token, lossy);
             var instances = new List<PoolInstance>();
             for (var entryIndex = 0; entryIndex < mix.Entries.Count; entryIndex++)
             {
@@ -114,12 +125,67 @@ namespace DCST4.Core.Performance
                     instances.Add(Split(entryIndex, image.File.Dataset, mix.Syntax, shared));
                 }
             }
-            // In turn by object type, so that a short run of a mix still sends every type: CR, US, CR, US ...
-            var interleaved = instances.GroupBy(i => i.EntryIndex)
+            return new InstancePool(mix, Interleave(instances));
+        }
+
+        /// <summary>In turn by object type, so that a short run of a mix still sends every type: CR, US, CR, US ...</summary>
+        private static List<PoolInstance> Interleave(List<PoolInstance> instances) =>
+            instances.GroupBy(i => i.EntryIndex)
                 .SelectMany(g => g.Select((item, position) => new { item, position }))
                 .OrderBy(x => x.position).ThenBy(x => x.item.EntryIndex)
                 .Select(x => x.item).ToList();
-            return new InstancePool(mix, interleaved);
+
+        /// <summary>
+        /// The pool of a mix of existing files: each file once, re-identified, with every source patient as one test patient,
+        /// since a load run puts the objects of a study together whatever patient they came from. A series of the files is an
+        /// object type of the mix, so its files stay in one series. The files are kept in memory, so all of them together may
+        /// take at most <see cref="DataMix.MaxPoolBytes"/>.
+        /// </summary>
+        private static InstancePool BuildFromFiles(DataMix mix, int seed, string uidRoot, TestPatientNaming naming, CancellationToken token, LossyCompressionSettings lossy)
+        {
+            if (mix.Files.Files.Count == 0) throw new PoolUnavailableException("The custom mix has no files to send.");
+            var source = new FolderImageSource(mix.Files, new FolderSendOptions
+            {
+                UidRoot = uidRoot,
+                PatientNaming = naming,
+                RunNonce = "pool/" + seed.ToString(CultureInfo.InvariantCulture),
+                Seed = seed,
+                OnePatient = true,
+            });
+
+            var instances = new List<PoolInstance>();
+            long total = 0;
+            foreach (var image in source.GetImages(token))
+            {
+                token.ThrowIfCancellationRequested();
+                var file = image.File;
+                if (mix.FilesSyntax != null)
+                {
+                    try
+                    {
+                        file = TransferSyntaxConverter.Convert(file, mix.FilesSyntax, token, null, lossy);
+                    }
+                    catch (Exception ex) when (!(ex is OperationCanceledException))
+                    {
+                        throw new PoolUnavailableException($"{image.SourcePath} cannot be put in {mix.FilesSyntax.UID.Name} on this computer: {ex.Message}");
+                    }
+                }
+
+                var shared = SharedBytes(file.Dataset);
+                total += shared;
+                if (total > DataMix.MaxPoolBytes)
+                {
+                    throw new PoolUnavailableException($"The files of the custom mix take more than {DataMix.MaxPoolBytes / 1048576} MB, and a load run keeps its objects in memory. Choose a folder with fewer or smaller files, or send them with Send files.");
+                }
+                instances.Add(Split(image.SeriesNumber - 1, file.Dataset, file.Dataset.InternalTransferSyntax, shared));
+            }
+
+            var pool = new InstancePool(mix, Interleave(instances));
+            if (pool.Contexts.Count > MaxContexts)
+            {
+                throw new PoolUnavailableException($"The files have {pool.Contexts.Count} combinations of SOP class and transfer syntax, and an association offers at most {MaxContexts}. Choose one transfer syntax for them on the Files tab.");
+            }
+            return pool;
         }
 
         /// <summary>
@@ -161,7 +227,7 @@ namespace DCST4.Core.Performance
             // the header, so none of the mixes may have a UID after it.
             var tailBytes = Encode(tail, syntax, sharedBytes);
             var headerBytes = Encode(header, syntax).Length;
-            return new PoolInstance(entryIndex, dataset.GetSingleValue<string>(DicomTag.SOPClassUID), header, tailBytes, headerBytes);
+            return new PoolInstance(entryIndex, dataset.GetSingleValue<string>(DicomTag.SOPClassUID), syntax, header, tailBytes, headerBytes);
         }
 
         /// <summary>
@@ -190,10 +256,28 @@ namespace DCST4.Core.Performance
         }
     }
 
+    /// <summary>A presentation context of a load run: one SOP class in one transfer syntax.</summary>
+    public struct PoolContext : IEquatable<PoolContext>
+    {
+        public PoolContext(string sopClassUid, string transferSyntaxUid)
+        {
+            SopClassUid = sopClassUid;
+            TransferSyntaxUid = transferSyntaxUid;
+        }
+
+        public string SopClassUid { get; }
+        public string TransferSyntaxUid { get; }
+
+        public bool Equals(PoolContext other) => string.Equals(SopClassUid, other.SopClassUid, StringComparison.Ordinal) && string.Equals(TransferSyntaxUid, other.TransferSyntaxUid, StringComparison.Ordinal);
+        public override bool Equals(object obj) => obj is PoolContext other && Equals(other);
+        public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(SopClassUid ?? string.Empty) * 31 + StringComparer.Ordinal.GetHashCode(TransferSyntaxUid ?? string.Empty);
+    }
+
     /// <summary>One send, ready to go: the stamped header and the shared tail.</summary>
     public sealed class StampedInstance
     {
         public string SopClassUid { get; internal set; }
+        public string TransferSyntaxUid { get; internal set; }
         public string SopInstanceUid { get; internal set; }
         public string StudyInstanceUid { get; internal set; }
         public string SeriesInstanceUid { get; internal set; }
@@ -263,6 +347,7 @@ namespace DCST4.Core.Performance
             return new StampedInstance
             {
                 SopClassUid = item.SopClassUid,
+                TransferSyntaxUid = item.TransferSyntax.UID.UID,
                 SopInstanceUid = sop,
                 StudyInstanceUid = _studyUid,
                 SeriesInstanceUid = series,

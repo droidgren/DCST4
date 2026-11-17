@@ -186,6 +186,41 @@ namespace DCST4
             }
         }
 
+        private void BrowseFilesFolderButton_Click(object sender, RoutedEventArgs e)
+        {
+            var current = _viewModel.Files.Folder;
+            using (var dialog = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Select the folder of DICOM files to send",
+                SelectedPath = System.IO.File.Exists(current) ? System.IO.Path.GetDirectoryName(current) : current,
+                ShowNewFolderButton = false,
+            })
+            {
+                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    _viewModel.Files.Folder = dialog.SelectedPath;
+                    if (_viewModel.ReadFilesCommand.CanExecute(null)) _viewModel.ReadFilesCommand.Execute(null);
+                }
+            }
+        }
+
+        private void BrowseDicomDirButton_Click(object sender, RoutedEventArgs e)
+        {
+            var current = _viewModel.Files.Folder;
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Select a DICOMDIR",
+                Filter = "DICOMDIR|DICOMDIR;*.DIR|All files|*.*",
+                CheckFileExists = true,
+                InitialDirectory = System.IO.Directory.Exists(current) ? current : System.IO.File.Exists(current) ? System.IO.Path.GetDirectoryName(current) : null,
+            };
+            if (dialog.ShowDialog(this) == true)
+            {
+                _viewModel.Files.Folder = dialog.FileName;
+                if (_viewModel.ReadFilesCommand.CanExecute(null)) _viewModel.ReadFilesCommand.Execute(null);
+            }
+        }
+
         private void TestSettingsButton_Click(object sender, RoutedEventArgs e)
         {
             new TestSettingsDialog(new TestSettingsViewModel(_viewModel)) { Owner = this }.ShowDialog();

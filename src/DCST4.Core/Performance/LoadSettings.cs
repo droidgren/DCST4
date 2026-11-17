@@ -138,7 +138,8 @@ namespace DCST4.Core.Performance
             var sizeText = size >= 1000 ? (size / 1000).ToString("0.0", CultureInfo.InvariantCulture) + " GB" : size.ToString("0", CultureInfo.InvariantCulture) + " MB";
             var mix = ResolvedMix;
             // Deflated is compressed when it is written, so like an encapsulated syntax its size is only known as a ceiling.
-            var compressed = mix != null && (mix.Syntax.IsEncapsulated || mix.Syntax.IsDeflate);
+            // Files sent as they are have a known size; put in another syntax, they too are only known as a ceiling.
+            var compressed = mix != null && (mix.Files == null || mix.FilesSyntax != null) && (mix.Syntax.IsEncapsulated || mix.Syntax.IsDeflate);
             var plan = $"{(exact ? "Stores" : "Stores up to")} {count.ToString("N0", CultureInfo.InvariantCulture)} new objects ({(compressed ? "at most " : "about ")}{sizeText}, mix {mix?.Id ?? Mix}{(mix != null && mix.IsCustom ? ": " + mix.Description : string.Empty)}) on {target}.";
 
             // Without a rate, a fast system uses up the ceiling before the duration is over, and the measured window shrinks.
@@ -156,6 +157,7 @@ namespace DCST4.Core.Performance
         /// <summary>What keeps a custom mix from being generated, found before the pool is built. Null if nothing does.</summary>
         private static string CustomMixProblem(DataMix mix)
         {
+            if (mix.Files != null) return FilesMixProblem(mix);
             foreach (var entry in mix.Entries)
             {
                 var request = new Generation.Datasets.TestDatasetRequest
@@ -183,6 +185,17 @@ namespace DCST4.Core.Performance
                 {
                     return $"One object of the custom mix is {known / 1048576.0:0} MB, and a load run keeps its objects in memory, which holds at most {DataMix.MaxPoolBytes / 1048576} MB each. Use fewer frames, a smaller payload or a compressed transfer syntax, or send it with Generate & Send.";
                 }
+            }
+            return null;
+        }
+
+        /// <summary>What keeps a mix of files from being sent, found before the files are read again.</summary>
+        private static string FilesMixProblem(DataMix mix)
+        {
+            if (mix.Files.Files.Count == 0) return "The Files tab has no files to send. Select a folder with DICOM files first.";
+            if (mix.FilesSyntax == null && mix.Files.TotalBytes > DataMix.MaxPoolBytes)
+            {
+                return $"The files of the custom mix are {mix.Files.TotalBytes / 1048576.0:0} MB, and a load run keeps its objects in memory, at most {DataMix.MaxPoolBytes / 1048576} MB in all. Choose a folder with fewer or smaller files, or send them with Send files.";
             }
             return null;
         }

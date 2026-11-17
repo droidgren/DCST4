@@ -8,8 +8,8 @@
         ShowInTaskbar="False">
     <DockPanel Margin="16,16,16,12">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-            <Button x:Name="YesButton" Content="Yes" Width="80" Height="25" Margin="0,0,10,0" IsDefault="True" Click="YesButton_Click"/>
-            <Button Content="No" Width="80" Height="25" IsCancel="True"/>
+            <Button x:Name="YesButton" Content="Yes" MinWidth="80" Height="25" Padding="10,0" Margin="0,0,10,0" IsDefault="True" Click="YesButton_Click"/>
+            <Button x:Name="NoButton" Content="No" MinWidth="80" Height="25" Padding="10,0" IsCancel="True"/>
         </StackPanel>
         <Image x:Name="QuestionIcon" DockPanel.Dock="Left" Width="32" Height="32" VerticalAlignment="Top" Margin="0,0,14,0"/>
         <!-- One line per line of the message, however long: the window grows to fit, and scrolls only past the screen. -->

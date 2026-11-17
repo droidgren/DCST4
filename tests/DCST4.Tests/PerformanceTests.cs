@@ -638,12 +638,51 @@ namespace DCST4.Tests
             Check("Enhanced CT and Tomosynthesis are two SOP classes on one association", big.NegotiatedContexts.Count == 2 && Scp.Associations.Count == 1);
 
             await TestCustomMix();
+            await TestFileMix();
 
             ResetScp();
             Scp.ContextTable = new ScpContextTable();
             Scp.ContextTable.Set(DicomUID.CTImageStorage, DicomTransferSyntax.ExplicitVRLittleEndian, ScpAnswer.Reject(DicomPresentationContextResult.RejectTransferSyntaxesNotSupported));
             var refused = await One("load-throughput", Settings(s => { s.InstanceCount = 4; }));
             Check("A syntax the system does not accept: NOT_SUPPORTED, nothing sent", refused.Result == TestResultClass.NOT_SUPPORTED && Scp.StoreCount == 0, Show(refused));
+        }
+
+        /// <summary>
+        /// The custom mix of the files of a folder, in their own syntaxes: one context per SOP class and syntax, one test patient
+        /// for files of two patients, the files' own compressed pixels on the wire.
+        /// </summary>
+        private static async Task TestFileMix()
+        {
+            var fixture = FolderSourceTests.MakeFixture(Path.Combine(_temp, "file-mix"));
+            var scan = Core.Files.FolderScanner.Scan(fixture.Folder, true, CancellationToken.None);
+            var mix = DataMix.FromFiles(scan, null, null);
+            Check("File mix: custom, described by folder, count and syntaxes", mix.IsCustom && mix.Files == scan && mix.HasMixedSyntaxes
+                && mix.Description.StartsWith("Files of file-mix: 6 files in 3 series", StringComparison.Ordinal) && mix.Description.Contains("as in the files (") && mix.Description.Contains("JPEG Lossless"), mix.Description);
+            Check("File mix: the planned volume is the files' size", mix.EstimatedBytesPerObject == scan.TotalBytes / 6);
+
+            var settings = new LoadSettings { MixOverride = mix, Mix = DataMix.CustomId, Associations = 1, InstanceCount = 6, SampleEvery = 0, WarmUpSeconds = 0 };
+            Check("File mix: valid, and the plan names it", settings.Validate(LoadMode.Load) == null && settings.DescribePlan(LoadMode.Load, "PACS").Contains("mix custom: Files of file-mix"), settings.Validate(LoadMode.Load) ?? settings.DescribePlan(LoadMode.Load, "PACS"));
+            Check("File mix: a folder without files is refused", new LoadSettings { MixOverride = DataMix.FromFiles(Core.Files.FolderScanner.Scan(Path.Combine(fixture.Folder, "B"), false, CancellationToken.None), null, null), Mix = DataMix.CustomId }
+                .Validate(LoadMode.Load).Contains("no files"));
+
+            var pool = InstancePool.Build(mix, 7, Root, TestPatientNaming.MarkedTestName, CancellationToken.None);
+            Check("File mix: one pool object per file, one context per SOP class and syntax", pool.Instances.Count == 6 && pool.Contexts.Count == 3, pool.Instances.Count + " objects, " + pool.Contexts.Count + " contexts");
+
+            ResetScp();
+            Scp.RecordReceived = true;
+            var result = await One("load-throughput", settings);
+            var received = Scp.Received.ToList();
+            Check("File mix: PASS, every file stored, each in its own syntax", result.Result == TestResultClass.PASS && received.Count == 6
+                && received.Count(r => r.Syntax == DicomTransferSyntax.JPEGProcess14SV1) == 2 && received.Count(r => r.Syntax == DicomTransferSyntax.ImplicitVRLittleEndian) == 1, Show(result) + " " + string.Join(",", received.Select(r => r.Syntax.UID.Name)));
+            Check("File mix: three contexts negotiated on one association", result.NegotiatedContexts.Count == 3 && Scp.Associations.Count == 1, result.NegotiatedContexts.Count.ToString(CultureInfo.InvariantCulture));
+            var patients = received.Select(r => r.Dataset.GetString(DicomTag.PatientID)).Distinct().ToList();
+            Check("File mix: the two source patients are one test patient, so that a study never mixes patients", patients.Count == 1 && TestPersonnummerRegistry.Default.Contains(patients[0]), string.Join(",", patients));
+            Check("File mix: the private tags of the files arrive", received.Count(r => r.Dataset.Any(i => i.Tag.Group == 0x0019 && i.Tag.Element == 0x1011)) == 3);
+
+            var oneSyntax = DataMix.FromFiles(scan, DicomTransferSyntax.ExplicitVRLittleEndian, "Explicit VR Little Endian");
+            var single = InstancePool.Build(oneSyntax, 7, Root, TestPatientNaming.MarkedTestName, CancellationToken.None);
+            Check("File mix in one chosen syntax: decoded first, two contexts", !oneSyntax.HasMixedSyntaxes && single.Contexts.Count == 2 && single.Instances.All(i => i.TransferSyntax == DicomTransferSyntax.ExplicitVRLittleEndian)
+                && oneSyntax.Description.EndsWith(", Explicit VR Little Endian", StringComparison.Ordinal), oneSyntax.Description);
         }
 
         /// <summary>The custom mix: one object type as the Exam tab describes it, here a cine loop in JPEG Baseline with a private payload.</summary>

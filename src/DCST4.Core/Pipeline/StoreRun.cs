@@ -86,7 +86,14 @@ namespace DCST4.Core.Pipeline
         /// <summary>Write to <see cref="SaveFolder"/>.</summary>
         public bool Save { get; set; }
         public string SaveFolder { get; set; }
+        /// <summary>
+        /// The syntax every image is put in before it is saved or sent. Null keeps each image in the syntax it has, which is
+        /// how files from a folder are sent "as in the files", with their own compressed pixel data.
+        /// </summary>
         public DicomTransferSyntax TransferSyntax { get; set; } = DicomTransferSyntax.ExplicitVRLittleEndian;
+
+        /// <summary>The name of <see cref="TransferSyntax"/> for the log, or what null means.</summary>
+        public string TransferSyntaxName => TransferSyntax?.UID.Name ?? "each file's own syntax";
         /// <summary>How hard a lossy encoder compresses. Null leaves every encoder at its default.</summary>
         public LossyCompressionSettings Lossy { get; set; }
         /// <summary>
@@ -199,12 +206,13 @@ namespace DCST4.Core.Pipeline
                     {
                         var endpoint = _options.Endpoint.Trimmed();
                         Logger.Information("Run started: {count} images to {called} at {host}:{port} from {calling}, proposing {syntax}",
-                            _source.ExpectedCount, endpoint.CalledAe, endpoint.Host, endpoint.Port, endpoint.CallingAe, _options.TransferSyntax.UID.Name);
-                        send = await new StoreService().SendAsync(endpoint, _options.Network, prepared, _options.AllowFallback, Complete, token, _options.Timeline).ConfigureAwait(false);
+                            _source.ExpectedCount, endpoint.CalledAe, endpoint.Host, endpoint.Port, endpoint.CallingAe, _options.TransferSyntaxName);
+                        var planned = (_source as IPlannedContexts)?.PlannedContexts(_options.TransferSyntax);
+                        send = await new StoreService().SendAsync(endpoint, _options.Network, prepared, _options.AllowFallback, Complete, token, _options.Timeline, planned).ConfigureAwait(false);
                     }
                     else
                     {
-                        Logger.Information("Run started: {count} images to disk only, {syntax}", _source.ExpectedCount, _options.TransferSyntax.UID.Name);
+                        Logger.Information("Run started: {count} images to disk only, {syntax}", _source.ExpectedCount, _options.TransferSyntaxName);
                         foreach (var image in prepared)
                         {
                             token.ThrowIfCancellationRequested();
@@ -219,6 +227,7 @@ namespace DCST4.Core.Pipeline
                                 PixelBytes = image.PixelBytes,
                                 SavedPath = image.SavedPath,
                                 SaveError = image.SaveError,
+                                SourcePath = image.SourcePath,
                             });
                         }
                     }
@@ -273,7 +282,10 @@ namespace DCST4.Core.Pipeline
             foreach (var image in images)
             {
                 var current = ++number;
-                image.File = TransferSyntaxConverter.Convert(image.File, _options.TransferSyntax, token, (done, total) => FrameEncoded?.Invoke(current, done, total), _options.Lossy);
+                if (_options.TransferSyntax != null)
+                {
+                    image.File = TransferSyntaxConverter.Convert(image.File, _options.TransferSyntax, token, (done, total) => FrameEncoded?.Invoke(current, done, total), _options.Lossy);
+                }
                 image.PixelBytes = PixelDataSize(image.File.Dataset);
 
                 if (_options.Save)

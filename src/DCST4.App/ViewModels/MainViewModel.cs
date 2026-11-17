@@ -1,5 +1,6 @@
 using DCST4.Core.Generation.Realism;
 using DCST4.Core.Capability;
+using DCST4.Core.Files;
 using DCST4.Core.Generation;
 using DCST4.Core.Generation.Modalities;
 using DCST4.Core.Network;
@@ -588,7 +589,34 @@ namespace DCST4.ViewModels
         private string _saveFolder;
         public string SaveFolder { get => _saveFolder; set { _saveFolder = value ?? string.Empty; OnPropertyChanged(); Settings.Default.SaveFolder = _saveFolder; } }
 
-        public string RunButtonText => _saveImages && !_sendImages ? "Generate & Save" : "Generate & Send";
+        public string RunButtonText => IsFilesSource
+            ? (_saveImages && !_sendImages ? "Save files" : "Send files")
+            : (_saveImages && !_sendImages ? "Generate & Save" : "Generate & Send");
+
+        /// <summary>The tab of the Files tab in the upper tab control: while it is selected, a run sends the files instead of a generated exam.</summary>
+        public const int FilesTabIndex = 2;
+
+        private int _selectedInputTab;
+        /// <summary>The selected tab of Exam, Identifiers and Files. Not saved: the program starts on the Exam tab.</summary>
+        public int SelectedInputTab
+        {
+            get => _selectedInputTab;
+            set
+            {
+                if (_selectedInputTab == value) return;
+                _selectedInputTab = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsFilesSource));
+                OnPropertyChanged(nameof(RunButtonText));
+                Performance?.RefreshPlan();
+            }
+        }
+
+        /// <summary>A run sends the files of the Files tab, and the custom mix is made of them.</summary>
+        public bool IsFilesSource => _selectedInputTab == FilesTabIndex;
+
+        /// <summary>The Files tab.</summary>
+        public FilesViewModel Files { get; private set; }
 
         public ObservableCollection<StoreResult> Results { get; } = new ObservableCollection<StoreResult>();
         public ObservableCollection<string> LogLines { get; } = new ObservableCollection<string>();
@@ -631,6 +659,10 @@ namespace DCST4.ViewModels
         /// <summary>Asks the user a yes/no question.</summary>
         public Func<string, bool> Confirm { get; set; } = message => ConfirmDialog.Ask(message);
 
+        /// <summary>Asks, after a folder has been read, whether to re-identify its files. True, the default, re-identifies.</summary>
+        public Func<string, bool> AskReidentify { get; set; } = message =>
+            ConfirmDialog.Ask(message, FilesQuestion.Title, FilesQuestion.ReidentifyButton, FilesQuestion.KeepButton);
+
         /// <summary>Writes the settings to disk.</summary>
         public Action SaveSettings { get; set; } = () => Settings.Default.Save();
 
@@ -659,6 +691,8 @@ namespace DCST4.ViewModels
         public ICommand CancelCommand { get; }
         /// <summary>Shows the first image of the exam as it would be sent. Not for documents and reports, which have no pixels.</summary>
         public ICommand ImagePreviewCommand { get; }
+        /// <summary>Reads the folder or DICOMDIR of the Files tab, then asks whether to re-identify the files.</summary>
+        public ICommand ReadFilesCommand { get; }
 
         /// <summary>The Performance tab.</summary>
         public PerformanceViewModel Performance { get; private set; }
@@ -706,15 +740,18 @@ namespace DCST4.ViewModels
             OpenPerformanceReportCommand = new RelayCommand(async _ => await OpenReportAsync(Performance.LastResultFiles), _ => !IsBusy && HasReport(Performance.LastResultFiles));
             CancelCommand = new RelayCommand(_ => CancelOperation(), _ => _cts != null && !_cts.IsCancellationRequested);
             ImagePreviewCommand = new RelayCommand(async _ => await RunBusyAsync(DoImagePreviewAsync), _ => !IsBusy && HasPixelData);
+            ReadFilesCommand = new RelayCommand(async _ => await RunBusyAsync(DoReadFilesAsync), _ => !IsBusy);
             NewValuesCommand = new RelayCommand(_ => GenerateNewValues(), _ => !IsBusy);
             SaveProfileCommand = new RelayCommand(_ => SaveProfile(), _ => !IsBusy);
             DeleteProfileCommand = new RelayCommand(_ => DeleteProfile(), _ => !IsBusy && FindProfile(ProfileName) != null);
             ClearLogCommand = new RelayCommand(_ => LogLines.Clear());
 
             LoadSettings();
+            Files = new FilesViewModel();
             Performance = new PerformanceViewModel(Settings.Default.PerformanceSettings, Settings.Default.PerformanceMode);
+            Files.Changed += () => Performance.RefreshPlan();
             Performance.SetTarget(() => "the destination above");
-            Performance.SetCustomMix(BuildCustomMix);
+            Performance.SetCustomMix(BuildCustomMix, () => IsFilesSource);
             Performance.SettingsChanged += () =>
             {
                 Settings.Default.PerformanceSettings = Performance.SaveSettings();
@@ -759,6 +796,7 @@ namespace DCST4.ViewModels
                 _selectedProfile = null;
                 _profileName = string.Empty;
                 Performance.ResetToDefaults();
+                Files.ReloadFromSettings();
                 TestSuite.ReloadFromSettings();
                 Comparison.ReloadFromSettings();
                 ReloadAdditionalTags();
@@ -1220,6 +1258,12 @@ namespace DCST4.ViewModels
         #region Run
         private async Task DoRunAsync(CancellationToken token)
         {
+            if (IsFilesSource)
+            {
+                await DoSendFilesAsync(token);
+                return;
+            }
+
             RefreshPreview();
 
             var problems = ReadOverrides(out _);
@@ -1373,11 +1417,126 @@ namespace DCST4.ViewModels
         /// </summary>
         public DataMix BuildCustomMix()
         {
+            if (IsFilesSource) return Files.BuildMix();
             if (_selectedImageObject == null || _selectedTransferSyntax == null) return null;
             // The display name, not the Object list's label: a mix described as "Single frame ..." would say nothing.
             return DataMix.Custom(_selectedImageObject.DatasetProfileId, Generating.DisplayName, _rows, _columns, _bitsStored, IsMultiFrame ? _framesPerImage : 1,
                 Generating.SamplesPerPixel, _selectedTransferSyntax.Syntax, _selectedTransferSyntax.Name, PrivatePayloadBytes, HasPixelData);
         }
+
+        #region Files
+        /// <summary>
+        /// Reads the folder or DICOMDIR of the Files tab and asks whether to re-identify what it holds. The headers are read
+        /// on a background thread; nothing is written and nothing is sent.
+        /// </summary>
+        private async Task DoReadFilesAsync(CancellationToken token)
+        {
+            var path = Files.Folder?.Trim();
+            if (string.IsNullOrEmpty(path))
+            {
+                ShowMessage("Select a folder, or a DICOMDIR, first.", MessageBoxImage.Warning, null);
+                return;
+            }
+
+            Files.Clear();
+            StatusText = "Reading " + path + "...";
+            FolderScan scan;
+            try
+            {
+                var includeSubfolders = Files.IncludeSubfolders;
+                scan = await Task.Run(() => FolderScanner.Scan(path, includeSubfolders, token, (done, total) =>
+                    _dispatcher.BeginInvoke(new Action(() => StatusText = $"Reading {path}: {done} of {total} files"), DispatcherPriority.Background)), token);
+            }
+            catch (OperationCanceledException)
+            {
+                StatusText = "Reading the files was cancelled.";
+                return;
+            }
+            catch (Exception ex)
+            {
+                // A folder that cannot be read, or a broken DICOMDIR, is a local problem and must not take the program down.
+                _logger.Warning(ex, "Could not read {path}", path);
+                StatusText = "Could not read the files: " + ex.Message;
+                ShowMessage("The files could not be read:\n" + ex.Message, MessageBoxImage.Warning, null);
+                return;
+            }
+
+            // Let the progress queued by the background thread land before the summary replaces it.
+            await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            Files.SetScan(scan);
+            if (scan.Files.Count == 0)
+            {
+                StatusText = "No DICOM files found in " + path + ".";
+                ShowMessage($"No DICOM files were found in {path}." + (scan.Skipped.Count > 0 ? $" {scan.Skipped.Count} files were skipped, listed on the Files tab." : string.Empty), MessageBoxImage.Warning, null);
+                return;
+            }
+
+            Files.Reidentify = AskReidentify(FilesQuestion.Text(scan));
+            _logger.Information("Files of {path}: {choice}", path, Files.Reidentify ? "re-identify as test patients" : "send unchanged");
+            StatusText = "Read " + scan.Summary + (Files.Reidentify ? ". They will be re-identified as test patients." : ". They will be sent unchanged.");
+        }
+
+        /// <summary>Sends and/or saves the files of the Files tab, as the Run button does for a generated exam.</summary>
+        private async Task DoSendFilesAsync(CancellationToken token)
+        {
+            var scan = Files.Scan;
+            var problems = new List<string>();
+            if (!Files.HasFiles) problems.Add("There are no files to send. Select a folder or a DICOMDIR on the Files tab, and Read it.");
+            var options = BuildRunOptions();
+            options.TransferSyntax = Files.SelectedSyntax.Syntax;
+            options.AllowFallback = Files.AllowFallback;
+            var optionsProblem = options.Validate();
+            if (optionsProblem != null) problems.Add(optionsProblem);
+            if (Files.Reidentify)
+            {
+                var rootProblem = TargetProfile.ValidateUidRoot(_testUidRoot);
+                if (rootProblem != null) problems.Add(rootProblem + " Set it in Test settings.");
+            }
+            if (problems.Count > 0)
+            {
+                _logger.Warning("Run not started: {problems}", string.Join(" ", problems));
+                StatusText = "Run not started: correct the values first.";
+                ShowMessage(string.Join("\n", problems), MessageBoxImage.Warning, null);
+                return;
+            }
+
+            // The question after reading warned already, but real patients are worth a second look before they leave.
+            if (!Files.Reidentify && _sendImages && !Confirm(FilesSendUnchangedQuestion(scan, options.Endpoint))) return;
+
+            var source = new FolderImageSource(scan, new FolderSendOptions
+            {
+                Reidentify = Files.Reidentify,
+                UidRoot = _testUidRoot,
+                PatientNaming = PatientNamingSetting(),
+            });
+
+            Results.Clear();
+            ProgressValue = 0;
+            ProgressMaximum = Math.Max(1, scan.Files.Count);
+            LastRunText = string.Empty;
+            StatusText = _sendImages ? $"Sending {scan.Files.Count} files to {options.Endpoint.CalledAe}..." : "Saving...";
+
+            var run = new StoreRun(source, options);
+            run.ImageCompleted += result => _dispatcher.BeginInvoke(new Action(() => AddResult(result, scan.Files.Count)), DispatcherPriority.Background);
+            run.FrameEncoded += (image, done, total) =>
+            {
+                if (done != total && done % EncodingProgressEvery != 0) return;
+                _dispatcher.BeginInvoke(new Action(() => StatusText = $"Encoding file {image} of {scan.Files.Count}: frame {done} of {total}"), DispatcherPriority.Background);
+            };
+
+            var summary = await run.ExecuteAsync(token);
+            await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+
+            LastRunText = summary.ToString();
+            StatusText = DescribeEnd(summary);
+        }
+
+        /// <summary>Asked before files are sent unchanged, with the destination, since they carry real patients.</summary>
+        public static string FilesSendUnchangedQuestion(FolderScan scan, DicomEndpoint endpoint) =>
+            $"Send {scan.Files.Count} files of {scan.PatientCount} {(scan.PatientCount == 1 ? "patient" : "patients")} unchanged to {endpoint?.CalledAe} at {endpoint?.Host}:{endpoint?.Port}?\n\n" +
+            "They keep their real patient names and IDs and their own UIDs, and get no DCST4 marking.\n" +
+            "Images cannot be assumed to be deletable from the destination.";
+        #endregion
 
         private StoreRunOptions BuildRunOptions() => new StoreRunOptions
         {

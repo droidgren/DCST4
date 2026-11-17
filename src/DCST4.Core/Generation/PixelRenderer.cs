@@ -214,6 +214,43 @@ namespace DCST4.Core.Generation
             }
         }
 
+        /// <summary>
+        /// The TEST IMAGE watermark alone, as one opacity per pixel (0 to 255), row by row. The same drawing as on a generated
+        /// image, for burning the mark into the pixels of an existing one.
+        /// </summary>
+        public static byte[] WatermarkMask(int rows, int columns)
+        {
+            var spec = new PixelRenderSpec { Rows = rows, Columns = columns };
+            using (var bitmap = new Bitmap(columns, rows, PixelFormat.Format32bppArgb))
+            {
+                using (var g = Graphics.FromImage(bitmap))
+                {
+                    g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    g.Clear(Color.Transparent);
+                    DrawWatermark(g, spec);
+                }
+
+                var mask = new byte[rows * columns];
+                var row = new byte[columns * 4];
+                var locked = bitmap.LockBits(new Rectangle(0, 0, columns, rows), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                try
+                {
+                    for (var y = 0; y < rows; y++)
+                    {
+                        Marshal.Copy(IntPtr.Add(locked.Scan0, y * locked.Stride), row, 0, row.Length);
+                        // A 32-bit Bitmap stores each pixel as blue, green, red, alpha.
+                        for (var x = 0; x < columns; x++) mask[y * columns + x] = row[x * 4 + 3];
+                    }
+                }
+                finally
+                {
+                    bitmap.UnlockBits(locked);
+                }
+                return mask;
+            }
+        }
+
         private static void DrawWatermark(Graphics g, PixelRenderSpec spec)
         {
             const string text = "TEST IMAGE";

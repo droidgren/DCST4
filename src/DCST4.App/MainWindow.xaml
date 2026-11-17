@@ -167,7 +167,7 @@
                     </Grid>
                 </GroupBox>
 
-                <TabControl IsEnabled="{Binding IsIdle}" MinHeight="280">
+                <TabControl IsEnabled="{Binding IsIdle}" MinHeight="280" SelectedIndex="{Binding SelectedInputTab, Mode=TwoWay}">
                     <TabItem Header="Exam">
                         <Grid Margin="8" Grid.IsSharedSizeScope="True">
                             <Grid.ColumnDefinitions>
@@ -345,6 +345,70 @@
                             </ScrollViewer>
                         </DockPanel>
                     </TabItem>
+
+                    <TabItem Header="Files" DataContext="{Binding Files}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="300">
+                            <Grid Margin="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Label Content="Folder:"/>
+                                <DockPanel Grid.Column="1" Margin="0,2">
+                                    <Button DockPanel.Dock="Right" Content="Read" Width="70" Margin="6,0,0,0" Command="{Binding DataContext.ReadFilesCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                            ToolTip="Reads the headers of the files, then asks whether to re-identify them as test patients. Nothing is sent or changed. A file is read again, whole, when it is sent."/>
+                                    <Button DockPanel.Dock="Right" Content="DICOMDIR..." Width="80" Margin="4,0,0,0" Click="BrowseDicomDirButton_Click" ToolTip="Select a DICOMDIR file, as on a CD or a USB export from a PACS"/>
+                                    <Button DockPanel.Dock="Right" Content="..." Width="26" Margin="4,0,0,0" Click="BrowseFilesFolderButton_Click" ToolTip="Select the folder"/>
+                                    <TextBox Text="{Binding Folder, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center"
+                                             ToolTip="A folder of DICOM files, or a DICOMDIR. A folder with a DICOMDIR at its top is read through it; otherwise every file in it is tried, whatever its name.&#x0a;&#x0a;While this tab is selected, the Run button sends these files instead of a generated exam, and the custom mix on the Performance tab is made of them.&#x0a;&#x0a;Default: none."/>
+                                </DockPanel>
+                                <CheckBox Grid.Row="1" Grid.Column="1" Content="Include subfolders" IsChecked="{Binding IncludeSubfolders, Mode=TwoWay}" Margin="0,2,0,4"
+                                          ToolTip="Also read the files of the folders in the folder. Not used when a DICOMDIR lists the files.&#x0a;&#x0a;Default: on."/>
+
+                                <Label Grid.Row="2" Content="Found:"/>
+                                <StackPanel Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" Margin="0,4">
+                                    <TextBlock Text="{Binding SummaryText}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding SyntaxText}" Foreground="#FF505050" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding ModalityText}" Foreground="#FF505050" TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <Label Grid.Row="3" Content="Patients:"/>
+                                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4">
+                                    <RadioButton Content="Re-identify as test patients" IsChecked="{Binding Reidentify, Mode=TwoWay}" Margin="0,0,16,0"
+                                                 ToolTip="Each patient becomes a patient from the test personnummer list, every UID of an instance gets a new one under the UID root of Test settings, and Manufacturer and Image Comments get DCST4's marking. Uncompressed pixels get the TEST IMAGE watermark; compressed pixels are sent as they are, without it. Private tags are kept.&#x0a;&#x0a;Asked each time a folder is read. Default: on."/>
+                                    <RadioButton Content="Send unchanged" IsChecked="{Binding KeepUnchanged, Mode=TwoWay}"
+                                                 ToolTip="The files go exactly as they are: the real patient names and IDs and the files' own UIDs. Only for data that may be sent to this destination. DCST4 asks again before it sends."/>
+                                </StackPanel>
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding EffectText}" Foreground="#FF505050" TextWrapping="Wrap" Margin="0,0,0,6"/>
+
+                                <Label Grid.Row="5" Content="Transfer syntax:"/>
+                                <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Margin="0,2">
+                                    <ComboBox Width="300" ItemsSource="{Binding SyntaxView}" IsSynchronizedWithCurrentItem="False" SelectedItem="{Binding SelectedSyntax, Mode=TwoWay}" VerticalAlignment="Center"
+                                              ToolTip="As in the files sends each file in its own syntax, with its own compressed pixel data, which is what real modality output tests. Any other syntax decodes and encodes the files first, which DCST4 cannot do from JPEG XL or H.264.&#x0a;&#x0a;Default: As in the files.">
+                                        <ComboBox.GroupStyle>
+                                            <StaticResource ResourceKey="SyntaxFamilyGroupStyle"/>
+                                        </ComboBox.GroupStyle>
+                                    </ComboBox>
+                                    <CheckBox Content="Allow fallback to Implicit VR" IsChecked="{Binding AllowFallback, Mode=TwoWay}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                              ToolTip="Off: the run stops with an error if the server does not accept a file's syntax. On: send it in the syntax the server accepted instead, as a real modality would, and flag it.&#x0a;&#x0a;Default: off."/>
+                                </StackPanel>
+
+                                <Expander Grid.Row="6" Grid.ColumnSpan="2" Header="{Binding SkippedHeader}" Margin="0,6,0,0">
+                                    <ListBox ItemsSource="{Binding Skipped}" MaxHeight="120" Margin="0,4,0,0" ToolTip="Files that will not be sent, and why. At most 200 are listed; the log has all of them."/>
+                                </Expander>
+                            </Grid>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </DockPanel>
 
@@ -388,6 +452,7 @@
                             <DataGridTextColumn Header="Syntax used" Binding="{Binding AcceptedTransferSyntax}" Width="150"/>
                             <DataGridTextColumn Header="ms" Binding="{Binding ElapsedMs}" Width="50"/>
                             <DataGridTextColumn Header="SOP Instance UID" Binding="{Binding SopInstanceUid}" Width="280"/>
+                            <DataGridTextColumn Header="Source file" Binding="{Binding SourcePath}" Width="200"/>
                             <DataGridTextColumn Header="Saved to" Binding="{Binding SavedPath}" Width="200"/>
                             <DataGridTextColumn Header="Save error" Binding="{Binding SaveError}" Width="200"/>
                         </DataGrid.Columns>

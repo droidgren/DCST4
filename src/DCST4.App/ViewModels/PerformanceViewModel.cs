@@ -115,14 +115,20 @@ namespace DCST4.ViewModels
         public IReadOnlyList<DataMix> Mixes { get; } = DataMixCatalog.All.Concat(new[] { CustomEntry }).ToList();
 
         /// <summary>Stands for the custom mix in the list. What is sent comes from <see cref="SetCustomMix"/> each time it is needed.</summary>
-        private static readonly DataMix CustomEntry = new DataMix(DataMix.CustomId, "The object described on the Exam tab", FellowOakDicom.DicomTransferSyntax.ExplicitVRLittleEndian);
+        private static readonly DataMix CustomEntry = new DataMix(DataMix.CustomId, "The object described on the Exam tab, or the files of the Files tab", FellowOakDicom.DicomTransferSyntax.ExplicitVRLittleEndian);
 
         private Func<DataMix> _customMix;
 
-        /// <summary>Where the custom mix comes from. Set by the main view model, which owns the Exam tab.</summary>
-        public void SetCustomMix(Func<DataMix> customMix)
+        private Func<bool> _customFromFiles;
+
+        /// <summary>
+        /// Where the custom mix comes from. Set by the main view model, which owns the Exam and Files tabs.
+        /// <paramref name="fromFiles"/> says whether the Files tab is the source, for the text shown before a folder is read.
+        /// </summary>
+        public void SetCustomMix(Func<DataMix> customMix, Func<bool> fromFiles = null)
         {
             _customMix = customMix;
+            _customFromFiles = fromFiles;
             RefreshPlan();
         }
 
@@ -137,7 +143,10 @@ namespace DCST4.ViewModels
             get
             {
                 ReadCustomMix();
-                return IsCustomMix ? "From the Exam tab: " + (_settings.MixOverride?.Description ?? "nothing to send yet") : SelectedMix.Description;
+                if (!IsCustomMix) return SelectedMix.Description;
+                var mix = _settings.MixOverride;
+                if (mix?.Files != null) return "From the Files tab: " + mix.Description;
+                return mix == null && _customFromFiles?.Invoke() == true ? "From the Files tab: nothing to send yet. Read a folder first" : "From the Exam tab: " + (mix?.Description ?? "nothing to send yet");
             }
         }
 

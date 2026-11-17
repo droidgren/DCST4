@@ -323,17 +323,18 @@ namespace DCST4.Core.Performance
                         consecutiveFailures = 0;
                         Interlocked.Exchange(ref _everAccepted, 1);
 
-                        var contextIds = new Dictionary<string, byte>(StringComparer.Ordinal);
-                        foreach (var context in raw.Contexts.Where(c => c.Accepted && c.AcceptedTransferSyntaxUid == _options.Pool.Syntax.UID.UID)) contextIds[context.AbstractSyntaxUid] = context.Id;
+                        // Each proposed context has one syntax, so an accepted one is in that syntax.
+                        var contextIds = new Dictionary<PoolContext, byte>();
+                        foreach (var context in raw.Contexts.Where(c => c.Accepted && c.AcceptedTransferSyntaxUid != null)) contextIds[new PoolContext(context.AbstractSyntaxUid, context.AcceptedTransferSyntaxUid)] = context.Id;
                         lock (_sync)
                         {
                             if (_outcome.Contexts.Count == 0) _outcome.Contexts.AddRange(raw.Negotiation());
                         }
 
-                        var missing = _options.Pool.SopClasses.FirstOrDefault(s => !contextIds.ContainsKey(s));
+                        var missing = _options.Pool.Contexts.Where(c => !contextIds.ContainsKey(c)).Select(c => (PoolContext?)c).FirstOrDefault();
                         if (missing != null)
                         {
-                            Fatal(LoadFatal.NotSupported, $"The system did not accept {DicomUID.Parse(missing).Name} in {_options.Pool.Syntax.UID.Name}, which the mix {_options.Pool.Mix.Id} sends.");
+                            Fatal(LoadFatal.NotSupported, $"The system did not accept {DicomUID.Parse(missing.Value.SopClassUid).Name} in {DicomUID.Parse(missing.Value.TransferSyntaxUid).Name}, which the mix {_options.Pool.Mix.Id} sends.");
                             await raw.ReleaseAsync(TimeSpan.FromMilliseconds(ReleaseTimeoutMs), CancellationToken.None).ConfigureAwait(false);
                             return;
                         }
@@ -365,8 +366,9 @@ namespace DCST4.Core.Performance
                             long lastByte;
                             try
                             {
-                                await raw.SendStoreCommandAsync(contextIds[stamped.SopClassUid], stamped.SopClassUid, stamped.SopInstanceUid).ConfigureAwait(false);
-                                await raw.SendDatasetAsync(contextIds[stamped.SopClassUid], stamped.Parts, pduLength).ConfigureAwait(false);
+                                var contextId = contextIds[new PoolContext(stamped.SopClassUid, stamped.TransferSyntaxUid)];
+                                await raw.SendStoreCommandAsync(contextId, stamped.SopClassUid, stamped.SopInstanceUid).ConfigureAwait(false);
+                                await raw.SendDatasetAsync(contextId, stamped.Parts, pduLength).ConfigureAwait(false);
                                 lastByte = Stopwatch.GetTimestamp();
                             }
                             catch (Exception ex) when (IsNetworkFailure(ex))
@@ -456,9 +458,9 @@ namespace DCST4.Core.Performance
         {
             var contexts = new List<RawContext>();
             byte id = 1;
-            foreach (var sopClass in _options.Pool.SopClasses)
+            foreach (var pair in _options.Pool.Contexts)
             {
-                contexts.Add(new RawContext { Id = id, AbstractSyntaxUid = sopClass, TransferSyntaxUids = { _options.Pool.Syntax.UID.UID } });
+                contexts.Add(new RawContext { Id = id, AbstractSyntaxUid = pair.SopClassUid, TransferSyntaxUids = { pair.TransferSyntaxUid } });
                 id += 2;
             }
             return contexts;

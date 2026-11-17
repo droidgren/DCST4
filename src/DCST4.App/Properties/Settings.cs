@@ -221,6 +221,14 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("")]
         public string SaveFolder { get => (string)this[nameof(SaveFolder)]; set => this[nameof(SaveFolder)] = value; }
 
+        // ------------------------------------------------------------ Files tab
+        /// <summary>The folder or DICOMDIR last read on the Files tab. Whether to re-identify is asked each time, not saved.</summary>
+        [UserScopedSetting, DefaultSettingValue("")]
+        public string FilesFolder { get => (string)this[nameof(FilesFolder)]; set => this[nameof(FilesFolder)] = value; }
+
+        [UserScopedSetting, DefaultSettingValue("True")]
+        public bool FilesIncludeSubfolders { get => (bool)this[nameof(FilesIncludeSubfolders)]; set => this[nameof(FilesIncludeSubfolders)] = value; }
+
         /// <summary>Whether a run writes its JSON file, and the capability matrix as JSON.</summary>
         [UserScopedSetting, DefaultSettingValue("False")]
         public bool WriteResultJson { get => (bool)this[nameof(WriteResultJson)]; set => this[nameof(WriteResultJson)] = value; }

@@ -73,12 +73,13 @@ namespace DCST4.Cli
             }
 
             if (args.Length >= 1 && args[0].Equals("generate", StringComparison.OrdinalIgnoreCase)) return await GenerateAsync(args).ConfigureAwait(false);
+            if (args.Length >= 1 && args[0].Equals("send-files", StringComparison.OrdinalIgnoreCase)) return await SendFilesAsync(args).ConfigureAwait(false);
 
             // Both only read result files and write one HTML file. Nothing is sent, so no profile and no log are needed.
             if (args.Length >= 1 && args[0].Equals("report", StringComparison.OrdinalIgnoreCase)) return ReportCommand.Report(args, UsageError, Refuse);
             if (args.Length >= 1 && args[0].Equals("compare", StringComparison.OrdinalIgnoreCase)) return ReportCommand.Compare(args, UsageError, Refuse);
 
-            if (args.Length == 0 || !args[0].Equals("run", StringComparison.OrdinalIgnoreCase)) return UsageError("Expected the command 'run', 'report', 'compare', 'generate', 'list-datasets', 'list-codecs' or 'list-mixes'.");
+            if (args.Length == 0 || !args[0].Equals("run", StringComparison.OrdinalIgnoreCase)) return UsageError("Expected the command 'run', 'report', 'compare', 'generate', 'send-files', 'list-datasets', 'list-codecs' or 'list-mixes'.");
 
             var arguments = CliArguments.Parse(args, out var argumentError);
             if (arguments == null) return UsageError(argumentError);
@@ -200,6 +201,47 @@ namespace DCST4.Cli
             catch (Exception ex) when (IsFileProblem(ex))
             {
                 return Refuse($"Cannot use the output folder {command.OutputFolder}: {ex.Message}");
+            }
+        }
+
+        private static async Task<int> SendFilesAsync(string[] args)
+        {
+            var command = SendFilesCommand.Parse(args, out var argumentError);
+            if (command == null) return UsageError(argumentError);
+
+            ConfigureLogging(command.LogFolder);
+
+            TargetProfile profile = null;
+            if (command.ProfilePath != null)
+            {
+                try
+                {
+                    profile = TargetProfile.Load(command.ProfilePath);
+                }
+                catch (TargetProfileException ex)
+                {
+                    return Refuse(ex.Message);
+                }
+                var problem = profile.Validate();
+                if (problem != null) return Refuse("The profile cannot be used: " + problem);
+            }
+            if (command.UidRoot != null)
+            {
+                var problem = TargetProfile.ValidateUidRoot(command.UidRoot);
+                if (problem != null) return Refuse(problem);
+            }
+
+            try
+            {
+                return await WithCancelKeyAsync(token => command.ExecuteAsync(profile, token)).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return RunExitCodes.Cancelled;
+            }
+            catch (Exception ex) when (IsFileProblem(ex))
+            {
+                return Refuse($"Cannot read {command.Source}: {ex.Message}");
             }
         }
 
