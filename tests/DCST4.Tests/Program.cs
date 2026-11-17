@@ -158,6 +158,7 @@ namespace DCST4.Tests
                         if (args[0] == "multiframe") MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "syntaxes") TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "realism") RealismTests.Run(temp, Check);
+                        if (args[0] == "realism") PreviewTests.Run(Check);
                         if (args[0] == "report") ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve") RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve" || args[0] == "commit") CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
@@ -210,6 +211,7 @@ namespace DCST4.Tests
                     MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     RealismTests.Run(temp, Check);
+                    PreviewTests.Run(Check);
                     RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                     CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();

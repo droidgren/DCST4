@@ -101,7 +101,7 @@
                     <Paragraph Style="{StaticResource H2}">A first exam in four steps</Paragraph>
                     <List MarkerStyle="Decimal">
                         <ListItem><Paragraph>Under <Bold>Server</Bold>, enter the server's <Bold>AET</Bold>, <Bold>IP/Hostname</Bold> and <Bold>Port</Bold>. Try <Bold>Ping</Bold> and <Bold>Dicom Echo</Bold>.</Paragraph></ListItem>
-                        <ListItem><Paragraph>Under <Bold>Exam</Bold>, select the modality (CT, MR, CR, DX, US, XA, RF, MG, PT or NM), which of its images under <Bold>Object</Bold>, the exam type, and how many images you want. 1 series with 1 image gives a single test image. <Bold>Estimated size</Bold> shows how much data that is.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Under <Bold>Exam</Bold>, select the modality (CT, MR, CR, DX, US, XA, RF, MG, PT or NM), which of its images under <Bold>Object</Bold>, the exam type, and how many images you want. 1 series with 1 image gives a single test image. <Bold>Estimated size</Bold> shows how much data that is, and <Bold>Image preview...</Bold> what the first image looks like.</Paragraph></ListItem>
                         <ListItem><Paragraph>Click <Bold>Generate &amp; Send</Bold>, and follow each image in the <Bold>Results</Bold> tab.</Paragraph></ListItem>
                         <ListItem><Paragraph>Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text under <Bold>File &gt; Settings</Bold> first.</Paragraph></ListItem>
                     </List>
@@ -182,6 +182,8 @@
                                 <TableCell><Paragraph>Number of series. A run can have at most 100,000 images in total.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Images per series</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Number of images in each series. The total is shown next to the field. For a multi-frame object it is the number of such objects, and starts at 1.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Frames per image</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>For a multi-frame object: how many frames each image has, 1 to 10,000. 30 for a cine loop or a cine run, 16 for a fluoro loop and 8 for the enhanced objects when the object is selected. The number of frames in the whole exam is shown next to the field.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Rows x Columns</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>The matrix, 64 to 4096.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Bits stored</Bold></Paragraph></TableCell>
@@ -190,18 +192,18 @@
                                 <TableCell><Paragraph>Specific Character Set. See <Italic>Character sets</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Transfer syntax</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>15 syntaxes under a heading for each codec family: Uncompressed, RLE, JPEG, JPEG-LS, JPEG 2000, HTJ2K, JPEG XL and Video. Lossy ones say so in their name. See <Italic>Transfer syntaxes</Italic>, and <Italic>Transfer syntax and fallback</Italic> for what happens if the server does not accept one.</Paragraph></TableCell></TableRow>
-                            <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>How much data the whole exam will be. It updates as you change the other fields.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Realistic images</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Off draws the flat test pattern. Low, Normal and High draw the modality's shape, texture and noise, for file sizes like those of real images. Not shown for OT, DOC and SR. See <Italic>Realistic images and lossy compression</Italic>.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Private payload</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Adds a large private binary value of the given size, in MB, to every image. 0, the default, adds none, and it is 0 at every start. See below.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>JPEG quality, JPEG 2000 ratio, H.264 Mbit/s</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Shown for a lossy transfer syntax: how hard it compresses, in its encoder's unit. Empty is the encoder's default.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Object</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Which image of the modality to generate: Single frame, or a multi-frame one where DCST4 has it. US has a cine loop and Enhanced US Volume, XA a cine run and Enhanced XA, RF a fluoro loop and Enhanced XRF, CT and MR their enhanced image and MG Breast Tomosynthesis. CR, DX, PT and NM have one image each. OT is Secondary Capture, DOC an Encapsulated PDF, and SR a Basic Text SR or Enhanced SR report. DOC and SR have no pixels, so the matrix, bits, frames and private payload are greyed out, and only Implicit VR, Explicit VR and Deflated can be chosen as transfer syntax.</Paragraph></TableCell></TableRow>
-                            <TableRow><TableCell><Paragraph><Bold>Frames per image</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>For a multi-frame object: how many frames each image has, 1 to 10,000. 30 for a cine loop or a cine run, 16 for a fluoro loop and 8 for the enhanced objects when the object is selected.</Paragraph></TableCell></TableRow>
-                            <TableRow><TableCell><Paragraph><Bold>Private payload</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>Adds a large private binary value of the given size, in MB, to every image. 0, the default, adds none, and it is 0 at every start. See below.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Under Allow fallback in the right column, or at the right end of the compression value's row when a lossy syntax is selected: how much data the whole exam will be. It updates as you change the other fields.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Image preview...</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>In the bottom right corner: shows the first image as it would be sent. See <Italic>Image preview</Italic> below.</Paragraph></TableCell></TableRow>
                         </TableRowGroup>
                     </Table>
                     <Paragraph Style="{StaticResource H2}">Estimated size</Paragraph>
@@ -212,6 +214,20 @@
                         <ListItem><Paragraph><Bold>-</Bold> means that a value is outside its allowed range.</Paragraph></ListItem>
                     </List>
                     <Paragraph>The DICOMDIR of a saved File-set is not counted. For a compressed multi-frame image the sample has a few frames, and the rest are taken to be as large. A private payload is added as it is.</Paragraph>
+                    <Paragraph Style="{StaticResource H2}">Image preview</Paragraph>
+                    <Paragraph>
+                        <Bold>Image preview...</Bold>, in the bottom right corner of the Exam tab, generates the first image with the
+                        values as they stand, puts it in the selected transfer syntax with the lossy settings, decodes it again and
+                        shows it in a window of its own, so you can see what a JPEG quality or a JPEG 2000 ratio does before
+                        anything is sent. Nothing is sent or saved.
+                    </Paragraph>
+                    <List>
+                        <ListItem><Paragraph>Only the first frame is made, so a long cine loop is quick to preview.</Paragraph></ListItem>
+                        <ListItem><Paragraph>The image is shown at its own size, or smaller to fit the window, never larger, so compression artefacts are not smoothed out. Below it are the matrix, the transfer syntax, the size of the file and, for grayscale, the window it opens in.</Paragraph></ListItem>
+                        <ListItem><Paragraph>JPEG XL and H.264 are shown before compression, with a note, since DCST4 cannot decode them.</Paragraph></ListItem>
+                        <ListItem><Paragraph>DOC and SR have no pixels, so the button is greyed out for them. Values that a run would refuse are reported in the same way, and <Bold>Cancel</Bold> stops a slow preview.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Another preview replaces the picture in the open window.</Paragraph></ListItem>
+                    </List>
                     <Paragraph Style="{StaticResource H2}">Multi-frame images</Paragraph>
                     <Paragraph>
                         <Bold>Object</Bold> says which image of the modality to generate. Six modalities have a
@@ -233,7 +249,7 @@
                     <Paragraph Style="{StaticResource H2}">Private payload</Paragraph>
                     <Paragraph>
                         Some ultrasound systems send their raw data along with a cine loop, as one private value that can be
-                        several times the size of the pixels. <Bold>Private payload ... MB/image</Bold>, under Frames per image, does the
+                        several times the size of the pixels. <Bold>Private payload ... MB/image</Bold>, under Realistic images, does the
                         same, to find out whether a PACS takes images with large private data and keeps it: a private
                         sequence, (0099,1020) under the private creator DCST4 TEST, with one binary value of 1 to 2,000 MB. A size of 0 adds none.
                         The value is random bytes, so it does not compress away, and it is written as it is generated,

@@ -169,7 +169,7 @@
 
                 <TabControl IsEnabled="{Binding IsIdle}" MinHeight="280">
                     <TabItem Header="Exam">
-                        <Grid Margin="8">
+                        <Grid Margin="8" Grid.IsSharedSizeScope="True">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="110"/>
                                 <ColumnDefinition Width="220"/>
@@ -198,11 +198,25 @@
                             <Label Grid.Row="1" Content="Series:"/>
                             <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SeriesCount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2" ToolTip="How many series the exam has, each with the number of images below.&#x0a;&#x0a;Default: 1."/>
                             <Label Grid.Row="1" Grid.Column="3" Content="Images per series:"/>
-                            <DockPanel Grid.Row="1" Grid.Column="4">
-                                <TextBlock DockPanel.Dock="Right" Text="{Binding TotalImagesText}" Foreground="#FF505050" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            <Grid Grid.Row="1" Grid.Column="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="48"/>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="ExamTotals"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="1" Text="{Binding TotalImagesText}" Foreground="#FF505050" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
                                 <TextBox Text="{Binding ImagesPerSeries, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2"
                                          ToolTip="1 gives a single test image.&#x0a;&#x0a;Default: the exam type's own number."/>
-                            </DockPanel>
+                            </Grid>
+                            <Label Grid.Row="2" Grid.Column="3" Content="Frames per image:"/>
+                            <Grid Grid.Row="2" Grid.Column="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="48"/>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="ExamTotals"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="1" Text="{Binding TotalFramesText}" Foreground="#FF505050" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                <TextBox Text="{Binding FramesPerImage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsMultiFrame}" VerticalAlignment="Center" Margin="0,2"
+                                         ToolTip="How many frames each image has, 1 to 10000. Only for a multi-frame object: Ultrasound Multi-frame, Enhanced CT, Enhanced MR and Breast Tomosynthesis. An ultrasound cine loop has 30 frames per second.&#x0a;&#x0a;Without compression an image holds less than 4 GB of pixels. A long cine loop needs JPEG Baseline or JPEG Lossless, and its frames are then encoded before the image is sent.&#x0a;&#x0a;Default: 30 for a cine loop, 8 for the others." ToolTipService.ShowOnDisabled="True"/>
+                            </Grid>
 
                             <Label Grid.Row="2" Content="Rows x Columns:"/>
                             <Grid Grid.Row="2" Grid.Column="1" Margin="0,2" IsEnabled="{Binding HasPixelData}">
@@ -215,37 +229,30 @@
                                 <TextBlock Grid.Column="1" Text=" x " VerticalAlignment="Center"/>
                                 <TextBox Grid.Column="2" Text="{Binding Columns, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" ToolTip="64 to 4096.&#x0a;&#x0a;Default: the modality's own, 512 for most."/>
                             </Grid>
-                            <Label Grid.Row="2" Grid.Column="3" Content="Bits stored:"/>
-                            <ComboBox Grid.Row="2" Grid.Column="4" ItemsSource="{Binding BitDepths}" SelectedItem="{Binding BitsStored, Mode=TwoWay}" IsEnabled="{Binding HasPixelData}" VerticalAlignment="Center" Margin="0,2"
+                            <Label Grid.Row="3" Grid.Column="3" Content="Bits stored:"/>
+                            <ComboBox Grid.Row="3" Grid.Column="4" ItemsSource="{Binding BitDepths}" SelectedItem="{Binding BitsStored, Mode=TwoWay}" IsEnabled="{Binding HasPixelData}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="The list shows what the selected modality's IOD allows.&#x0a;&#x0a;Default: the modality's own, 16 for CT."/>
 
                             <Label Grid.Row="3" Content="Character set:"/>
                             <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding CharacterSets}" SelectedItem="{Binding CharacterSet, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="Specific Character Set (0008,0005): ISO_IR 100 is Latin-1, ISO_IR 192 is UTF-8. Empty value sends the tag with zero length, which means Basic ASCII, so Auto names lose their å, ä and ö.&#x0a;&#x0a;Default: ISO_IR 100."/>
-                            <Label Grid.Row="3" Grid.Column="3" Content="Transfer syntax:"/>
-                            <ComboBox Grid.Row="3" Grid.Column="4" ItemsSource="{Binding TransferSyntaxView}" IsSynchronizedWithCurrentItem="False" SelectedItem="{Binding SelectedTransferSyntax, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
+                            <Label Grid.Row="4" Grid.Column="3" Content="Transfer syntax:"/>
+                            <ComboBox Grid.Row="4" Grid.Column="4" ItemsSource="{Binding TransferSyntaxView}" IsSynchronizedWithCurrentItem="False" SelectedItem="{Binding SelectedTransferSyntax, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="The transfer syntax the images are sent and saved in, by codec family. Lossy syntaxes say so in their name. JPEG XL is written lossless by DCST4's own encoder, in both of its syntaxes. H.264 uses the encoder of Windows and is for US Multi-frame only, since the XA and RF images must be MONOCHROME2. JPEG XL and H.264 cannot fall back to Implicit VR, since DCST4 cannot decode them.&#x0a;&#x0a;Default: Explicit VR Little Endian.">
                                 <ComboBox.GroupStyle>
                                     <StaticResource ResourceKey="SyntaxFamilyGroupStyle"/>
                                 </ComboBox.GroupStyle>
                             </ComboBox>
 
-                            <Label Grid.Row="4" Content="Estimated size:"/>
-                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding EstimatedSizeText}" Foreground="#FF505050" VerticalAlignment="Center"
-                                       ToolTip="The whole exam as sent or saved, not counting a DICOMDIR. For JPEG Lossless, one sample image is compressed and the result multiplied by the number of images."/>
-
-                            <CheckBox Grid.Row="4" Grid.Column="4" Content="Allow fallback to Implicit VR" Margin="0,4,0,0"
+                            <CheckBox Grid.Row="5" Grid.Column="4" Content="Allow fallback to Implicit VR" Margin="0,4,0,0"
                                       IsChecked="{Binding AllowFallback, Mode=TwoWay}" IsEnabled="{Binding FallbackIsRelevant}"
                                       ToolTip="Off: the run stops with an error if the server does not accept the selected syntax. On: send as Implicit VR instead, as a real modality would, and flag it.&#x0a;&#x0a;Default: off."/>
 
-                            <Label Grid.Row="5" Content="Object:"/>
-                            <ComboBox Grid.Row="5" Grid.Column="1" ItemsSource="{Binding ImageObjects}" SelectedItem="{Binding SelectedImageObject, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
+                            <Label Grid.Row="4" Content="Object:"/>
+                            <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding ImageObjects}" SelectedItem="{Binding SelectedImageObject, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
                                       ToolTip="Which image of the modality to generate, named after its IOD. US, XA, RF, CT, MR and MG also have multi-frame images. OT is Secondary Capture, DOC an Encapsulated PDF, and SR a Basic Text SR or Enhanced SR report. DOC and SR have no pixels, so the matrix, bits, frames and private payload do not apply to them.&#x0a;&#x0a;Default: the modality's ordinary image."/>
-                            <Label Grid.Row="6" Grid.Column="3" Content="Frames per image:"/>
-                            <TextBox Grid.Row="6" Grid.Column="4" Text="{Binding FramesPerImage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsMultiFrame}" VerticalAlignment="Center" Margin="0,2"
-                                     ToolTip="How many frames each image has, 1 to 10000. Only for a multi-frame object: Ultrasound Multi-frame, Enhanced CT, Enhanced MR and Breast Tomosynthesis. An ultrasound cine loop has 30 frames per second.&#x0a;&#x0a;Without compression an image holds less than 4 GB of pixels. A long cine loop needs JPEG Baseline or JPEG Lossless, and its frames are then encoded before the image is sent.&#x0a;&#x0a;Default: 30 for a cine loop, 8 for the others." ToolTipService.ShowOnDisabled="True"/>
-                            <Label Grid.Row="6" Content="Realistic images:" Visibility="{Binding RealismApplies, Converter={StaticResource BoolToVisibility}}"/>
-                            <ComboBox Grid.Row="6" Grid.Column="1" ItemsSource="{Binding RealismLevelChoices}" SelectedItem="{Binding SelectedRealism, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
+                            <Label Grid.Row="5" Content="Realistic images:" Visibility="{Binding RealismApplies, Converter={StaticResource BoolToVisibility}}"/>
+                            <ComboBox Grid.Row="5" Grid.Column="1" ItemsSource="{Binding RealismLevelChoices}" SelectedItem="{Binding SelectedRealism, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,2"
                                       Visibility="{Binding RealismApplies, Converter={StaticResource BoolToVisibility}}">
                                 <ComboBox.ToolTip>
                                     <TextBlock MaxWidth="420" TextWrapping="Wrap">
@@ -259,19 +266,33 @@
                                 </ComboBox.ToolTip>
                             </ComboBox>
 
-                            <Label Grid.Row="5" Grid.Column="3" Content="{Binding CompressionLabel}" Visibility="{Binding CompressionVisible, Converter={StaticResource BoolToVisibility}}"/>
-                            <DockPanel Grid.Row="5" Grid.Column="4" Visibility="{Binding CompressionVisible, Converter={StaticResource BoolToVisibility}}"
-                                       ToolTip="How hard the selected lossy syntax compresses, in its encoder's own unit: the JPEG quality, 1 to 100, for JPEG Baseline and Extended; the JPEG 2000 ratio, 2 to 200 as N:1; or the H.264 bitrate, 0.1 to 50 Mbit/s. Empty puts the encoder's default back. A value other than the default is written in Derivation Description.&#x0a;&#x0a;HTJ2K (lossy) has no setting, since its encoder does not reach a ratio it is asked for. JPEG XL is written lossless by DCST4.&#x0a;&#x0a;The same settings as in File &gt; Settings &gt; Images, which the Tests and Performance tabs also use.&#x0a;&#x0a;Default: the encoder's, JPEG quality 90, JPEG 2000 20:1, H.264 from the picture size and frame rate.">
-                                <TextBox DockPanel.Dock="Left" Width="48" Text="{Binding CompressionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,6,2"
-                                         Visibility="{Binding CompressionEditable, Converter={StaticResource BoolToVisibility}}"/>
-                                <TextBlock Text="{Binding CompressionHint}" Foreground="#FF505050" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            <Label Grid.Row="6" Grid.Column="3" Content="{Binding CompressionLabel}" Visibility="{Binding CompressionVisible, Converter={StaticResource BoolToVisibility}}"/>
+                            <!-- Estimated size shares this row: in the label column when no lossy syntax is selected, at the right of the row when one is,
+                                 and on the line below that, still at the right, when the window is too narrow for both. -->
+                            <Label Grid.Row="6" Grid.Column="3" VerticalAlignment="Top" Content="Estimated size:" Visibility="{Binding CompressionVisible, Converter={StaticResource InverseBoolToVisibility}}"/>
+                            <infra:SplitRowPanel Grid.Row="6" Grid.Column="4" VerticalAlignment="Top">
+                                <StackPanel Orientation="Horizontal" Visibility="{Binding CompressionVisible, Converter={StaticResource BoolToVisibility}}"
+                                            ToolTip="How hard the selected lossy syntax compresses, in its encoder's own unit: the JPEG quality, 1 to 100, for JPEG Baseline and Extended; the JPEG 2000 ratio, 2 to 200 as N:1; or the H.264 bitrate, 0.1 to 50 Mbit/s. Empty puts the encoder's default back. A value other than the default is written in Derivation Description.&#x0a;&#x0a;HTJ2K (lossy) has no setting, since its encoder does not reach a ratio it is asked for. JPEG XL is written lossless by DCST4.&#x0a;&#x0a;The same settings as in File &gt; Settings &gt; Images, which the Tests and Performance tabs also use.&#x0a;&#x0a;Default: the encoder's, JPEG quality 90, JPEG 2000 20:1, H.264 from the picture size and frame rate.">
+                                    <TextBox Width="48" Text="{Binding CompressionText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2,6,2"
+                                             Visibility="{Binding CompressionEditable, Converter={StaticResource BoolToVisibility}}"/>
+                                    <TextBlock Text="{Binding CompressionHint}" Foreground="#FF505050" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <infra:SplitRowPanel Gap="8" FillWidth="False" VerticalAlignment="Center" MinHeight="26" ToolTip="The whole exam as sent or saved, not counting a DICOMDIR. For JPEG Lossless, one sample image is compressed and the result multiplied by the number of images.">
+                                    <TextBlock Text="Estimated size:" Margin="0,4" VerticalAlignment="Center" Visibility="{Binding CompressionVisible, Converter={StaticResource BoolToVisibility}}"/>
+                                    <TextBlock Text="{Binding EstimatedSizeText}" Foreground="#FF505050" VerticalAlignment="Center" Margin="0,4"/>
+                                </infra:SplitRowPanel>
+                            </infra:SplitRowPanel>
+
+                            <Label Grid.Row="6" Content="Private payload:" IsEnabled="{Binding HasPixelData}" ToolTip="Adds a private sequence with one large binary value to every image, as some ultrasound systems do with their raw data. The value is random bytes under the private creator DCST4 TEST, in (0099,1020). Use it to find out whether a PACS takes images with large private data.&#x0a;&#x0a;The size in megabytes for each image: 0 for none, or 1 to 2000. It is 0 every time DCST4 starts.&#x0a;&#x0a;Default: 0, none."/>
+                            <DockPanel Grid.Row="6" Grid.Column="1" VerticalAlignment="Top" IsEnabled="{Binding HasPixelData}" ToolTip="Adds a private sequence with one large binary value to every image, as some ultrasound systems do with their raw data. The value is random bytes under the private creator DCST4 TEST, in (0099,1020). Use it to find out whether a PACS takes images with large private data.&#x0a;&#x0a;The size in megabytes for each image: 0 for none, or 1 to 2000. It is 0 every time DCST4 starts.&#x0a;&#x0a;Default: 0, none.">
+                                <TextBlock DockPanel.Dock="Right" Text="MB/image" Foreground="#FF505050" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                <TextBox Text="{Binding PrivatePayloadMb, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2"/>
                             </DockPanel>
 
-                            <Label Grid.Row="7" Grid.Column="3" Content="Private payload:" IsEnabled="{Binding HasPixelData}" ToolTip="Adds a private sequence with one large binary value to every image, as some ultrasound systems do with their raw data. The value is random bytes under the private creator DCST4 TEST, in (0099,1020). Use it to find out whether a PACS takes images with large private data.&#x0a;&#x0a;The size in megabytes for each image: 0 for none, or 1 to 2000. It is 0 every time DCST4 starts.&#x0a;&#x0a;Default: 0, none."/>
-                            <DockPanel Grid.Row="7" Grid.Column="4" IsEnabled="{Binding HasPixelData}" ToolTip="Adds a private sequence with one large binary value to every image, as some ultrasound systems do with their raw data. The value is random bytes under the private creator DCST4 TEST, in (0099,1020). Use it to find out whether a PACS takes images with large private data.&#x0a;&#x0a;The size in megabytes for each image: 0 for none, or 1 to 2000. It is 0 every time DCST4 starts.&#x0a;&#x0a;Default: 0, none.">
-                                <TextBox DockPanel.Dock="Left" Text="{Binding PrivatePayloadMb, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="48" Margin="0,2,6,2" VerticalAlignment="Center"/>
-                                <TextBlock Text="MB/image" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                            </DockPanel>
+                            <Button Grid.Row="8" Grid.Column="4" Content="Image preview..." Width="110" Height="24" Margin="0,8,0,0"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Command="{Binding ImagePreviewCommand}"
+                                    ToolTip="Shows the first frame of the first image with the values as they stand: generated, put in the selected transfer syntax with the lossy settings, and decoded again, so lossy compression can be seen. JPEG XL and H.264 are shown before compression, since DCST4 cannot decode them. Nothing is sent or saved.&#x0a;&#x0a;Not for DOC and SR, which have no pixels."
+                                    ToolTipService.ShowOnDisabled="True"/>
                         </Grid>
                     </TabItem>
 

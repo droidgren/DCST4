@@ -43,6 +43,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Configurable images:** number of series and images, matrix from 64 to 4096, 8 to 16 bits stored as the modality allows, and up to 10,000 frames in a multi-frame image.
 - **Private payload:** optionally, a large private binary value in every image, as some ultrasound systems send their raw data, to find out whether a PACS takes it. Its size is 0, none, by default and at every start. See [Multi-frame images and private payload](#multi-frame-images-and-private-payload).
 - **Estimated size:** the Exam box shows how much data the whole exam will be, and updates as you change the settings.
+- **Image preview:** the **Image preview...** button in the bottom right corner of the Exam tab shows the first frame of the first image as it would be sent: generated with the values as they stand, put in the selected transfer syntax with the lossy settings, and decoded again, so what lossy compression does can be seen. Nothing is sent or saved.
 - **Realistic images:** optionally, each modality's shape, tissue texture and noise under the overlays: speckle in an ultrasound sector, quantum noise in X-ray, noise in HU set by the CT kernel, Rician noise in MR and counting noise in PET and NM. Synthetic images otherwise compress far better than real ones, so file sizes and codec comparisons mean little without it. Off by default. See [Realistic images and lossy compression](#realistic-images-and-lossy-compression).
 - **Lossy compression settings:** JPEG quality, JPEG 2000 ratio, JPEG-LS NEAR and H.264 bitrate, each in the encoder's own unit, for Generate & Send, the tests and the command line. Each encoder runs at its default until set.
 - **Transfer syntaxes:** 15 in the Transfer syntax list, grouped by codec family: Implicit VR LE, Explicit VR LE and Deflated; RLE Lossless; JPEG Baseline, Extended and Lossless SV1; JPEG-LS Lossless; JPEG 2000 Lossless and lossy; HTJ2K Lossless and lossy; JPEG XL Lossless and JPEG XL, written by DCST4's own encoder; and H.264 High Profile for an ultrasound cine loop, written by the encoder of Windows. See [Transfer syntaxes](#transfer-syntaxes).
@@ -91,8 +92,9 @@ The program is not digitally signed, so you may see a **Windows protected your P
 1. Enter the server's AE title, host and port. Try **Ping** and **Dicom Echo**.
 2. On the **Exam** tab, select modality and exam type, and how many images you want. 1 series with 1 image gives a single test image. **Estimated size** shows how much data that is. For Implicit and Explicit VR it is calculated. For the other syntaxes, Deflated included, one sample image is compressed in the background and the result multiplied by the number of images. A saved File-set's DICOMDIR is not counted.
 3. Optionally, enter your own values on the **Identifiers** tab by unticking **Auto**.
-4. Click **Generate & Send** and follow each image in **Results**.
-5. Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text first.
+4. Optionally, click **Image preview...** to see the first image as it would be sent.
+5. Click **Generate & Send** and follow each image in **Results**.
+6. Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text first.
 
 F1 in the program opens the help, with a list of topics on the left. The box above the list searches the whole help: Ctrl+F gets there. The list then shows only the topics with a match and how many, Enter or F3 goes to the next match and Shift+Enter or Shift+F3 to the one before, and Esc ends the search.
 
@@ -171,7 +173,7 @@ The frames are drawn as they are written and are never all in memory, so an obje
 
 Enhanced CT, Enhanced MR and Breast Tomosynthesis still lack some attributes that a strict validator names, see [Checking with another toolkit](#checking-with-another-toolkit). The cine loop, the cine run and the fluoro loop pass `dciodvfy` without errors, and the two enhanced X-ray objects pass with remarks that come from the validator's own tables.
 
-**Private payload ... MB/image**, under Frames per image on the Exam tab, adds one large private value to every image, the way some ultrasound systems send their raw data along with a cine loop, where it can be four times the size of the pixels. Use it to find out whether a PACS takes images with large private data, and whether it keeps it. The size is 1 to 2,000 MB, and 0, the default, adds none. It is set back to 0 every time DCST4 starts, so that a large payload is never sent because it was set the last time.
+**Private payload ... MB/image**, under Realistic images on the Exam tab, adds one large private value to every image, the way some ultrasound systems send their raw data along with a cine loop, where it can be four times the size of the pixels. Use it to find out whether a PACS takes images with large private data, and whether it keeps it. The size is 1 to 2,000 MB, and 0, the default, adds none. It is set back to 0 every time DCST4 starts, so that a large payload is never sent because it was set the last time.
 
 | What is written | Where |
 | --------------- | ----- |
@@ -239,7 +241,7 @@ The same page has the **lossy compression** settings, each in the unit of its ow
 | JPEG-LS NEAR | JPEG-LS Near-Lossless | 1-255, held to half the largest sample value | 3 |
 | H.264 bitrate | H.264 High Profile | 0.1-50 Mbit/s | 0.2 bits per pixel and frame, at least 1 Mbit/s |
 
-A value that is set is written in Derivation Description (0008,2111), for example `Lossy compressed by DCST4: JPEG quality 75`, beside Lossy Image Compression Ratio, which says what was reached. An object with functional groups has Derivation Description only inside a functional group, so there only the ratio says it. HTJ2K lossy has no setting: given a ratio, its encoder in PureCodecs 0.5.1 stops at about 5:1 for 8 bits and 1.5:1 for 16, whatever was asked. JPEG XL has none either, since DCST4 writes it lossless.
+A value that is set is written in Derivation Description (0008,2111), for example `Lossy compressed by DCST4: JPEG quality 75`, beside Lossy Image Compression Ratio, which says what was reached. An object with functional groups has Derivation Description only inside a functional group, so there only the ratio says it. HTJ2K lossy has no setting: given a ratio, its encoder in PureCodecs (measured with 0.5.1) stops at about 5:1 for 8 bits and 1.5:1 for 16, whatever was asked. JPEG XL has none either, since DCST4 writes it lossless.
 
 Both apply wherever images are made: Generate & Send, the store tests, the Performance tests and their pool, the estimated size, and `DCST4.Cli.exe run` and `generate` with `--realism`, `--jpeg-quality`, `--j2k-ratio`, `--jpegls-near` and `--h264-mbps`. The result file, the HTML report and a dataset's manifest record them.
 
@@ -825,7 +827,7 @@ src\DCST4.Core\     No WPF reference
     Objects\        Objects without pixels: Basic Text and Enhanced SR, KOS, GSPS, PDF, RT Structure Set, and DocumentProfile, which offers one in Generate & Send
     Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
   TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
-  Pipeline\         IImageSource, StoreRun (transcode, save, send), LossyCompressionSettings (the encoders' parameters), TransferSyntaxOption and TransferSyntaxFamily (the list of Generate & Send, by codec family), RunSummary, ExamSizeEstimator, TransferSyntaxConverter (which encodes a multi-frame image frame by frame, and sends JPEG XL and H.264 to the encoders below)
+  Pipeline\         IImageSource, StoreRun (transcode, save, send), LossyCompressionSettings (the encoders' parameters), TransferSyntaxOption and TransferSyntaxFamily (the list of Generate & Send, by codec family), RunSummary, ExamSizeEstimator, ImagePreview (the first frame of one sample image, compressed, decoded and rendered to BGRA bytes with fo-dicom's RawImageManager, for the App's preview), TransferSyntaxConverter (which encodes a multi-frame image frame by frame, and sends JPEG XL and H.264 to the encoders below)
   Codecs\           OwnCodecs: which syntaxes DCST4 encodes itself, which are video, and which can be decoded
     JpegXl\         JpegXlEncoder (lossless JPEG XL codestream), JxlPrefixCode, JxlBitWriter, JpegXlFrameCodec (one DICOM frame to one codestream)
     Video\          H264Encoder (H.264 in MP4 with the encoder of Windows, and a decoder for checks), MediaFoundation.cs (the COM interop)
@@ -837,7 +839,7 @@ src\DCST4.Core\     No WPF reference
   Reporting\        RunFile (reads a result file back), RunReportWriter and ComparisonReportWriter (HTML), HtmlWriter (the one place where text is encoded), SvgChart, VendorFingerprint, RunComparer, ReportFiles, ResultCleaner (deletes old result files)
   Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestGroups, TestResult, ResultFileWriter
     Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category, PerformanceTests.cs the Performance category
-src\DCST4.App\      WPF app. HelpWindow.xaml.cs holds the help and its quick search. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Test settings dialog is TestSettingsDialog.xaml with ViewModels\TestSettingsViewModel.cs, a copy applied at OK, and the Performance settings dialog PerformanceSettingsDialog.xaml with ViewModels\PerformanceSettingsViewModel.cs. The Test and Performance Results tab of SettingsDialog.xaml is ViewModels\ResultSettingsViewModel.cs, applied at OK in the same way. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs, the Compare runs dialog CompareRunsDialog.xaml with ViewModels\CompareRunsViewModel.cs
+src\DCST4.App\      WPF app. HelpWindow.xaml.cs holds the help and its quick search. Infrastructure\SplitRowPanel lays out the Exam tab's compression row, with Estimated size at its right. PreviewWindow.xaml shows the Exam tab's image preview, one window reused, opened through MainViewModel.ShowImagePreview. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Test settings dialog is TestSettingsDialog.xaml with ViewModels\TestSettingsViewModel.cs, a copy applied at OK, and the Performance settings dialog PerformanceSettingsDialog.xaml with ViewModels\PerformanceSettingsViewModel.cs. The Test and Performance Results tab of SettingsDialog.xaml is ViewModels\ResultSettingsViewModel.cs, applied at OK in the same way. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs, the Compare runs dialog CompareRunsDialog.xaml with ViewModels\CompareRunsViewModel.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
 tools\              List refresh script
@@ -969,7 +971,7 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe multiframe
 # Only the tests of the transfer syntax list, Deflated, JPEG XL and H.264
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe syntaxes
 
-# Only the tests of realistic images and the lossy compression settings
+# Only the tests of realistic images, the lossy compression settings and the image preview
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe realism
 
 # The Exam tab with a multi-frame object, drawn to a PNG at the window's smallest size
@@ -1061,7 +1063,7 @@ What this means for a reader: compare a system with itself only over several run
 | Package                  | Use                                                          | Licence    |
 | ------------------------ | ------------------------------------------------------------ | ---------- |
 | fo-dicom 5.2.6           | DICOM                                                        | MS-PL      |
-| FoDicom.PureCodecs 0.5.1 | JPEG, JPEG-LS, JPEG 2000, HTJ2K and RLE. Managed code, no native DLL. Pre-1.0. | MS-PL      |
+| FoDicom.PureCodecs 0.5.2 | JPEG, JPEG-LS, JPEG 2000, HTJ2K and RLE. Managed code, no native DLL. Pre-1.0. | MS-PL      |
 | Serilog                  | Logging                                                      | Apache-2.0 |
 | System.Text.Json         | Target profiles, result files and manifests, and reading result files back for reports. Comes with fo-dicom. | MIT        |
 
@@ -1091,13 +1093,15 @@ New:
 - Both apply to Generate & Send, the store and Performance tests and the estimated size. On the Exam tab, **Realistic images** is shown for the modalities that have a realistic form, and selecting a lossy transfer syntax shows its value under Allow fallback to Implicit VR (JPEG quality, JPEG 2000 ratio or H.264 Mbit/s), which can be changed there. Both edit the same settings as Settings > Images. The result file, the HTML report and a dataset's manifest record them. Two Performance runs made with different image settings are shown side by side in a comparison but not judged, as with other differing settings
 - `DCST4.Cli.exe run` and `generate` take `--realism off|low|normal|high`, `--jpeg-quality`, `--j2k-ratio`, `--jpegls-near` and `--h264-mbps`
 - In the test harness, `DCST4.Tests.exe realism` runs only the new tests, and `-Render` also writes realistic images of CT, MR, CR, XA, MG, PT and US
+- **Image preview** on the Exam tab: the **Image preview...** button in its bottom right corner shows the first frame of the first image with the values as they stand, compressed in the selected transfer syntax with the lossy settings and decoded again, with its matrix, file size and window. JPEG XL and H.264 are shown before compression, since DCST4 cannot decode them. It is not available for DOC and SR, which have no pixels, and can be cancelled. Nothing is sent or saved
 
 Changed:
 
 - Result files have schema version 7, for the two new fields. Earlier versions of DCST4 refuse to read a version 7 file
-- On the Exam tab, the private payload has moved under Frames per image, as **Private payload ... MB/image**, and Frames per image is one row lower to make room for the value of a lossy transfer syntax
+- On the Exam tab, Frames per image has moved under Images per series and shows the number of frames in the whole exam next to it, as Images per series shows the images. The private payload has moved under Realistic images, as **Private payload ... MB/image**, with its field as wide as the others. Estimated size has moved to the right column under Allow fallback to Implicit VR, at the right end of the compression value's row when a lossy syntax is selected, and Object and Realistic images are one row higher
 - The private payload has no check box any more: a size of 0, the default, adds none. It is 0 at every start, as the box was unticked, and the size is no longer remembered
 - With every setting at its default, the images and files are the same as in 1.11.1, and a dataset with a fixed seed keeps its UIDs
+- FoDicom.PureCodecs 0.5.2, from 0.5.1. A dataset's manifest records the new version
 
 Fixed:
 

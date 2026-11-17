@@ -202,6 +202,7 @@ namespace DCST4.ViewModels
                 _selectedImageObject = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsMultiFrame));
+                OnPropertyChanged(nameof(TotalFramesText));
                 OnPropertyChanged(nameof(HasPixelData));
                 OnPropertyChanged(nameof(RealismApplies));
                 OnPropertyChanged(nameof(RealismDescription));
@@ -237,6 +238,7 @@ namespace DCST4.ViewModels
             {
                 _framesPerImage = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(TotalFramesText));
                 // Kept for the multi-frame modalities only, so that leaving one does not write 1 over the number entered.
                 if (IsMultiFrame) Settings.Default.FramesPerImage = value;
                 RefreshSizeEstimate();
@@ -275,12 +277,15 @@ namespace DCST4.ViewModels
         }
 
         private int _seriesCount;
-        public int SeriesCount { get => _seriesCount; set { _seriesCount = value; OnPropertyChanged(); OnPropertyChanged(nameof(TotalImagesText)); Settings.Default.SeriesCount = value; UpdateManualUidRules(); } }
+        public int SeriesCount { get => _seriesCount; set { _seriesCount = value; OnPropertyChanged(); OnPropertyChanged(nameof(TotalImagesText)); OnPropertyChanged(nameof(TotalFramesText)); Settings.Default.SeriesCount = value; UpdateManualUidRules(); } }
 
         private int _imagesPerSeries;
-        public int ImagesPerSeries { get => _imagesPerSeries; set { _imagesPerSeries = value; OnPropertyChanged(); OnPropertyChanged(nameof(TotalImagesText)); Settings.Default.ImagesPerSeries = value; UpdateManualUidRules(); } }
+        public int ImagesPerSeries { get => _imagesPerSeries; set { _imagesPerSeries = value; OnPropertyChanged(); OnPropertyChanged(nameof(TotalImagesText)); OnPropertyChanged(nameof(TotalFramesText)); Settings.Default.ImagesPerSeries = value; UpdateManualUidRules(); } }
 
         public string TotalImagesText => $"{Math.Max(0, (long)_seriesCount * _imagesPerSeries)} images in total";
+
+        /// <summary>Every frame of the exam: series x images x frames, with 1 frame for a single-frame object.</summary>
+        public string TotalFramesText => $"{Math.Max(0, (long)_seriesCount * _imagesPerSeries * (IsMultiFrame ? _framesPerImage : 1))} frames in total";
 
         private int _rows;
         public int Rows { get => _rows; set { _rows = value; OnPropertyChanged(); Settings.Default.Rows = value; RefreshSizeEstimate(); } }
@@ -620,6 +625,9 @@ namespace DCST4.ViewModels
         public Action<string, MessageBoxImage, string> ShowMessage { get; set; } = (message, icon, title) =>
             MessageBox.Show(message, title ?? DefaultTitle(icon), MessageBoxButton.OK, icon);
 
+        /// <summary>Shows a rendered preview image. One preview window is reused.</summary>
+        public Action<PreviewImage> ShowImagePreview { get; set; } = image => PreviewWindow.ShowImage(image, Application.Current?.MainWindow);
+
         /// <summary>Asks the user a yes/no question.</summary>
         public Func<string, bool> Confirm { get; set; } = message => ConfirmDialog.Ask(message);
 
@@ -649,6 +657,8 @@ namespace DCST4.ViewModels
         public ICommand OpenReportCommand { get; }
         public ICommand OpenPerformanceReportCommand { get; }
         public ICommand CancelCommand { get; }
+        /// <summary>Shows the first image of the exam as it would be sent. Not for documents and reports, which have no pixels.</summary>
+        public ICommand ImagePreviewCommand { get; }
 
         /// <summary>The Performance tab.</summary>
         public PerformanceViewModel Performance { get; private set; }
@@ -695,6 +705,7 @@ namespace DCST4.ViewModels
             OpenReportCommand = new RelayCommand(async _ => await OpenReportAsync(TestSuite.LastResultFiles), _ => !IsBusy && HasReport(TestSuite.LastResultFiles));
             OpenPerformanceReportCommand = new RelayCommand(async _ => await OpenReportAsync(Performance.LastResultFiles), _ => !IsBusy && HasReport(Performance.LastResultFiles));
             CancelCommand = new RelayCommand(_ => CancelOperation(), _ => _cts != null && !_cts.IsCancellationRequested);
+            ImagePreviewCommand = new RelayCommand(async _ => await RunBusyAsync(DoImagePreviewAsync), _ => !IsBusy && HasPixelData);
             NewValuesCommand = new RelayCommand(_ => GenerateNewValues(), _ => !IsBusy);
             SaveProfileCommand = new RelayCommand(_ => SaveProfile(), _ => !IsBusy);
             DeleteProfileCommand = new RelayCommand(_ => DeleteProfile(), _ => !IsBusy && FindProfile(ProfileName) != null);
@@ -1306,6 +1317,55 @@ namespace DCST4.ViewModels
         };
 
         private const int EncodingProgressEvery = 10;
+
+        /// <summary>
+        /// Generates the first image with the values as they stand, compresses and decodes it as a run would, and shows its
+        /// first frame. Nothing is sent or saved.
+        /// </summary>
+        private async Task DoImagePreviewAsync(CancellationToken token)
+        {
+            RefreshPreview();
+
+            var problems = ReadOverrides(out _);
+            var request = BuildRequest();
+            var syntax = _selectedTransferSyntax.Syntax;
+            if (request.Identity == null && IdentityMessage != null) problems.Add(IdentityMessage);
+            else problems.AddRange(ExamValidator.Validate(request));
+            if (CompressionProblem != null) problems.Add(CompressionProblem);
+            if (problems.Count == 0) problems.AddRange(ExamValidator.SyntaxProblems(request, syntax));
+            if (problems.Count > 0)
+            {
+                _logger.Warning("Image preview not made: {problems}", string.Join(" ", problems));
+                StatusText = "Image preview not made: correct the values first.";
+                ShowMessage(string.Join("\n", problems), MessageBoxImage.Warning, null);
+                return;
+            }
+            if (request.Identity.StudyDateTimeIsAuto) request.Identity.StudyDateTime = DateTime.Now;
+
+            StatusText = "Making the image preview...";
+            PreviewImage image;
+            try
+            {
+                image = await Task.Run(() => ImagePreview.Render(request, syntax, token), token);
+            }
+            catch (OperationCanceledException)
+            {
+                StatusText = "Image preview cancelled.";
+                return;
+            }
+            catch (Exception ex)
+            {
+                // A codec that throws must not take the program down: nothing has been sent.
+                _logger.Warning(ex, "Could not make the image preview");
+                StatusText = "Image preview failed: " + ex.Message;
+                ShowMessage("The image preview could not be made:\n" + ex.Message, MessageBoxImage.Warning, null);
+                return;
+            }
+
+            _logger.Information("Image preview: {description}{note}", image.Description, image.Note == null ? string.Empty : " " + image.Note);
+            StatusText = "Image preview: " + image.Description;
+            ShowImagePreview(image);
+        }
 
         /// <summary>
         /// The object of the Exam tab as a mix for the Performance tab: its modality, matrix, bits, frames, transfer syntax and
