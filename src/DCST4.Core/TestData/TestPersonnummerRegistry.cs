@@ -55,8 +55,9 @@ namespace DCST4.Core.TestData
     }
 
     /// <summary>
-    /// Skatteverket's official test personnummer, embedded in this assembly. This is the only source of random
-    /// patient IDs: nothing in the program makes up a number. Refresh the list with tools\Update-TestPersonnummer.ps1.
+    /// Skatteverket's official test personnummer, embedded in this assembly. This is the only source of a personnummer
+    /// as Patient ID: nothing in the program makes up a number. The other Auto Patient ID, DCST4 and ten digits, comes from
+    /// <see cref="TestPatientIds"/>. Refresh the list with tools\Update-TestPersonnummer.ps1.
     /// </summary>
     public sealed class TestPersonnummerRegistry
     {

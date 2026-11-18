@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace DCST4.Core.TestData
 {
-    /// <summary>How test-suite datasets, and the Auto name of Generate &amp; Send in the app, name the patient. The Patient ID comes from TestPersonnummerRegistry in both.</summary>
+    /// <summary>How test-suite datasets, and the Auto name of Generate &amp; Send in the app, name the patient. The Patient ID follows TestPatientIdSource in both.</summary>
     public enum TestPatientNaming
     {
         /// <summary>An invented Swedish name. Not the default since 1.9.0.</summary>

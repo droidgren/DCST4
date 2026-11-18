@@ -86,7 +86,7 @@ namespace DCST4.Core.Generation
 
     /// <summary>
     /// Attributes at the top level of the image IODs that a PACS test often wants filled in. Left out on purpose: Other
-    /// Patient IDs, since random patient IDs may only come from TestPersonnummerRegistry, and Requested Procedure ID and
+    /// Patient IDs, since a personnummer may only come from TestPersonnummerRegistry, and Requested Procedure ID and
     /// Scheduled Procedure Step ID, which in an image belong inside Request Attributes Sequence.
     /// </summary>
     public static class CommonTagCatalog

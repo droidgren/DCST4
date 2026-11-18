@@ -378,8 +378,8 @@ namespace DCST4.Tests
             Console.WriteLine("\nTest data: patient naming");
             var registry = TestPersonnummerRegistry.Default;
 
-            var swedish = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.RegistrySwedishName });
-            var marked = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.MarkedTestName });
+            var swedish = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.RegistrySwedishName, PatientIds = TestPatientIdSource.TestPersonnummer });
+            var marked = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.MarkedTestName, PatientIds = TestPatientIdSource.TestPersonnummer });
 
             check("Swedish name: Patient IDs are in the registry", swedish.Images.All(i => registry.Contains(Text(i.File.Dataset, DicomTag.PatientID))), null);
             check("Marked name: Patient IDs are in the registry", marked.Images.All(i => registry.Contains(Text(i.File.Dataset, DicomTag.PatientID))), null);
@@ -389,8 +389,20 @@ namespace DCST4.Tests
             check("Marked name: Referring Physician DCST4^REFERRING^<number>", marked.Images.All(i => MarkedReferrer.IsMatch(Text(i.File.Dataset, DicomTag.ReferringPhysicianName))), Text(marked.Images[0].File.Dataset, DicomTag.ReferringPhysicianName));
             check("Swedish name: the referrer is not marked", swedish.Images.All(i => !Text(i.File.Dataset, DicomTag.ReferringPhysicianName).StartsWith("DCST4")), Text(swedish.Images[0].File.Dataset, DicomTag.ReferringPhysicianName));
 
-            var again = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.MarkedTestName });
+            var again = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.MarkedTestName, PatientIds = TestPatientIdSource.TestPersonnummer });
             check("Marked name: the number comes from the seed", again.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientName)).SequenceEqual(marked.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientName))), null);
+
+            // 1.13.0: the Patient ID is random by default, and the personnummer when asked.
+            var randomIds = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.MarkedTestName });
+            var randomAgain = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 20, Rows = 64, Columns = 64, PatientNaming = TestPatientNaming.MarkedTestName });
+            check("Random IDs by default: DCST4 and ten digits, none on the list", randomIds.Images.All(i => TestPatientIds.IsRandomId(Text(i.File.Dataset, DicomTag.PatientID)) && !registry.Contains(Text(i.File.Dataset, DicomTag.PatientID))), Text(randomIds.Images[0].File.Dataset, DicomTag.PatientID));
+            check("Random IDs: one per patient", randomIds.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientID)).Distinct().Count() == 20, null);
+            check("Random IDs: from the seed, the same every time", randomAgain.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientID) + Text(i.File.Dataset, DicomTag.PatientBirthDate) + Text(i.File.Dataset, DicomTag.SOPInstanceUID))
+                .SequenceEqual(randomIds.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientID) + Text(i.File.Dataset, DicomTag.PatientBirthDate) + Text(i.File.Dataset, DicomTag.SOPInstanceUID))), null);
+            check("Random IDs: a birth date and a sex for each", randomIds.Images.All(i => Text(i.File.Dataset, DicomTag.PatientBirthDate).Length == 8 && (Text(i.File.Dataset, DicomTag.PatientSex) == "M" || Text(i.File.Dataset, DicomTag.PatientSex) == "F")), null);
+            check("Random IDs and personnummer never share a SOP Instance UID", !randomIds.Images.Select(i => Text(i.File.Dataset, DicomTag.SOPInstanceUID)).Intersect(marked.Images.Select(i => Text(i.File.Dataset, DicomTag.SOPInstanceUID))).Any(), null);
+            check("Random IDs: the names do not change with the ID source", randomIds.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientName)).SequenceEqual(marked.Images.Select(i => Text(i.File.Dataset, DicomTag.PatientName))), null);
+            check("Manifest records the ID source", randomIds.Manifest.Request.PatientIds == "Random" && marked.Manifest.Request.PatientIds == "TestPersonnummer", randomIds.Manifest.Request.PatientIds);
 
             var older = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 5, Rows = 64, Columns = 64, ReferenceDate = new DateTime(2030, 6, 1) });
             var fixedDate = Generate(new TestDatasetRequest { ProfileId = "ct", Patients = 5, Rows = 64, Columns = 64 });
@@ -452,7 +464,7 @@ namespace DCST4.Tests
                     var name = Text(read, DicomTag.PatientName);
                     var label = $"{naming} {variant}";
 
-                    check($"{label}: Patient ID is in the registry", TestPersonnummerRegistry.Default.Contains(Text(read, DicomTag.PatientID)), null);
+                    check($"{label}: Patient ID is a random DCST4 ID, the default", TestPatientIds.IsRandomId(Text(read, DicomTag.PatientID)), Text(read, DicomTag.PatientID));
                     if (naming == TestPatientNaming.MarkedTestName) check($"{label}: keeps the marker", new Regex(@"^DCST4\^TEST\^\d+").IsMatch(name), name);
 
                     if (variant == CharacterSetVariant.EmptyAscii)
@@ -512,7 +524,7 @@ namespace DCST4.Tests
                 check($"{label}: derivation description at 1024", Text(dataset, DicomTag.DerivationDescription).Length == 1024, null);
                 check($"{label}: person name at the 64 of a component group", Text(dataset, DicomTag.ReferringPhysicianName).Length == 64, null);
                 check($"{label}: Image Comments keeps the project's address first", Text(dataset, DicomTag.ImageComments).StartsWith(ProductUrl), null);
-                check($"{label}: Patient ID untouched", TestPersonnummerRegistry.Default.Contains(Text(dataset, DicomTag.PatientID)), null);
+                check($"{label}: Patient ID untouched", TestPatientIds.IsRandomId(Text(dataset, DicomTag.PatientID)), Text(dataset, DicomTag.PatientID));
 
                 var depth1 = dataset.GetSequence(DicomTag.RequestAttributesSequence).Items[0];
                 var depth2 = depth1.GetSequence(DicomTag.ScheduledProtocolCodeSequence).Items[0];

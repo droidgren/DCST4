@@ -223,7 +223,9 @@ namespace DCST4.Core.Generation
         {
             var warnings = new List<string>();
             var id = request.Identity;
-            if (id != null && !string.IsNullOrEmpty(id.PatientId) && !(registry ?? TestPersonnummerRegistry.Default).Contains(id.PatientId))
+            // A random ID is plainly not a person's number, so only other IDs need a look.
+            if (id != null && !string.IsNullOrEmpty(id.PatientId) && !TestPatientIds.IsRandomId(id.PatientId)
+                && !(registry ?? TestPersonnummerRegistry.Default).Contains(id.PatientId))
             {
                 warnings.Add($"Patient ID '{id.PatientId}' is not in Skatteverket's list of test personnummer. Make sure it is not a real person's number.");
             }

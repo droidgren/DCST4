@@ -3,6 +3,7 @@ using DCST4.Core.Generation.Realism;
 using DCST4.Core.Capability;
 using DCST4.Core.Generation.Datasets;
 using DCST4.Core.Network;
+using DCST4.Core.TestData;
 using FellowOakDicom;
 using Serilog;
 using System;
@@ -30,6 +31,8 @@ namespace DCST4.Core.Testing
         public RealismLevel Realism { get; set; } = RealismLevel.Off;
         /// <summary>How hard a lossy encoder compresses the generated data. Null leaves every encoder at its default.</summary>
         public LossyCompressionSettings Lossy { get; set; }
+        /// <summary>Where the Patient ID of every object sent comes from: DCST4 and ten random digits, or the test personnummer list.</summary>
+        public TestPatientIdSource PatientIds { get; set; } = TestPatientIds.Default;
         /// <summary>Where originals and retrieved files go, and stay. Null uses a temporary folder that is deleted after the run.</summary>
         public string WorkFolder { get; set; }
         /// <summary>How long a stored object may take to appear in a query.</summary>

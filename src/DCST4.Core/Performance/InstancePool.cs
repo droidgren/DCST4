@@ -65,12 +65,12 @@ namespace DCST4.Core.Performance
         public long AverageWireBytes => Instances.Count == 0 ? 0 : (long)Instances.Average(i => (double)i.WireBytes);
 
         /// <summary>
-        /// Generates the pool. Every object type uses the same seed, so they share one patient from the test personnummer
-        /// list. Throws <see cref="PoolUnavailableException"/> if the encoder cannot produce the mix here. The noise of a
-        /// realistic image is drawn once per object in the pool, not again for every send.
+        /// Generates the pool. Every object type uses the same seed, so they share one patient, whose ID is random or from the
+        /// test personnummer list as <paramref name="patientIds"/> says. Throws <see cref="PoolUnavailableException"/> if the
+        /// encoder cannot produce the mix here. The noise of a realistic image is drawn once per object in the pool, not again for every send.
         /// </summary>
         public static InstancePool Build(DataMix mix, int seed, string uidRoot, TestPatientNaming naming, CancellationToken token,
-            RealismLevel realism = RealismLevel.Off, LossyCompressionSettings lossy = null)
+            RealismLevel realism = RealismLevel.Off, LossyCompressionSettings lossy = null, TestPatientIdSource patientIds = TestPatientIds.Default)
         {
             if (mix == null) throw new ArgumentNullException(nameof(mix));
             var instances = new List<PoolInstance>();
@@ -83,6 +83,7 @@ namespace DCST4.Core.Performance
                     Seed = seed,
                     UidRoot = uidRoot,
                     PatientNaming = naming,
+                    PatientIds = patientIds,
                     InstancesPerSeries = Math.Max(1, mix.PoolPerEntry),
                     Rows = entry.Rows,
                     Columns = entry.Columns,

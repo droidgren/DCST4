@@ -59,7 +59,7 @@ namespace DCST4.Core.Testing.Cases
             try
             {
                 context.Report($"Generating and encoding the {mix.Id} pool before anything is sent");
-                pool = await Task.Run(() => InstancePool.Build(mix, context.Session.SeedFor("load-pool/" + mix.Id), context.Profile.UidRoot, context.PatientNaming, token, context.Session.Options.Realism, context.Session.Options.Lossy), token).ConfigureAwait(false);
+                pool = await Task.Run(() => InstancePool.Build(mix, context.Session.SeedFor("load-pool/" + mix.Id), context.Profile.UidRoot, context.PatientNaming, token, context.Session.Options.Realism, context.Session.Options.Lossy, context.Session.Options.PatientIds), token).ConfigureAwait(false);
             }
             catch (PoolUnavailableException ex)
             {

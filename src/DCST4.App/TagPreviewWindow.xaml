@@ -1,0 +1,34 @@
+<Window x:Class="DCST4.TagPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Tags preview"
+        Width="900" Height="680" MinWidth="420" MinHeight="300"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <DockPanel Margin="10">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+            <Label DockPanel.Dock="Left" Content="Filter:" Padding="0,0,6,0" VerticalAlignment="Center" Target="{Binding ElementName=FilterBox}"/>
+            <TextBox x:Name="FilterBox" VerticalAlignment="Center" TextChanged="FilterBox_TextChanged"
+                     ToolTip="Shows only the rows whose tag, name or value contains this text, ignoring case. A matching element inside a sequence is shown with the sequence and item it is in."/>
+        </DockPanel>
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+            <Button DockPanel.Dock="Right" Content="Close" Width="75" Height="23" VerticalAlignment="Bottom" Margin="8,0,0,0" Click="Close_Click" IsCancel="True"/>
+            <Button DockPanel.Dock="Right" Content="Copy" Width="75" Height="23" VerticalAlignment="Bottom" Margin="12,0,0,0" Click="Copy_Click"
+                    ToolTip="Copies the rows shown to the clipboard as tab-separated text: tag, VR, name and value, with sequences indented"/>
+            <StackPanel>
+                <TextBlock x:Name="DescriptionText" TextWrapping="Wrap"/>
+                <TextBlock Text="The first object as it would be sent, in the selected transfer syntax. Group 0002, the File Meta Information, is in a saved file only and is not sent with C-STORE. Nothing has been sent or saved." Foreground="#FF505050" TextWrapping="Wrap" Margin="0,4,0,0"/>
+            </StackPanel>
+        </DockPanel>
+        <DataGrid x:Name="TagsGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Extended"
+                  GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#FFE0E0E0" Background="White" CanUserSortColumns="False"
+                  FontFamily="Consolas" EnableRowVirtualization="True">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Tag" Binding="{Binding IndentedTag}" Width="150"/>
+                <DataGridTextColumn Header="VR" Binding="{Binding Vr}" Width="40"/>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="280"/>
+                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

@@ -24,6 +24,8 @@ namespace DCST4.Cli
             "  --log-dir          Where to write the log. Default: %LocalAppData%\\DCST4\\Logs\n" +
             "  --patient-naming   MarkedTestName (default), which gives DCST4^TEST^<number> and the Referring Physician\n" +
             "                     DCST4^REFERRING^<number>, or RegistrySwedishName for Swedish names.\n" +
+            "  --patient-id       random (default), which gives DCST4 and 10 random digits with a random birth date and sex,\n" +
+            "                     or personnummer for one of Skatteverket's test personnummer.\n" +
             "\n" +
             "Options of run for the tests that store objects:\n" +
             "  --seed <n>                       Fixes the generated data. The same seed repeats the same UIDs, which are duplicates on a real system\n" +
@@ -89,6 +91,7 @@ namespace DCST4.Cli
         public string OutputFolder { get; private set; }
         public string LogFolder { get; private set; }
         public TestPatientNaming PatientNaming { get; private set; } = TestPatientNames.Default;
+        public TestPatientIdSource PatientIds { get; private set; } = TestPatientIds.Default;
         public int? Seed { get; private set; }
         public string MatrixPath { get; private set; }
         public FellowOakDicom.DicomTransferSyntax TransferSyntax { get; private set; }
@@ -226,6 +229,9 @@ namespace DCST4.Cli
         public static string PatientNamingError(string value) =>
             $"Unknown patient naming '{value}'. Use {nameof(TestPatientNaming.MarkedTestName)} or {nameof(TestPatientNaming.RegistrySwedishName)}.";
 
+        public static string PatientIdError(string value) =>
+            $"Unknown patient ID source '{value}'. Use random or personnummer.";
+
         /// <summary>Returns null and sets <paramref name="error"/> if the arguments after "run" are not usable.</summary>
         public static CliArguments Parse(IReadOnlyList<string> args, out string error)
         {
@@ -255,6 +261,14 @@ namespace DCST4.Cli
                             return null;
                         }
                         parsed.PatientNaming = naming;
+                        break;
+                    case "--patient-id":
+                        if (!TestPatientIds.TryParse(value, out var patientIds))
+                        {
+                            error = PatientIdError(value);
+                            return null;
+                        }
+                        parsed.PatientIds = patientIds;
                         break;
                     case "--seed":
                         if (!int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var seed))

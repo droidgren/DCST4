@@ -159,6 +159,7 @@ namespace DCST4.Tests
                         if (args[0] == "syntaxes") TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "realism") RealismTests.Run(temp, Check);
                         if (args[0] == "realism") PreviewTests.Run(Check);
+                        if (args[0] == "realism") PreviewTests.RunTags(Check);
                         if (args[0] == "report") ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve") RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "retrieve" || args[0] == "commit") CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
@@ -212,6 +213,7 @@ namespace DCST4.Tests
                     TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     RealismTests.Run(temp, Check);
                     PreviewTests.Run(Check);
+                    PreviewTests.RunTags(Check);
                     RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
                     CommitmentTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
@@ -365,6 +367,43 @@ namespace DCST4.Tests
             Check("Patient naming: a Swedish referrer with the Swedish naming", swedishName.ReferringPhysicianName == identity.ReferringPhysicianName && !swedishName.ReferringPhysicianName.StartsWith("DCST4^", StringComparison.Ordinal), swedishName.ReferringPhysicianName);
             Check("Patient naming: a typed referrer wins", draw(new IdentityOverrides { ReferringPhysicianName = "Typed^Doctor", PatientNaming = TestPatientNaming.MarkedTestName }).ReferringPhysicianName == "Typed^Doctor");
             Check("Patient naming: the referrer does not change the other Auto values", marked.StudyId == identity.StudyId && marked.AccessionNumber == swedishName.AccessionNumber && marked.PatientBirthDate == swedishName.PatientBirthDate, marked.StudyId);
+
+            // The Patient ID setting: the list by default in Core, DCST4 and ten digits when asked, a typed ID always.
+            var randomId = draw(new IdentityOverrides { PatientIds = TestPatientIdSource.Random });
+            Check("Patient ID: random is DCST4 and ten digits", System.Text.RegularExpressions.Regex.IsMatch(randomId.PatientId, @"^DCST4\d{10}$") && TestPatientIds.IsRandomId(randomId.PatientId), randomId.PatientId);
+            Check("Patient ID: random is not on the list and is no personnummer", !TestPersonnummerRegistry.Default.Contains(randomId.PatientId) && !Personnummer.TryParse(randomId.PatientId, out _), randomId.PatientId);
+            Check("Patient ID: the list by default in Core, and when asked", draw(new IdentityOverrides()).PatientId == identity.PatientId
+                && draw(new IdentityOverrides { PatientIds = TestPatientIdSource.TestPersonnummer }).PatientId == identity.PatientId, identity.PatientId);
+            Check("Patient ID: random gives a sex of M or F", randomId.PatientSex == "M" || randomId.PatientSex == "F", randomId.PatientSex);
+            Check("Patient ID: the same seed gives the same random patient", draw(new IdentityOverrides { PatientIds = TestPatientIdSource.Random }).PatientId == randomId.PatientId
+                && draw(new IdentityOverrides { PatientIds = TestPatientIdSource.Random }).PatientBirthDate == randomId.PatientBirthDate, randomId.PatientId);
+            Check("Patient ID: the source does not change the other Auto values", randomId.AccessionNumber == identity.AccessionNumber && randomId.StudyId == identity.StudyId
+                && randomId.StudyInstanceUid != null && randomId.ReferringPhysicianName == identity.ReferringPhysicianName, randomId.AccessionNumber);
+            Check("Patient ID: a typed ID wins, with birth date and sex read from it", draw(new IdentityOverrides { PatientId = identity.PatientId, PatientIds = TestPatientIdSource.Random }).PatientBirthDate == identity.PatientBirthDate
+                && draw(new IdentityOverrides { PatientId = "Typed", PatientIds = TestPatientIdSource.Random }).PatientId == "Typed", null);
+            var ageDay = new DateTime(2026, 11, 6);
+            var agesInRange = Enumerable.Range(0, 400).All(seed =>
+            {
+                var drawn = new IdentityGenerator(random: new Random(seed), clock: () => ageDay)
+                    .Generate(new IdentityOverrides { PatientIds = TestPatientIdSource.Random }, Modality("CT"), Modality("CT").Presets[0], 30, 31);
+                var age = TestPersonnummerRegistry.AgeOn(DateTime.ParseExact(drawn.PatientBirthDate, "yyyyMMdd", CultureInfo.InvariantCulture), ageDay);
+                return age >= 30 && age <= 31;
+            });
+            Check("Patient ID: a random birth date is within the age range", agesInRange, null);
+            var edges = Enumerable.Range(0, 3000).Select(seed => TestPatientIds.BirthDate(new Random(seed), ageDay, 0, 0)).ToList();
+            Check("Patient ID: age 0 to 0 reaches both ends of the year", edges.Min() == ageDay.AddYears(-1).AddDays(1) && edges.Max() == ageDay, edges.Min().ToString("yyyyMMdd") + "-" + edges.Max().ToString("yyyyMMdd"));
+            Check("Patient ID: no warning for a random ID, one for another ID that is not on the list",
+                ExamValidator.Warnings(new ExamRequest { Identity = randomId }).Count == 0
+                && ExamValidator.Warnings(new ExamRequest { Identity = new ExamIdentity { PatientId = "12345" } }).Count == 1
+                && ExamValidator.Warnings(new ExamRequest { Identity = new ExamIdentity { PatientId = "DCST4123" } }).Count == 1, null);
+            Check("Patient ID: the setting parses, ignoring case, and personnummer on the command line",
+                TestPatientIds.TryParse("random", out var idSource) && idSource == TestPatientIdSource.Random
+                && TestPatientIds.TryParse("TESTPERSONNUMMER", out idSource) && idSource == TestPatientIdSource.TestPersonnummer
+                && TestPatientIds.TryParse("personnummer", out idSource) && idSource == TestPatientIdSource.TestPersonnummer, null);
+            Check("Patient ID: anything else means the default, which is random",
+                !TestPatientIds.TryParse("nonsense", out idSource) && idSource == TestPatientIdSource.Random && !TestPatientIds.TryParse("", out idSource)
+                && TestPatientIds.Default == TestPatientIdSource.Random && new TestDatasetRequest().PatientIds == TestPatientIdSource.Random
+                && new DCST4.Core.Testing.TestRunOptions().PatientIds == TestPatientIdSource.Random, null);
 
             Check("Patient age in years", DicomImageBuilder.PatientAge("19800615", new DateTime(2026, 11, 6)) == "046Y");
             Check("Patient age in months", DicomImageBuilder.PatientAge("20260315", new DateTime(2026, 11, 6)) == "007M");

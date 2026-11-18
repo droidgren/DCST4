@@ -58,6 +58,9 @@ namespace DCST4
             NewValuesAfterRun.IsChecked = s.NewValuesAfterRun;
             TestPatientNames.TryParse(s.TestPatientNaming, out var patientNaming);
             TestPatientNaming.SelectedValue = patientNaming.ToString();
+            TestPatientIds.TryParse(s.TestPatientIdSource, out var patientIds);
+            TestPatientIdSource.SelectedValue = patientIds.ToString();
+            PersonnummerSourceText.Text = PersonnummerSource();
             BurnInText.IsChecked = s.BurnInText;
             ShowUpdateWindowAtStartup.IsChecked = s.ShowUpdateWindowAtStartup;
             RealismLevelBox.SelectedValue = RealismLevels.Parse(s.RealismLevel).ToString();
@@ -80,6 +83,28 @@ namespace DCST4
             CustomTagsGrid.ItemsSource = _customTags;
             VrBox.ItemsSource = AdditionalTagRules.TextVrs;
             VrBox.SelectedItem = "LO";
+        }
+
+        /// <summary>Where the Swedish test personnummer come from, with the source line of the list built into the program.</summary>
+        internal static string PersonnummerSource()
+        {
+            string list;
+            try
+            {
+                // The comment line of the list: its name, source URL, fetch date and count.
+                var registry = TestPersonnummerRegistry.Default;
+                list = string.IsNullOrWhiteSpace(registry.SourceDescription)
+                    ? string.Format(CultureInfo.InvariantCulture, "{0} numbers", registry.Count)
+                    : registry.SourceDescription.Trim();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Log.ForContext<SettingsDialog>().Warning(ex, "Could not read the test personnummer list");
+                list = "the list could not be read: " + ex.Message;
+            }
+            return "Swedish test personnummer come from Skatteverket's open list of test personnummer (skatteverket.se, Testpersonnummer som öppen data), "
+                + "numbers that Skatteverket will never give to a real person. The list is built into DCST4: " + list + ". "
+                + "A random ID gets a random birth date within the age range on the Identifiers tab, and a random sex. An ID typed on the Identifiers tab always wins.";
         }
 
         private static List<AdditionalTag> ReadSavedTags(string xml)
@@ -128,6 +153,7 @@ namespace DCST4
             s.Client_LogDataPDUs = LogDataPDUs.IsChecked == true;
             s.NewValuesAfterRun = NewValuesAfterRun.IsChecked == true;
             s.TestPatientNaming = (string)TestPatientNaming.SelectedValue;
+            s.TestPatientIdSource = (string)TestPatientIdSource.SelectedValue ?? TestPatientIds.Default.ToString();
             s.BurnInText = BurnInText.IsChecked == true;
             s.ShowUpdateWindowAtStartup = ShowUpdateWindowAtStartup.IsChecked == true;
             s.RealismLevel = (string)RealismLevelBox.SelectedValue ?? RealismLevel.Off.ToString();

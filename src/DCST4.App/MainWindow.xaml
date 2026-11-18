@@ -289,10 +289,14 @@
                                 <TextBox Text="{Binding PrivatePayloadMb, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,2"/>
                             </DockPanel>
 
-                            <Button Grid.Row="8" Grid.Column="4" Content="Image preview..." Width="110" Height="24" Margin="0,8,0,0"
-                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Command="{Binding ImagePreviewCommand}"
-                                    ToolTip="Shows the first frame of the first image with the values as they stand: generated, put in the selected transfer syntax with the lossy settings, and decoded again, so lossy compression can be seen. JPEG XL and H.264 are shown before compression, since DCST4 cannot decode them. Nothing is sent or saved.&#x0a;&#x0a;Not for DOC and SR, which have no pixels."
-                                    ToolTipService.ShowOnDisabled="True"/>
+                            <StackPanel Grid.Row="8" Grid.Column="4" Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                <Button Content="Tags preview..." Width="110" Height="24" Margin="0,0,8,0" Command="{Binding TagPreviewCommand}"
+                                        ToolTip="Lists every DICOM tag of the first object with the values as they stand: generated as a run would, in the selected transfer syntax with the lossy settings, with the File Meta Information of a saved file first. Sequences are shown with their items. Long values are cut, and binary values such as Pixel Data are shown as their size. The list can be filtered and copied. Nothing is sent or saved.&#x0a;&#x0a;For every object type, also DOC and SR."
+                                        ToolTipService.ShowOnDisabled="True"/>
+                                <Button Content="Image preview..." Width="110" Height="24" Command="{Binding ImagePreviewCommand}"
+                                        ToolTip="Shows the first frame of the first image with the values as they stand: generated, put in the selected transfer syntax with the lossy settings, and decoded again, so lossy compression can be seen. JPEG XL and H.264 are shown before compression, since DCST4 cannot decode them. Nothing is sent or saved.&#x0a;&#x0a;Not for DOC and SR, which have no pixels."
+                                        ToolTipService.ShowOnDisabled="True"/>
+                            </StackPanel>
                         </Grid>
                     </TabItem>
 
@@ -303,9 +307,9 @@
                                         ToolTip="Draw a new patient and new identifiers for the Auto fields"/>
                                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="Random patient age:" VerticalAlignment="Center"/>
-                                    <TextBox Text="{Binding MinAge, Mode=TwoWay}" Width="36" Margin="6,0,4,0" VerticalAlignment="Center" ToolTip="The youngest age, in years, of a random patient from the test personnummer list.&#x0a;&#x0a;Default: 0."/>
+                                    <TextBox Text="{Binding MinAge, Mode=TwoWay}" Width="36" Margin="6,0,4,0" VerticalAlignment="Center" ToolTip="The youngest age, in years, of a random patient, from the test personnummer list or with a random Patient ID.&#x0a;&#x0a;Default: 0."/>
                                     <TextBlock Text="to" VerticalAlignment="Center"/>
-                                    <TextBox Text="{Binding MaxAge, Mode=TwoWay}" Width="36" Margin="4,0,0,0" VerticalAlignment="Center" ToolTip="The oldest age, in years, of a random patient from the test personnummer list.&#x0a;&#x0a;Default: 100."/>
+                                    <TextBox Text="{Binding MaxAge, Mode=TwoWay}" Width="36" Margin="4,0,0,0" VerticalAlignment="Center" ToolTip="The oldest age, in years, of a random patient, from the test personnummer list or with a random Patient ID.&#x0a;&#x0a;Default: 100."/>
                                 </StackPanel>
                                 <TextBlock Text="{Binding IdentityMessage}" Foreground="#FFB03000" TextWrapping="Wrap" VerticalAlignment="Center" Margin="12,0,12,0"/>
                             </DockPanel>

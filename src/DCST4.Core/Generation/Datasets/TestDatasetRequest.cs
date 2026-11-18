@@ -46,6 +46,8 @@ namespace DCST4.Core.Generation.Datasets
         public string UidRoot { get; set; }
         public DateTime ReferenceDate { get; set; } = DefaultReferenceDate;
         public TestPatientNaming PatientNaming { get; set; } = TestPatientNames.Default;
+        /// <summary>Where each patient's ID comes from: DCST4 and ten random digits, or the test personnummer list.</summary>
+        public TestPatientIdSource PatientIds { get; set; } = TestPatientIds.Default;
         public int Patients { get; set; } = 1;
         public int StudiesPerPatient { get; set; } = 1;
         public int SeriesPerStudy { get; set; } = 1;

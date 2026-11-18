@@ -628,6 +628,9 @@ namespace DCST4.ViewModels
         /// <summary>Shows a rendered preview image. One preview window is reused.</summary>
         public Action<PreviewImage> ShowImagePreview { get; set; } = image => PreviewWindow.ShowImage(image, Application.Current?.MainWindow);
 
+        /// <summary>Shows the tags of the first object. One tags window is reused.</summary>
+        public Action<TagPreviewResult> ShowTagPreview { get; set; } = result => TagPreviewWindow.ShowTags(result, Application.Current?.MainWindow);
+
         /// <summary>Asks the user a yes/no question.</summary>
         public Func<string, bool> Confirm { get; set; } = message => ConfirmDialog.Ask(message);
 
@@ -659,6 +662,8 @@ namespace DCST4.ViewModels
         public ICommand CancelCommand { get; }
         /// <summary>Shows the first image of the exam as it would be sent. Not for documents and reports, which have no pixels.</summary>
         public ICommand ImagePreviewCommand { get; }
+        /// <summary>Lists every tag of the first object of the exam as it would be sent. For every object type.</summary>
+        public ICommand TagPreviewCommand { get; }
 
         /// <summary>The Performance tab.</summary>
         public PerformanceViewModel Performance { get; private set; }
@@ -674,9 +679,9 @@ namespace DCST4.ViewModels
 
             Action changed = RefreshPreview;
             PatientNameField = new IdentityFieldViewModel("Patient Name", "Surname^Firstname. Auto: as chosen in Settings > Identifiers, DCST4^TEST^ and a number, or an invented Swedish name, sometimes with å, ä or ö.", changed);
-            PatientIdField = new IdentityFieldViewModel("Patient ID", "Auto: from Skatteverket's official test personnummer.", changed);
-            BirthDateField = new IdentityFieldViewModel("Birth Date", "YYYYMMDD. Auto: from the personnummer.", changed);
-            SexField = new IdentityFieldViewModel("Sex", "M, F or O. Auto: from the personnummer.", changed);
+            PatientIdField = new IdentityFieldViewModel("Patient ID", "Auto: as chosen in Settings > Identifiers, DCST4 and 10 random digits, or one of Skatteverket's official test personnummer.", changed);
+            BirthDateField = new IdentityFieldViewModel("Birth Date", "YYYYMMDD. Auto: from the personnummer, or random within the age range for a random Patient ID.", changed);
+            SexField = new IdentityFieldViewModel("Sex", "M, F or O. Auto: from the personnummer, or random for a random Patient ID.", changed);
             AccessionField = new IdentityFieldViewModel("Accession No", "At most 16 characters.", changed);
             StudyIdField = new IdentityFieldViewModel("Study ID", "At most 16 characters.", changed);
             StudyUidField = new IdentityFieldViewModel("Study UID", "Digits and dots, at most 64 characters.", changed);
@@ -706,6 +711,7 @@ namespace DCST4.ViewModels
             OpenPerformanceReportCommand = new RelayCommand(async _ => await OpenReportAsync(Performance.LastResultFiles), _ => !IsBusy && HasReport(Performance.LastResultFiles));
             CancelCommand = new RelayCommand(_ => CancelOperation(), _ => _cts != null && !_cts.IsCancellationRequested);
             ImagePreviewCommand = new RelayCommand(async _ => await RunBusyAsync(DoImagePreviewAsync), _ => !IsBusy && HasPixelData);
+            TagPreviewCommand = new RelayCommand(async _ => await RunBusyAsync(DoTagPreviewAsync), _ => !IsBusy && _selectedImageObject != null);
             NewValuesCommand = new RelayCommand(_ => GenerateNewValues(), _ => !IsBusy);
             SaveProfileCommand = new RelayCommand(_ => SaveProfile(), _ => !IsBusy);
             DeleteProfileCommand = new RelayCommand(_ => DeleteProfile(), _ => !IsBusy && FindProfile(ProfileName) != null);
@@ -1023,6 +1029,13 @@ namespace DCST4.ViewModels
             return naming;
         }
 
+        /// <summary>The Patient ID setting in Settings > Identifiers, used by Generate &amp; Send and by the tests.</summary>
+        private static DCST4.Core.TestData.TestPatientIdSource PatientIdSourceSetting()
+        {
+            DCST4.Core.TestData.TestPatientIds.TryParse(Settings.Default.TestPatientIdSource, out var source);
+            return source;
+        }
+
         private List<string> ReadOverrides(out IdentityOverrides overrides)
         {
             var problems = new List<string>();
@@ -1045,6 +1058,7 @@ namespace DCST4.ViewModels
                 AdditionalTags = _additionalFields.Select(f => new AdditionalTagValue(f.Tag, f.Field.ManualValue?.Trim())).ToList(),
                 AutoValuesInBasicAscii = CharacterSetTagValue == DicomCharacterSets.Empty,
                 PatientNaming = PatientNamingSetting(),
+                PatientIds = PatientIdSourceSetting(),
             };
 
             var manualDate = StudyDateTimeField.ManualValue?.Trim();
@@ -1324,23 +1338,7 @@ namespace DCST4.ViewModels
         /// </summary>
         private async Task DoImagePreviewAsync(CancellationToken token)
         {
-            RefreshPreview();
-
-            var problems = ReadOverrides(out _);
-            var request = BuildRequest();
-            var syntax = _selectedTransferSyntax.Syntax;
-            if (request.Identity == null && IdentityMessage != null) problems.Add(IdentityMessage);
-            else problems.AddRange(ExamValidator.Validate(request));
-            if (CompressionProblem != null) problems.Add(CompressionProblem);
-            if (problems.Count == 0) problems.AddRange(ExamValidator.SyntaxProblems(request, syntax));
-            if (problems.Count > 0)
-            {
-                _logger.Warning("Image preview not made: {problems}", string.Join(" ", problems));
-                StatusText = "Image preview not made: correct the values first.";
-                ShowMessage(string.Join("\n", problems), MessageBoxImage.Warning, null);
-                return;
-            }
-            if (request.Identity.StudyDateTimeIsAuto) request.Identity.StudyDateTime = DateTime.Now;
+            if (!TryBuildPreviewRequest("Image preview", out var request, out var syntax)) return;
 
             StatusText = "Making the image preview...";
             PreviewImage image;
@@ -1365,6 +1363,69 @@ namespace DCST4.ViewModels
             _logger.Information("Image preview: {description}{note}", image.Description, image.Note == null ? string.Empty : " " + image.Note);
             StatusText = "Image preview: " + image.Description;
             ShowImagePreview(image);
+        }
+
+        /// <summary>
+        /// The exam as a run would make it, with the values as they stand, for a preview. False, with the problems shown, if
+        /// the values could not be run. <paramref name="what"/> names the preview in the log and the status bar.
+        /// </summary>
+        private bool TryBuildPreviewRequest(string what, out ExamRequest request, out FellowOakDicom.DicomTransferSyntax syntax)
+        {
+            RefreshPreview();
+
+            var problems = ReadOverrides(out _);
+            request = BuildRequest();
+            syntax = _selectedTransferSyntax.Syntax;
+            if (request.Identity == null && IdentityMessage != null) problems.Add(IdentityMessage);
+            else problems.AddRange(ExamValidator.Validate(request));
+            if (CompressionProblem != null) problems.Add(CompressionProblem);
+            if (problems.Count == 0) problems.AddRange(ExamValidator.SyntaxProblems(request, syntax));
+            if (problems.Count > 0)
+            {
+                _logger.Warning("{what} not made: {problems}", what, string.Join(" ", problems));
+                StatusText = what + " not made: correct the values first.";
+                ShowMessage(string.Join("\n", problems), MessageBoxImage.Warning, null);
+                return false;
+            }
+            if (request.Identity.StudyDateTimeIsAuto) request.Identity.StudyDateTime = DateTime.Now;
+            return true;
+        }
+
+        /// <summary>
+        /// Generates the first object with the values as they stand, in the selected transfer syntax with the lossy settings,
+        /// and lists all its tags. Nothing is sent or saved.
+        /// </summary>
+        private async Task DoTagPreviewAsync(CancellationToken token)
+        {
+            if (!TryBuildPreviewRequest("Tags preview", out var request, out var syntax)) return;
+
+            StatusText = "Making the tags preview...";
+            Action<int, int> frameEncoded = (done, total) => _dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!token.IsCancellationRequested) StatusText = $"Making the tags preview: frame {done} of {total} encoded...";
+            }), DispatcherPriority.Background);
+            TagPreviewResult result;
+            try
+            {
+                result = await Task.Run(() => TagPreview.Build(request, syntax, token, frameEncoded), token);
+            }
+            catch (OperationCanceledException)
+            {
+                StatusText = "Tags preview cancelled.";
+                return;
+            }
+            catch (Exception ex)
+            {
+                // A codec that throws must not take the program down: nothing has been sent.
+                _logger.Warning(ex, "Could not make the tags preview");
+                StatusText = "Tags preview failed: " + ex.Message;
+                ShowMessage("The tags preview could not be made:\n" + ex.Message, MessageBoxImage.Warning, null);
+                return;
+            }
+
+            _logger.Information("Tags preview: {description}", result.Description);
+            StatusText = "Tags preview: " + result.Description;
+            ShowTagPreview(result);
         }
 
         /// <summary>
@@ -1418,6 +1479,7 @@ namespace DCST4.ViewModels
             FaultSettleSeconds = _faultSettleSeconds,
             Realism = Realism,
             Lossy = Lossy,
+            PatientIds = PatientIdSourceSetting(),
         };
 
         /// <summary>Saves the current destination fields for use with DCST4.Cli.exe.</summary>

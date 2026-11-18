@@ -148,6 +148,16 @@ namespace DCST4.Tests
             var settingsDialog = new SettingsDialog(new ResultSettingsViewModel(vm));
             await ShowAndCapture(settingsDialog, window, Path.Combine(folder, "settings-tags.png"), () => Select(settingsDialog, "Additional tags"));
             await ShowAndCapture(settingsDialog, window, Path.Combine(folder, "settings-results.png"), () => Select(settingsDialog, "Test and Performance Results"));
+            await ShowAndCapture(settingsDialog, window, Path.Combine(folder, "settings-identifiers.png"), () => Select(settingsDialog, "Identifiers"));
+
+            // The tags preview of the exam above, in its own window.
+            Core.Pipeline.TagPreviewResult tags = null;
+            vm.ShowTagPreview = result => tags = result;
+            await Execute(vm, vm.TagPreviewCommand);
+            if (tags == null) throw new InvalidOperationException("The tags preview was not made: " + vm.StatusText);
+            var tagWindow = new TagPreviewWindow { Width = 1000, Height = 700 };
+            tagWindow.SetResult(tags);
+            await ShowAndCapture(tagWindow, window, Path.Combine(folder, "tags-preview.png"));
 
             // Shorter Storage Commitment waits, since the mock answers at once. Not in any picture.
             vm.CommitLingerSeconds = 0;
