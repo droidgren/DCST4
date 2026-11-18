@@ -62,6 +62,14 @@ namespace DCST4.Cli
                         }
                         request.PatientNaming = naming;
                         break;
+                    case "--patient-id":
+                        if (!TestPatientIds.TryParse(value, out var patientIds))
+                        {
+                            error = CliArguments.PatientIdError(value);
+                            return null;
+                        }
+                        request.PatientIds = patientIds;
+                        break;
                     case "--transfer-syntax":
                         var syntax = CompressionCatalog.Find(value);
                         if (syntax == null)

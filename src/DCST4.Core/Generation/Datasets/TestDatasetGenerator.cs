@@ -246,7 +246,7 @@ namespace DCST4.Core.Generation.Datasets
             var scope = "seed/" + Int(_request.Seed) + "/patient/" + Int(index);
             var ct = ModalityCatalog.Find("CT");
             var drawn = new IdentityGenerator(_registry, SeededValues.Random(scope), () => _request.ReferenceDate, new DeterministicUidSource(null, scope))
-                .Generate(null, ct, ct.Presets[0], MinPatientAge, MaxPatientAge);
+                .Generate(new IdentityOverrides { PatientIds = _request.PatientIds }, ct, ct.Presets[0], MinPatientAge, MaxPatientAge);
 
             return new Patient
             {
@@ -334,6 +334,8 @@ namespace DCST4.Core.Generation.Datasets
             if (request.Realism != RealismLevel.Off) extras += "|realism=" + request.Realism;
             var lossy = request.Lossy?.Key;
             if (!string.IsNullOrEmpty(lossy)) extras += "|lossy=" + lossy;
+            // Left out for the personnummer, which every dataset had before 1.13.0, rather than for the default.
+            if (request.PatientIds != TestPatientIdSource.TestPersonnummer) extras += "|ids=" + request.PatientIds;
             return extras;
         }
 
@@ -350,6 +352,7 @@ namespace DCST4.Core.Generation.Datasets
                 UidRoot = string.IsNullOrWhiteSpace(_request.UidRoot) ? DeterministicUidSource.UuidRoot : _request.UidRoot.Trim(),
                 ReferenceDate = _request.ReferenceDate.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture),
                 PatientNaming = _request.PatientNaming.ToString(),
+                PatientIds = _request.PatientIds.ToString(),
                 Patients = _request.Patients,
                 StudiesPerPatient = _request.StudiesPerPatient,
                 SeriesPerStudy = _request.SeriesPerStudy,

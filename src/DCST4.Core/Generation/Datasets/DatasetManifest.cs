@@ -90,6 +90,8 @@ namespace DCST4.Core.Generation.Datasets
         public string UidRoot { get; set; }
         public string ReferenceDate { get; set; }
         public string PatientNaming { get; set; }
+        /// <summary>Random or TestPersonnummer. Missing in a manifest from before 1.13.0, when it was always the personnummer.</summary>
+        public string PatientIds { get; set; }
         public int Patients { get; set; }
         public int StudiesPerPatient { get; set; }
         public int SeriesPerStudy { get; set; }

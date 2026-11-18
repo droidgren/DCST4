@@ -159,6 +159,7 @@ namespace DCST4.Tests
                 vm.TestSuite.Choices[0].IsSelected = true;
                 vm.BurnInText = true;
                 settings["TestPatientNaming"] = "RegistrySwedishName";
+                settings["TestPatientIdSource"] = "TestPersonnummer";
                 vm.ProfileName = "Something";
 
                 // ------------------------------------------------ Settings > Images, read at each run
@@ -254,7 +255,7 @@ namespace DCST4.Tests
                 check("Confirmed: the Tests tab is the defaults, with nothing ticked", vm.TestUidRoot == "2.25" && vm.CommitWaitSeconds == 60 && vm.LimitMaxAssociations == 10 && vm.TestSuite.ResultsFolder == TestSuiteViewModel.DefaultResultsFolder
                     && vm.TestSuite.SelectedStoreSyntax == vm.TestSuite.StoreSyntaxChoices[0] && vm.TestSuite.Choices.All(c => !c.IsSelected), vm.TestSuite.ResultsFolder);
                 check("Confirmed: the Performance tab is the defaults", vm.Performance.SelectedMode == vm.Performance.Modes[0] && vm.Performance.Associations == Core.Performance.LoadSettings.DefaultAssociations, vm.Performance.Associations.ToString());
-                check("Confirmed: the exam and File > Settings are the defaults", vm.SelectedModality.Code == "CT" && vm.SeriesCount == 1 && !vm.BurnInText && (string)settings["TestPatientNaming"] == "MarkedTestName" && (int)settings["ResponseTimeoutSeconds"] == 60, (string)settings["TestPatientNaming"]);
+                check("Confirmed: the exam and File > Settings are the defaults", vm.SelectedModality.Code == "CT" && vm.SeriesCount == 1 && !vm.BurnInText && (string)settings["TestPatientNaming"] == "MarkedTestName" && (string)settings["TestPatientIdSource"] == "Random" && (int)settings["ResponseTimeoutSeconds"] == 60, (string)settings["TestPatientNaming"] + " " + (string)settings["TestPatientIdSource"]);
                 check("Confirmed: Settings > Images is the defaults", (string)settings["RealismLevel"] == "Off" && (int)settings["JpegLsNear"] == 0 && vm.Lossy == null && vm.Realism == Core.Generation.Realism.RealismLevel.Off, (string)settings["RealismLevel"]);
                 check("Confirmed: the comparison threshold is the default", thresholdBefore == "25" && vm.Comparison.ThresholdText == "10" && (double)settings["CompareThresholdPercent"] == 10, vm.Comparison.ThresholdText);
                 check("Confirmed: only the HTML report is written, and nothing is deleted", !vm.WriteResultJson && !vm.WriteResultCsv && vm.WriteResultHtml && !vm.WriteResultSeries && vm.ResultsKeepDays == 0
@@ -297,8 +298,10 @@ namespace DCST4.Tests
 
             // ------------------------------------------------ Auto by default
             check("All identifier fields start on Auto", vm.IdentityFields.All(f => f.IsAuto), null);
-            check("Auto Patient ID is on the test list", TestPersonnummerRegistry.Default.Contains(vm.PatientIdField.Value), vm.PatientIdField.Value);
-            check("Preview shows the birth date of that number", vm.BirthDateField.Value == vm.PatientIdField.Value.Substring(0, 8), vm.BirthDateField.Value);
+            // Settings.Default reads the real user.config, so the Auto Patient ID follows what it says.
+            var listIds = PatientIdsFromList();
+            check("Auto Patient ID follows Settings > Identifiers", listIds ? TestPersonnummerRegistry.Default.Contains(vm.PatientIdField.Value) : TestPatientIds.IsRandomId(vm.PatientIdField.Value), vm.PatientIdField.Value);
+            check("Preview shows a birth date, that of the number from the list", vm.BirthDateField.Value.Length == 8 && (!listIds || vm.BirthDateField.Value == vm.PatientIdField.Value.Substring(0, 8)), vm.BirthDateField.Value);
             check("Preview has no warning", vm.IdentityMessage == null, vm.IdentityMessage);
 
             // ------------------------------------------------ Manual values do not disturb the others
@@ -429,6 +432,40 @@ namespace DCST4.Tests
             finally
             {
                 settings["TestPatientNaming"] = savedNaming;
+            }
+
+            // ------------------------------------------------ Patient ID source, in Settings > Identifiers
+            var savedIds = settings["TestPatientIdSource"];
+            try
+            {
+                Func<string> shownIds = () => (string)((ComboBox)new SettingsDialog(new ResultSettingsViewModel(vm)).FindName("TestPatientIdSource")).SelectedValue;
+                check("Settings: the default Patient ID is random", settings.Properties["TestPatientIdSource"].DefaultValue as string == "Random", settings.Properties["TestPatientIdSource"].DefaultValue as string);
+                settings["TestPatientIdSource"] = "TestPersonnummer";
+                check("Settings: the saved Patient ID source is selected", shownIds() == "TestPersonnummer", shownIds());
+                settings["TestPatientIdSource"] = "Random";
+                check("Settings: random can be chosen", shownIds() == "Random", shownIds());
+                settings["TestPatientIdSource"] = "nonsense";
+                check("Settings: an unreadable Patient ID source shows the default", shownIds() == "Random", shownIds());
+                var source = ((TextBlock)new SettingsDialog(new ResultSettingsViewModel(vm)).FindName("PersonnummerSourceText")).Text;
+                check("Settings: says where the personnummer come from", source.Contains("Skatteverket") && source.Contains("skatteverket.entryscape.net") && source.Contains("fetched"), source);
+
+                settings["TestPatientIdSource"] = "Random";
+                vm.ReloadAdditionalTags();
+                var randomPatient = vm.PatientIdField.Value;
+                var accessionBefore = vm.AccessionField.Value;
+                check("Generate & Send: a random Patient ID in the preview when chosen", TestPatientIds.IsRandomId(randomPatient) && vm.BirthDateField.Value.Length == 8 && (vm.SexField.Value == "M" || vm.SexField.Value == "F"), randomPatient);
+                check("Generate & Send: no warning for a random Patient ID", vm.IdentityMessage == null, vm.IdentityMessage);
+                settings["TestPatientIdSource"] = "TestPersonnummer";
+                vm.ReloadAdditionalTags();
+                check("Generate & Send: a test personnummer when chosen, the rest unchanged", TestPersonnummerRegistry.Default.Contains(vm.PatientIdField.Value) && vm.AccessionField.Value == accessionBefore, vm.PatientIdField.Value);
+                check("Tests: the run options carry the setting", vm.BuildTestRunOptions().PatientIds == TestPatientIdSource.TestPersonnummer, null);
+                settings["TestPatientIdSource"] = "Random";
+                check("Tests: and random", vm.BuildTestRunOptions().PatientIds == TestPatientIdSource.Random, null);
+            }
+            finally
+            {
+                settings["TestPatientIdSource"] = savedIds;
+                vm.ReloadAdditionalTags();
             }
 
             // ------------------------------------------------ Burned-in text
@@ -898,7 +935,7 @@ namespace DCST4.Tests
                 && received[0].Dataset.GetSingleValue<int>(DicomTag.NumberOfFrames) == 6 && received[0].Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID) == DicomUID.UltrasoundMultiFrameImageStorage
                 && PrivatePayload.BytesIn(received[0].Dataset) == PrivatePayload.BytesPerMegabyte, string.Join("; ", h.Messages) + " " + vm.StatusText);
             check("... and it is marked as a test image like every other", received.Count == 1 && received[0].Dataset.GetString(DicomTag.Manufacturer) == "DCST4"
-                && Core.TestData.TestPersonnummerRegistry.Default.Contains(received[0].Dataset.GetString(DicomTag.PatientID)), null);
+                && IsAutoPatientId(received[0].Dataset.GetString(DicomTag.PatientID)), null);
 
             var restarted = new MainViewModel();
             check("At the next start: the modality, the object and the frames are back, and the payload is 0",
@@ -1056,7 +1093,60 @@ namespace DCST4.Tests
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("DOC");
             check("DOC: the button is disabled", !vm.ImagePreviewCommand.CanExecute(null), null);
             vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
+
+            // ------------------------------------------------ Tags preview
+            Console.WriteLine("\nTags preview button");
+            var tags = new List<TagPreviewResult>();
+            vm.ShowTagPreview = result => tags.Add(result);
+            h.Messages.Clear();
+            check("Tags: the button is enabled", vm.TagPreviewCommand.CanExecute(null), null);
+            await h.Execute(vm.TagPreviewCommand);
+            check("Tags: one list, of the Patient ID in the preview, and no message", tags.Count == 1 && tags[0].PatientId == vm.PatientIdField.Value && h.Messages.Count == 0,
+                tags.Count + " " + string.Join(" | ", h.Messages));
+            check("Tags: the matrix of the Exam tab", tags.Count == 1 && tags[0].Rows.Any(r => r.Tag == "(0028,0010)" && r.Value == vm.Rows.ToString()) && tags[0].Rows.Any(r => r.Tag == "(0028,0011)" && r.Value == vm.Columns.ToString()), vm.Rows + " x " + vm.Columns);
+            check("Tags: idle again, and the status says what was listed", !vm.IsBusy && vm.StatusText.StartsWith("Tags preview: CT", StringComparison.Ordinal), vm.StatusText);
+            vm.PatientIdField.IsAuto = false;
+            vm.PatientIdField.Value = "Typed-ID";
+            await h.Execute(vm.TagPreviewCommand);
+            check("Tags: a typed value is listed", tags.Count == 2 && tags[1].Rows.Any(r => r.Tag == "(0010,0020)" && r.Value == "Typed-ID"), null);
+            vm.PatientIdField.IsAuto = true;
+
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("SR");
+            check("Tags: SR has the button enabled", vm.TagPreviewCommand.CanExecute(null), null);
+            await h.Execute(vm.TagPreviewCommand);
+            check("Tags: SR is listed", tags.Count == 3 && tags[2].Rows.Any(r => r.Tag == "(0040,A730)"), tags.Count > 2 ? tags[2].Description : vm.StatusText);
+            vm.SelectedModality = Core.Generation.Modalities.ModalityCatalog.Find("CT");
+
+            vm.Rows = 10;
+            await h.Execute(vm.TagPreviewCommand);
+            check("Tags: invalid rows give a message and no list", tags.Count == 3 && h.Messages.Count == 1 && vm.StatusText.StartsWith("Tags preview not made", StringComparison.Ordinal), vm.StatusText);
+            vm.Rows = 96;
+
+            var tagWindow = new TagPreviewWindow();
+            tagWindow.SetResult(tags[2]);
+            var allRows = tagWindow.ShownRows.Count;
+            check("Tag window: every row shown", allRows == tags[2].Rows.Count, allRows + " of " + tags[2].Rows.Count);
+            tagWindow.Filter = "manufacturer";
+            check("Tag window: the filter finds by name", tagWindow.ShownRows.Count >= 1 && tagWindow.ShownRows.All(r => r.Name.IndexOf("Manufacturer", StringComparison.OrdinalIgnoreCase) >= 0), tagWindow.ShownRows.Count.ToString());
+            tagWindow.Filter = "0040A160";
+            var nested = tagWindow.ShownRows;
+            check("Tag window: a nested match keeps its sequence and item", nested.Any(r => r.Row.Tag == "(0040,A160)") && nested.Any(r => r.Row.Tag == "(0040,A730)") && nested.Any(r => r.Name.StartsWith("Item ", StringComparison.Ordinal)), nested.Count.ToString());
+            check("Tag window: Copy gives a header and one line for each row shown", tagWindow.CopyText().TrimEnd().Split('\n').Length == nested.Count + 1 && tagWindow.CopyText().StartsWith("Tag\tVR\tName\tValue", StringComparison.Ordinal), null);
+            tagWindow.Filter = string.Empty;
+            check("Tag window: an empty filter shows all again", tagWindow.ShownRows.Count == allRows, null);
+            tagWindow.Close();
         }
+
+        /// <summary>True if the user.config the harness reads chooses the test personnummer for Auto Patient IDs.</summary>
+        private static bool PatientIdsFromList()
+        {
+            var settings = (System.Configuration.ApplicationSettingsBase)typeof(SettingsDialog).Assembly.GetType("DCST4.Properties.Settings").GetProperty("Default").GetValue(null);
+            TestPatientIds.TryParse(settings["TestPatientIdSource"] as string, out var source);
+            return source == TestPatientIdSource.TestPersonnummer;
+        }
+
+        /// <summary>An Auto Patient ID of either source.</summary>
+        private static bool IsAutoPatientId(string id) => TestPersonnummerRegistry.Default.Contains(id) || TestPatientIds.IsRandomId(id);
 
         private static async Task RunSizeEstimate(int port, Action<string, bool, string> check)
         {

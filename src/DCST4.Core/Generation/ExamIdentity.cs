@@ -35,6 +35,11 @@ namespace DCST4.Core.Generation
         /// seeded test datasets, which name their patients themselves, draw exactly as before. Generate &amp; Send passes the setting.
         /// </summary>
         public TestPatientNaming PatientNaming { get; set; } = TestPatientNaming.RegistrySwedishName;
+        /// <summary>
+        /// Where an Auto Patient ID comes from: the test personnummer list, or DCST4 and ten random digits with a random birth
+        /// date and sex. The list here, so that a direct caller draws as before. Every front-end and test run passes the setting.
+        /// </summary>
+        public TestPatientIdSource PatientIds { get; set; } = TestPatientIdSource.TestPersonnummer;
     }
 
     /// <summary>The final values of one exam, Auto or manual. Series and SOP Instance UIDs stay null when each series or image gets its own.</summary>
@@ -105,9 +110,18 @@ namespace DCST4.Core.Generation
             var additionalSeed = _random.Next(); // Last, so that the values above are the same with or without additional tags.
 
             // Birth date and sex follow the personnummer whenever it can be read, so the tags agree with each other.
+            // A random ID has none to read, so they are drawn from the same sequence as the ID.
             Personnummer number = null;
             string patientId;
-            if (manual.PatientId == null)
+            DateTime? drawnBirthDate = null;
+            string drawnSex = null;
+            if (manual.PatientId == null && manual.PatientIds == TestPatientIdSource.Random)
+            {
+                patientId = TestPatientIds.Random(numberRandom);
+                drawnBirthDate = TestPatientIds.BirthDate(numberRandom, now, minAge, maxAge);
+                drawnSex = TestPatientIds.Sex(numberRandom);
+            }
+            else if (manual.PatientId == null)
             {
                 number = _registry.Pick(numberRandom, now, minAge, maxAge);
                 patientId = number.Value;
@@ -118,13 +132,14 @@ namespace DCST4.Core.Generation
                 Personnummer.TryParse(patientId, out number);
             }
 
-            var sex = manual.PatientSex ?? number?.Sex ?? string.Empty;
+            var sex = manual.PatientSex ?? number?.Sex ?? drawnSex ?? string.Empty;
+            var birthDate = number?.BirthDate ?? drawnBirthDate;
 
             return new ExamIdentity
             {
                 PatientId = patientId,
                 PatientSex = sex,
-                PatientBirthDate = manual.PatientBirthDate ?? number?.BirthDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? string.Empty,
+                PatientBirthDate = manual.PatientBirthDate ?? birthDate?.ToString("yyyyMMdd", CultureInfo.InvariantCulture) ?? string.Empty,
                 PatientName = manual.PatientName ?? (manual.PatientNaming == TestPatientNaming.MarkedTestName
                     ? TestPatientNames.Marked(nameRandom)
                     : AutoText(manual, SwedishNames.Pick(nameRandom, sex))),

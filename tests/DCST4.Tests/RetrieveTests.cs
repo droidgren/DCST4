@@ -235,7 +235,7 @@ namespace DCST4.Tests
             _check("Store test: the timeline holds the C-STORE", store.Timeline.Any(e => e.Type == "C-STORE-RQ") && store.Timeline.Any(e => e.Type == "C-STORE-RSP" && e.Status == "0x0000"), string.Join(",", store.Timeline.Select(e => e.Type)));
             var steps = store.Timeline.Select(e => e.Type).ToList();
             _check("Store test: the request comes after the association was accepted", steps.IndexOf("A-ASSOCIATE-AC") >= 0 && steps.IndexOf("A-ASSOCIATE-AC") < steps.IndexOf("C-STORE-RQ") && steps.IndexOf("C-STORE-RQ") < steps.IndexOf("C-STORE-RSP"), string.Join(",", steps));
-            _check("Store test: Patient ID from the list", DCST4.Core.TestData.TestPersonnummerRegistry.Default.Contains(Scp.Archive[0].PatientId), Scp.Archive[0].PatientId);
+            _check("Store test: a random DCST4 Patient ID by default", DCST4.Core.TestData.TestPatientIds.IsRandomId(Scp.Archive[0].PatientId), Scp.Archive[0].PatientId);
             _check("Report: the seed is written", report.Seed == 7, null);
 
             var json = ResultFileWriter.ToJson(report);
@@ -578,9 +578,16 @@ namespace DCST4.Tests
             var kept = await Execute("conflict-demographics");
             var keptResult = Result(kept, "conflict-demographics");
             _check("Conflict: two patients kept in one study is a finding", keptResult.Result == TestResultClass.FAIL && keptResult.Details["finding"] == "two-patients-in-one-study", Show(kept));
-            _check("Conflict: both patients are from the list and differ", keptResult.Details["firstPatientId"] != keptResult.Details["secondPatientId"]
-                && DCST4.Core.TestData.TestPersonnummerRegistry.Default.Contains(keptResult.Details["firstPatientId"])
-                && DCST4.Core.TestData.TestPersonnummerRegistry.Default.Contains(keptResult.Details["secondPatientId"]), null);
+            _check("Conflict: both patients have random IDs by default, and differ", keptResult.Details["firstPatientId"] != keptResult.Details["secondPatientId"]
+                && DCST4.Core.TestData.TestPatientIds.IsRandomId(keptResult.Details["firstPatientId"])
+                && DCST4.Core.TestData.TestPatientIds.IsRandomId(keptResult.Details["secondPatientId"]), keptResult.Details["firstPatientId"]);
+
+            Fresh();
+            var listed = await Execute("conflict-demographics", options: new TestRunOptions { PatientIds = DCST4.Core.TestData.TestPatientIdSource.TestPersonnummer });
+            var listedResult = Result(listed, "conflict-demographics");
+            _check("Conflict: with the personnummer chosen, both patients are from the list and differ", listedResult.Details["firstPatientId"] != listedResult.Details["secondPatientId"]
+                && DCST4.Core.TestData.TestPersonnummerRegistry.Default.Contains(listedResult.Details["firstPatientId"])
+                && DCST4.Core.TestData.TestPersonnummerRegistry.Default.Contains(listedResult.Details["secondPatientId"]), Show(listed));
 
             Fresh();
             Scp.Conflicts = ConflictPolicy.Reject;

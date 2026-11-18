@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.12.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.13.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -37,13 +37,14 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Realistic exams:** CT, MR and PT stacks, CR, DX, US, XA, RF, MG and NM images, and for US, XA, RF, CT, MR and MG also their multi-frame objects: an ultrasound cine loop, an Enhanced US Volume, a cine run, a fluoro loop, Enhanced CT, MR, XA and XRF and Breast Tomosynthesis, built to their IODs and checked with outside validators, with consistent slice geometry and believable timestamps. See [Checking with another toolkit](#checking-with-another-toolkit) for what is still reported.
 - **Everything is automatic, and everything can be overridden:** patient, accession number, study ID, UIDs, date and time. The fields show what the next run will use.
 - **Additional tags:** add common tags with generated values, or any custom tag, including private ones, under **File > Settings**.
-- **Official test patients:** random Patient IDs come only from Skatteverket's list of test personnummer. Birth date and sex follow from the number.
+- **Test patients:** an Auto Patient ID is `DCST4` and ten random digits by default, which cannot be read as a personnummer, with a random birth date in the age range and a random sex. Under **File > Settings** it can be a Swedish test personnummer instead, from Skatteverket's list of numbers that are never given to a real person, and birth date and sex then follow from the number. See [Test personnummer](#test-personnummer).
 - **Patient names:** `DCST4^TEST^<number>` by default, which is plainly not a person, with the Referring Physician `DCST4^REFERRING^<number>`, or Swedish names, chosen under **File > Settings**. About 40% of the Swedish names contain å, ä or ö, with Specific Character Set ISO_IR 100 or ISO_IR 192. An empty Specific Character Set (Basic ASCII) is also available, and random names then lose their diacritics.
 - **Optional burned-in text:** turn on a text box in the pixels and choose which tags it shows, so you can compare them with the tags in the viewer. It is off by default.
 - **Configurable images:** number of series and images, matrix from 64 to 4096, 8 to 16 bits stored as the modality allows, and up to 10,000 frames in a multi-frame image.
 - **Private payload:** optionally, a large private binary value in every image, as some ultrasound systems send their raw data, to find out whether a PACS takes it. Its size is 0, none, by default and at every start. See [Multi-frame images and private payload](#multi-frame-images-and-private-payload).
 - **Estimated size:** the Exam box shows how much data the whole exam will be, and updates as you change the settings.
-- **Image preview:** the **Image preview...** button in the bottom right corner of the Exam tab shows the first frame of the first image as it would be sent: generated with the values as they stand, put in the selected transfer syntax with the lossy settings, and decoded again, so what lossy compression does can be seen. Nothing is sent or saved.
+- **Tags preview:** the **Tags preview...** button in the bottom right corner of the Exam tab lists every DICOM tag of the first object as it would be sent, in the selected transfer syntax with the lossy settings, sequences and private tags included, after the File Meta Information of a saved file. The list can be filtered and copied. It works for every object type, DOC and SR included. Nothing is sent or saved.
+- **Image preview:** the **Image preview...** button beside it shows the first frame of the first image as it would be sent: generated with the values as they stand, put in the selected transfer syntax with the lossy settings, and decoded again, so what lossy compression does can be seen. Nothing is sent or saved.
 - **Realistic images:** optionally, each modality's shape, tissue texture and noise under the overlays: speckle in an ultrasound sector, quantum noise in X-ray, noise in HU set by the CT kernel, Rician noise in MR and counting noise in PET and NM. Synthetic images otherwise compress far better than real ones, so file sizes and codec comparisons mean little without it. Off by default. See [Realistic images and lossy compression](#realistic-images-and-lossy-compression).
 - **Lossy compression settings:** JPEG quality, JPEG 2000 ratio, JPEG-LS NEAR and H.264 bitrate, each in the encoder's own unit, for Generate & Send, the tests and the command line. Each encoder runs at its default until set.
 - **Transfer syntaxes:** 15 in the Transfer syntax list, grouped by codec family: Implicit VR LE, Explicit VR LE and Deflated; RLE Lossless; JPEG Baseline, Extended and Lossless SV1; JPEG-LS Lossless; JPEG 2000 Lossless and lossy; HTJ2K Lossless and lossy; JPEG XL Lossless and JPEG XL, written by DCST4's own encoder; and H.264 High Profile for an ultrasound cine loop, written by the encoder of Windows. See [Transfer syntaxes](#transfer-syntaxes).
@@ -92,7 +93,7 @@ The program is not digitally signed, so you may see a **Windows protected your P
 1. Enter the server's AE title, host and port. Try **Ping** and **Dicom Echo**.
 2. On the **Exam** tab, select modality and exam type, and how many images you want. 1 series with 1 image gives a single test image. **Estimated size** shows how much data that is. For Implicit and Explicit VR it is calculated. For the other syntaxes, Deflated included, one sample image is compressed in the background and the result multiplied by the number of images. A saved File-set's DICOMDIR is not counted.
 3. Optionally, enter your own values on the **Identifiers** tab by unticking **Auto**.
-4. Optionally, click **Image preview...** to see the first image as it would be sent.
+4. Optionally, click **Tags preview...** to see every tag of the first object, or **Image preview...** to see the first image, as it would be sent.
 5. Click **Generate & Send** and follow each image in **Results**.
 6. Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text first.
 
@@ -103,6 +104,21 @@ F1 in the program opens the help, with a list of topics on the left. The box abo
 Auto values are drawn when the program starts and when you click **New values**. They stay on screen after a run, so the exam can be looked up in PACS.
 
 Running again without **New values** uses the same patient, accession number and Study UID, so the images arrive as a new series in the same study, also if you changed modality or exam type. Series numbers start at 1 again, and an Auto Study Date/Time is the time of each run. To draw new values after every run instead, tick **Draw new Auto values after each run** under **File > Settings**, on the **Identifiers** tab.
+
+### Patient ID
+
+**Patient ID in generated objects**, on the **Identifiers** tab of **File > Settings**, decides where an Auto Patient ID comes from:
+
+- **Random ID (DCST4 and 10 digits)**, the default, such as `DCST40482917365`. It starts with letters, so no date or check digit can be read from it. Birth Date is a random day that gives an age within **Random patient age** on the Identifiers tab, and Sex is M or F at random.
+- **Swedish test personnummer**, a number from Skatteverket's list of test personnummer, which is built into DCST4. Birth Date and Sex are read from the number. The tab says where the list comes from and when it was fetched. See [Test personnummer](#test-personnummer).
+
+The setting applies to Generate & Send and to the objects that the Tests and Performance tabs send. On the command line it is `--patient-id random` or `--patient-id personnummer`. A Patient ID typed on the Identifiers tab always wins, and a typed personnummer still gives the birth date and sex.
+
+### Tags preview
+
+**Tags preview...**, in the bottom right corner of the **Exam** tab, generates the first object with the values as they stand, puts it in the selected transfer syntax with the lossy settings as a run does, and lists every tag it has: tag, VR, name from the DICOM dictionary and value. Group 0002, the File Meta Information of a saved file, comes first; it is not sent with C-STORE. A sequence shows its number of items, and each item and its elements are indented under it. Values longer than 256 characters are cut, and binary values such as Pixel Data, a private payload or an encapsulated frame are shown as their size. Lossy Image Compression, the ratio and Derivation Description appear as a lossy syntax writes them.
+
+The **Filter** box shows only the rows whose tag, name or value contains the text, with the sequences and items above a match, and a tag can be typed as `(0010,0020)`, `0010,0020` or `00100020`. **Copy** puts the rows shown on the clipboard as tab-separated text. It works for every object type, also DOC and SR, and a long cine loop in a compressed syntax can be cancelled while it is encoded. Nothing is sent or saved.
 
 ### Burned-in text
 
@@ -449,7 +465,7 @@ These tests prove, per object type, that what the PACS accepted can be found, ca
 | `verify-integrity`                   | Is what came back what was sent? The Intact step                                                                                |
 | `duplicate-identical`                | The same SOP Instance UID sent twice                                                                                            |
 | `duplicate-modified`                 | The same SOP Instance UID with changed content: which version is kept                                                           |
-| `conflict-demographics`              | One Study Instance UID with two patients from the test personnummer list                                                        |
+| `conflict-demographics`              | One Study Instance UID with two patients, each with its own Patient ID                                                          |
 
 **The transfer syntax** of each store test is chosen per object type: your choice if you made one and the object type allows it, then the first of Explicit VR, Implicit VR and the lossless compressions that the capability matrix says is accepted, otherwise Explicit VR. The matrix comes from `negotiation-probe` in the same run, the Capabilities tab, or `--matrix <file>`. Each store result records in `transferSyntaxSelectedBy` what chose it. A status of Success or Warning is `PASS`, a warning with its raw code. A refused object is `FAIL`, and `0x0122` or a context that was not accepted is `NOT_SUPPORTED`.
 
@@ -548,7 +564,7 @@ These tests find the limits of the PACS and show what it does when a transfer go
 
 The instance of a fault test follows from the seed. If it is already on the PACS, from an earlier run with the same `--seed`, the test gives `INDETERMINATE` and sends nothing.
 
-**What is left on the PACS**: four CT images of about 130 KB from `limit-max-pdu`, one from `limit-oversized-pdu` if the PACS takes it, and one of 2 MB from each fault test. All are marked as test images, with a Patient ID from the test personnummer list and UIDs under the profile's root. The other tests store nothing.
+**What is left on the PACS**: four CT images of about 130 KB from `limit-max-pdu`, one from `limit-oversized-pdu` if the PACS takes it, and one of 2 MB from each fault test. All are marked as test images, with an Auto Patient ID as chosen in Settings, random or from the test personnummer list, and UIDs under the profile's root. The other tests store nothing.
 
 **The TLS tests** give `INDETERMINATE` if the profile does not use TLS. The two client certificate tests first open an association with the profile's own settings, and give `INDETERMINATE` if that fails, since a refusal would then prove nothing. The certificate from an unknown authority is made in memory and is never put in a certificate store. Windows needs its private key in a key container to use it, so one exists in your profile while the test runs and is removed afterwards. An expired certificate is only a fair test if it comes from an authority the PACS trusts, so DCST4 cannot make one: install one yourself in your personal certificate store and give its thumbprint in **Expired client certificate** in Test settings on the Tests tab, or as `tlsExpiredClientCertThumbprint` in the profile's `endpoint`. Neither thumbprint is written to the result files. A PACS on TLS 1.3 may refuse a certificate only after the handshake, by closing the connection, and that counts as refused. `tls-server-certificate` reports on the PACS's certificate as this computer sees it, so a certificate from an internal authority that is not installed here is reported as not trusted.
 
@@ -585,7 +601,7 @@ Plan for the load test: Stores up to 5,000 new objects (about 675 MB, mix ct) on
 
 For all three, a SOP class or transfer syntax that is not accepted is `NOT_SUPPORTED`, a PACS that answers nothing is `TIMEOUT`, a cancel is `INDETERMINATE`, and a codec that is not available on this computer is `TOOL_ERROR`.
 
-**How it sends.** Each association has a worker of its own, and one C-STORE outstanding at a time, as most modalities send. Before the first send, the objects of the mix are generated and encoded in its transfer syntax, four per object type, so no transcoding or generation happens while the clock runs. Each send gets new UIDs under the profile's UID root: a new SOP Instance UID every time, and a new Study and Series Instance UID and Frame of Reference, an Accession Number and Series and Instance Numbers per 500 sends of one worker. The UIDs also hold a value drawn for each run, so two runs never send the same UID, even with the same `--seed`. The patient is one from the test personnummer list, the same for the whole run, and is named in the result's `details`, so the objects can be found on the PACS. Only the attributes are encoded again per send: the pixel data is encoded once and every send uses the same bytes. The workers write the DICOM PDUs themselves, with `RawAssociation`, the same code as the Limits tests, because fo-dicom's client does not show when a request goes on the wire and encodes the whole dataset again for every send. Nothing is logged per image. The first ten problems are written to the log, then they are only counted. The first of them, with its raw status, Error Comment or the lack of one, and the second of the run it happened in, is also in the result's `details` as `firstProblem`.
+**How it sends.** Each association has a worker of its own, and one C-STORE outstanding at a time, as most modalities send. Before the first send, the objects of the mix are generated and encoded in its transfer syntax, four per object type, so no transcoding or generation happens while the clock runs. Each send gets new UIDs under the profile's UID root: a new SOP Instance UID every time, and a new Study and Series Instance UID and Frame of Reference, an Accession Number and Series and Instance Numbers per 500 sends of one worker. The UIDs also hold a value drawn for each run, so two runs never send the same UID, even with the same `--seed`. The patient is the same for the whole run, with a random Patient ID or one from the test personnummer list as chosen, and is named in the result's `details`, so the objects can be found on the PACS. Only the attributes are encoded again per send: the pixel data is encoded once and every send uses the same bytes. The workers write the DICOM PDUs themselves, with `RawAssociation`, the same code as the Limits tests, because fo-dicom's client does not show when a request goes on the wire and encodes the whole dataset again for every send. Nothing is logged per image. The first ten problems are written to the log, then they are only counted. The first of them, with its raw status, Error Comment or the lack of one, and the second of the run it happened in, is also in the result's `details` as `firstProblem`.
 
 **What is measured**, on the monotonic clock:
 
@@ -760,6 +776,7 @@ DCST4.Cli.exe generate --dataset enhanced-ct --out C:\Temp\enhanced --seed 42 --
 | `--seed`                                                              | Everything that varies follows from this. Default 1                                                               |
 | `--uid-root`                                                          | UIDs start with this root. Without it they are `2.25.` and a value hashed from the seed and counters              |
 | `--patient-naming`                                                    | `MarkedTestName` (default), which gives `DCST4^TEST^<number>` and the Referring Physician `DCST4^REFERRING^<number>`, or `RegistrySwedishName` for Swedish names |
+| `--patient-id`                                                        | `random` (default), which gives `DCST4` and ten digits with a random birth date and sex, or `personnummer` for Skatteverket's test personnummer |
 | `--patients` `--studies` `--series` `--instances`                     | How many. Default 1 of each                                                                                       |
 | `--rows` `--columns` `--bits` `--frames`                              | The image. The profile's own values if left out                                                                   |
 | `--transfer-syntax`                                                   | `explicit` (default), `implicit`, or a name from `list-codecs`, or a Transfer Syntax UID                          |
@@ -768,7 +785,7 @@ DCST4.Cli.exe generate --dataset enhanced-ct --out C:\Temp\enhanced --seed 42 --
 
 Assume that a PACS cannot delete what it receives, and keep the volumes small. `tomosynthesis-large`, about 700 MB per object, only runs when asked for by name.
 
-**Patient IDs** come only from Skatteverket's list of test personnummer, whatever the naming. The name is `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name with `--patient-naming RegistrySwedishName` or on the Identifiers tab of **File > Settings**. The Referring Physician's Name follows the setting: `DCST4^REFERRING^<number>` with the marked name, a Swedish name otherwise. The same setting gives the Auto patient name and referring physician of Generate & Send, and it applies to the objects that the store, query, duplicate, limit, fault and Performance tests send.
+**Patient IDs** are `DCST4` and ten digits by default, drawn from the seed like everything else, or with `--patient-id personnummer` or the Patient ID setting on the Identifiers tab of **File > Settings** a number from Skatteverket's list of test personnummer. A personnummer is never made up. A dataset with the personnummer has the same UIDs as before 1.13.0, and one with random IDs gets UIDs of its own, so the two never share a SOP Instance UID. `manifest.json` records the choice as `patientIds`. The name is `DCST4^TEST^<number>` by default, which is plainly not a person, or a Swedish name with `--patient-naming RegistrySwedishName` or on the Identifiers tab of **File > Settings**. The Referring Physician's Name follows the setting: `DCST4^REFERRING^<number>` with the marked name, a Swedish name otherwise. The same setting gives the Auto patient name and referring physician of Generate & Send, and it applies to the objects that the store, query, duplicate, limit, fault and Performance tests send.
 
 **What is guaranteed:** the same seed, parameters, personnummer list and reference date give byte-identical files, within one DCST4 version, one fo-dicom and PureCodecs version, and the same Windows GDI+ and Consolas rendering. On another computer the UIDs, names and all non-pixel attributes still match, and the pixels match only if the rendering does. `manifest.json` records these versions. The reference date is fixed, so the same request gives the same result on any day.
 
@@ -815,7 +832,9 @@ The list embedded in the program comes from Skatteverket's open data:
 
 Skatteverket says on [Testpersonnummer som öppen data](https://www.skatteverket.se/omoss/digitalasamarbeten/omvaraoppnadata/testpersonnummersomoppendata.4.5b35a6251761e6914202df9.html) that these numbers will never be used for real persons, that they are blocked from being assigned, and that anyone may use them. Its open data is described as free to use without agreements or fees. No named licence such as CC0 was found on the pages checked, so that is worth confirming before the list is redistributed outside your organisation.
 
-The list holds future dates and people born in the 1890s, so random selection only uses people already born and within an age range, 0 to 100 by default. A manually entered Patient ID that is not on the list is accepted with a warning.
+The list is used when **Patient ID in generated objects** on the Identifiers tab of **File > Settings** is **Swedish test personnummer**, or with `--patient-id personnummer`. The default is a random ID, `DCST4` and ten digits, which is not a personnummer at all. The Settings tab shows the source line of the list built into the program.
+
+The list holds future dates and people born in the 1890s, so random selection only uses people already born and within an age range, 0 to 100 by default. A manually entered Patient ID that is neither on the list nor a random DCST4 ID is accepted with a warning.
 
 ## Architecture
 
@@ -826,8 +845,8 @@ src\DCST4.Core\     No WPF reference
     Modalities\     ModalityCatalog (the ten modalities, the OT, DOC and SR groups, and the objects each can generate) and MultiFrameProfiles (the multi-frame IODs, Enhanced US Volume, Secondary Capture and ObjectGroupProfile)
     Objects\        Objects without pixels: Basic Text and Enhanced SR, KOS, GSPS, PDF, RT Structure Set, and DocumentProfile, which offers one in Generate & Send
     Datasets\       Dataset profiles, TestDatasetGenerator, variants, CompressionCatalog, DatasetManifest
-  TestData\         Test personnummer, names, identifiers, UID sources, TestPatientNaming
-  Pipeline\         IImageSource, StoreRun (transcode, save, send), LossyCompressionSettings (the encoders' parameters), TransferSyntaxOption and TransferSyntaxFamily (the list of Generate & Send, by codec family), RunSummary, ExamSizeEstimator, ImagePreview (the first frame of one sample image, compressed, decoded and rendered to BGRA bytes with fo-dicom's RawImageManager, for the App's preview), TransferSyntaxConverter (which encodes a multi-frame image frame by frame, and sends JPEG XL and H.264 to the encoders below)
+  TestData\         Test personnummer (TestPersonnummerRegistry), TestPatientIdSource and TestPatientIds (the random DCST4 Patient ID with its birth date and sex), names, identifiers, UID sources, TestPatientNaming
+  Pipeline\         IImageSource, StoreRun (transcode, save, send), LossyCompressionSettings (the encoders' parameters), TransferSyntaxOption and TransferSyntaxFamily (the list of Generate & Send, by codec family), RunSummary, ExamSizeEstimator, ImagePreview (the first frame of one sample image, compressed, decoded and rendered to BGRA bytes with fo-dicom's RawImageManager, for the App's preview), TagPreview (the first object made and encoded as a run does, listed as TagPreviewRow with depth, tag, VR, name and value, for the App's tags preview), TransferSyntaxConverter (which encodes a multi-frame image frame by frame, and sends JPEG XL and H.264 to the encoders below)
   Codecs\           OwnCodecs: which syntaxes DCST4 encodes itself, which are video, and which can be decoded
     JpegXl\         JpegXlEncoder (lossless JPEG XL codestream), JxlPrefixCode, JxlBitWriter, JpegXlFrameCodec (one DICOM frame to one codestream)
     Video\          H264Encoder (H.264 in MP4 with the encoder of Windows, and a decoder for checks), MediaFoundation.cs (the COM interop)
@@ -839,7 +858,7 @@ src\DCST4.Core\     No WPF reference
   Reporting\        RunFile (reads a result file back), RunReportWriter and ComparisonReportWriter (HTML), HtmlWriter (the one place where text is encoded), SvgChart, VendorFingerprint, RunComparer, ReportFiles, ResultCleaner (deletes old result files)
   Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestGroups, TestResult, ResultFileWriter
     Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category, PerformanceTests.cs the Performance category
-src\DCST4.App\      WPF app. HelpWindow.xaml.cs holds the help and its quick search. Infrastructure\SplitRowPanel lays out the Exam tab's compression row, with Estimated size at its right. PreviewWindow.xaml shows the Exam tab's image preview, one window reused, opened through MainViewModel.ShowImagePreview. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Test settings dialog is TestSettingsDialog.xaml with ViewModels\TestSettingsViewModel.cs, a copy applied at OK, and the Performance settings dialog PerformanceSettingsDialog.xaml with ViewModels\PerformanceSettingsViewModel.cs. The Test and Performance Results tab of SettingsDialog.xaml is ViewModels\ResultSettingsViewModel.cs, applied at OK in the same way. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs, the Compare runs dialog CompareRunsDialog.xaml with ViewModels\CompareRunsViewModel.cs
+src\DCST4.App\      WPF app. HelpWindow.xaml.cs holds the help and its quick search. Infrastructure\SplitRowPanel lays out the Exam tab's compression row, with Estimated size at its right. PreviewWindow.xaml shows the Exam tab's image preview, one window reused, opened through MainViewModel.ShowImagePreview, and TagPreviewWindow.xaml its tags preview with the filter and Copy, opened through MainViewModel.ShowTagPreview. Both previews validate the Exam tab through MainViewModel.TryBuildPreviewRequest. The Patient ID setting is Settings.TestPatientIdSource, read by MainViewModel for Generate & Send and put in TestRunOptions.PatientIds for the Tests and Performance tabs. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Test settings dialog is TestSettingsDialog.xaml with ViewModels\TestSettingsViewModel.cs, a copy applied at OK, and the Performance settings dialog PerformanceSettingsDialog.xaml with ViewModels\PerformanceSettingsViewModel.cs. The Test and Performance Results tab of SettingsDialog.xaml is ViewModels\ResultSettingsViewModel.cs, applied at OK in the same way. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs, the Compare runs dialog CompareRunsDialog.xaml with ViewModels\CompareRunsViewModel.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
 tools\              List refresh script
@@ -971,7 +990,7 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe multiframe
 # Only the tests of the transfer syntax list, Deflated, JPEG XL and H.264
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe syntaxes
 
-# Only the tests of realistic images, the lossy compression settings and the image preview
+# Only the tests of realistic images, the lossy compression settings, the image preview and the Core tags preview
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe realism
 
 # The Exam tab with a multi-frame object, drawn to a PNG at the window's smallest size
@@ -1083,6 +1102,19 @@ What this means for a reader: compare a system with itself only over several run
 | Series of a Performance test, written as it runs | Next to the result files, as `DCST4-run-<start>-<test id>.csv`, and for the soak also `-windows.csv` |
 
 ## Changelog
+
+### 1.13.0
+
+New:
+
+- **Patient ID in generated objects**, on the Identifiers tab of **File > Settings**: a **random ID**, `DCST4` and ten digits with a random birth date in the age range and a random sex, or a **Swedish test personnummer** from Skatteverket's list. The tab says where the personnummer come from, with the source and fetch date of the list built into the program. The setting applies to Generate & Send, the Tests tab and the Performance tab
+- `DCST4.Cli.exe run` and `generate` take `--patient-id random|personnummer`. A dataset's manifest records the choice as `patientIds`
+- **Tags preview** on the Exam tab: the **Tags preview...** button beside Image preview lists every DICOM tag of the first object as it would be sent, in the selected transfer syntax with the lossy settings: the File Meta Information, then the dataset with its sequences, items and private tags. Long values are cut and binary values shown as their size. The list can be filtered by tag, name or value and copied as tab-separated text. It works for every object type, DOC and SR included, and can be cancelled. Nothing is sent or saved
+
+Changed:
+
+- An Auto Patient ID is now random by default, `DCST4` and ten digits, in Generate & Send, the tests and the command line. Choose **Swedish test personnummer** in Settings, or `--patient-id personnummer`, to get personnummer as before. With that choice the objects, files and a seeded dataset's UIDs are the same as in 1.12.0
+- A random DCST4 Patient ID gives no warning that it is not on the list of test personnummer. Other IDs that are not on the list still do
 
 ### 1.12.0
 

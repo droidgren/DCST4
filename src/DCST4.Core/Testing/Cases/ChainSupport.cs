@@ -66,6 +66,7 @@ namespace DCST4.Core.Testing.Cases
                 Seed = context.Session.SeedFor(purpose),
                 UidRoot = context.Profile.UidRoot,
                 PatientNaming = context.PatientNaming,
+                PatientIds = context.Session.Options.PatientIds,
                 Rows = Matrix,
                 Columns = Matrix,
                 TransferSyntax = syntax,

@@ -69,6 +69,70 @@ namespace DCST4.Tests
             Check("Cancelled before it starts", cancelled);
         }
 
+        /// <summary>1.13.0: the tags preview, every tag of the first object as it would be sent.</summary>
+        public static void RunTags(Action<string, bool, string> check)
+        {
+            _check = check;
+            Console.WriteLine("\nTags preview");
+
+            var ctRequest = Request(ModalityCatalog.Find("CT"), 128, 96);
+            var ct = TagPreview.Build(ctRequest, DicomTransferSyntax.ExplicitVRLittleEndian, CancellationToken.None);
+            Func<TagPreviewResult, string, TagPreviewRow> row = (result, tag) => result.Rows.FirstOrDefault(r => r.Tag == tag);
+            Check("Tags: File Meta Information first, marked as such", ct.Rows.Count > 0 && ct.Rows[0].Tag.StartsWith("(0002,", StringComparison.Ordinal) && ct.Rows[0].IsFileMeta
+                && ct.Rows.Where(r => r.Tag.StartsWith("(0002,", StringComparison.Ordinal)).All(r => r.IsFileMeta) && ct.Rows.Where(r => r.IsFileMeta).All(r => r.Tag.StartsWith("(0002,", StringComparison.Ordinal)), ct.Rows.FirstOrDefault()?.Tag);
+            Check("Tags: the transfer syntax in the File Meta Information", row(ct, "(0002,0010)")?.Value == DicomTransferSyntax.ExplicitVRLittleEndian.UID.UID, row(ct, "(0002,0010)")?.Value);
+            Check("Tags: the Patient ID of the identity", row(ct, "(0010,0020)")?.Value == ctRequest.Identity.PatientId && ct.PatientId == ctRequest.Identity.PatientId, row(ct, "(0010,0020)")?.Value);
+            Check("Tags: the name and VR from the dictionary", row(ct, "(0010,0020)")?.Name == "Patient ID" && row(ct, "(0010,0020)")?.Vr == "LO", row(ct, "(0010,0020)")?.Name);
+            Check("Tags: Manufacturer DCST4", row(ct, "(0008,0070)")?.Value == "DCST4", row(ct, "(0008,0070)")?.Value);
+            Check("Tags: Pixel Data as its size", row(ct, "(7FE0,0010)")?.Value == "(" + (128 * 96 * 2).ToString("#,0", System.Globalization.CultureInfo.InvariantCulture) + " bytes)", row(ct, "(7FE0,0010)")?.Value);
+            Check("Tags: binary numbers as numbers, Rows and Columns", row(ct, "(0028,0010)")?.Value == "128" && row(ct, "(0028,0011)")?.Value == "96" && row(ct, "(0028,0010)")?.Vr == "US",
+                row(ct, "(0028,0010)")?.Value + " x " + row(ct, "(0028,0011)")?.Value);
+            Check("Tags: multi-valued numbers with a backslash", (row(ct, "(0020,0037)")?.Value ?? string.Empty).Split('\\').Length == 6, row(ct, "(0020,0037)")?.Value);
+            Check("Tags: in tag order within the dataset", ct.Rows.Where(r => r.Depth == 0 && !r.IsFileMeta).Select(r => r.Tag).SequenceEqual(ct.Rows.Where(r => r.Depth == 0 && !r.IsFileMeta).Select(r => r.Tag).OrderBy(t => t, StringComparer.Ordinal)), null);
+            Check("Tags: the description names the object, syntax and size", ct.Description.Contains("CT") && ct.Description.Contains("the first of 1 object") && ct.Description.Contains(DicomTransferSyntax.ExplicitVRLittleEndian.UID.Name) && ct.Description.Contains("KB"), ct.Description);
+
+            var several = Request(ModalityCatalog.Find("CT"), 128, 96);
+            several.SeriesCount = 3;
+            several.ImagesPerSeries = 50;
+            var sw = Stopwatch.StartNew();
+            var first = TagPreview.Build(several, DicomTransferSyntax.ExplicitVRLittleEndian, CancellationToken.None);
+            Check("Tags: of an exam of 150 images, only the first is made", first.Description.Contains("the first of 150 objects") && row(first, "(0020,0013)")?.Value == "1" && sw.Elapsed < TimeSpan.FromSeconds(10), sw.ElapsedMilliseconds + " ms, " + first.Description);
+
+            var lossyRequest = Request(ModalityCatalog.Find("CR"), 128, 128);
+            lossyRequest.BitsStored = 8;
+            lossyRequest.Lossy = new LossyCompressionSettings { JpegQuality = 50 };
+            var lossy = TagPreview.Build(lossyRequest, DicomTransferSyntax.JPEGProcess1, CancellationToken.None);
+            Check("Tags: a lossy syntax as it is sent", row(lossy, "(0002,0010)")?.Value == DicomTransferSyntax.JPEGProcess1.UID.UID && row(lossy, "(0028,2110)")?.Value == "01", row(lossy, "(0028,2110)")?.Value);
+            Check("Tags: encapsulated Pixel Data as fragments", (row(lossy, "(7FE0,0010)")?.Value ?? string.Empty).StartsWith("(encapsulated, ", StringComparison.Ordinal), row(lossy, "(7FE0,0010)")?.Value);
+            Check("Tags: a lossy setting in Derivation Description", (row(lossy, "(0008,2111)")?.Value ?? string.Empty).Contains("50"), row(lossy, "(0008,2111)")?.Value);
+
+            var payloadRequest = Request(ModalityCatalog.Find("US"), 128, 128);
+            payloadRequest.PrivatePayloadBytes = 1000;
+            var payload = TagPreview.Build(payloadRequest, DicomTransferSyntax.ExplicitVRLittleEndian, CancellationToken.None);
+            Check("Tags: a private tag with its creator", payload.Rows.Any(r => r.Name.StartsWith("Private tag (", StringComparison.Ordinal)) && payload.Rows.Any(r => r.Name == "Private Creator"), null);
+
+            var srModality = ModalityCatalog.ObjectsOf(ModalityCatalog.Find("SR"))[0].Image;
+            var sr = TagPreview.Build(Request(srModality, 128, 128), DicomTransferSyntax.ExplicitVRLittleEndian, CancellationToken.None);
+            var content = sr.Rows.FirstOrDefault(r => r.Tag == "(0040,A730)");
+            Check("Tags: SR works, though it has no pixels", sr.Rows.Count > 20 && row(sr, "(7FE0,0010)") == null, sr.Description);
+            Check("Tags: a sequence with its items, one level deeper each", content != null && System.Text.RegularExpressions.Regex.IsMatch(content.Value, @"^\d+ items?$")
+                && sr.Rows.Any(r => r.Depth == content.Depth + 1 && r.Name == "Item 1") && sr.Rows.Any(r => r.Depth == content.Depth + 2), content?.Value);
+            Check("Tags: nested sequences go deeper", sr.Rows.Max(r => r.Depth) >= 3, sr.Rows.Max(r => r.Depth).ToString());
+            Check("Tags: no value is longer than the limit", sr.Rows.Concat(ct.Rows).All(r => r.Value.Length <= TagPreview.MaxValueLength + 1), null);
+
+            var cancelled = false;
+            try
+            {
+                using (var cts = new CancellationTokenSource())
+                {
+                    cts.Cancel();
+                    TagPreview.Build(Request(ModalityCatalog.Find("CT"), 128, 128), DicomTransferSyntax.ExplicitVRLittleEndian, cts.Token);
+                }
+            }
+            catch (OperationCanceledException) { cancelled = true; }
+            Check("Tags: cancelled before it starts", cancelled);
+        }
+
         private static void Check(string name, bool ok, string detail = null) => _check(name, ok, detail);
 
         private static PreviewImage Render(ModalityProfile modality, DicomTransferSyntax syntax, int rows, int columns, LossyCompressionSettings lossy = null, int frames = 1, int bits = 0)

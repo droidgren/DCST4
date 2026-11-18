@@ -101,7 +101,7 @@
                     <Paragraph Style="{StaticResource H2}">A first exam in four steps</Paragraph>
                     <List MarkerStyle="Decimal">
                         <ListItem><Paragraph>Under <Bold>Server</Bold>, enter the server's <Bold>AET</Bold>, <Bold>IP/Hostname</Bold> and <Bold>Port</Bold>. Try <Bold>Ping</Bold> and <Bold>Dicom Echo</Bold>.</Paragraph></ListItem>
-                        <ListItem><Paragraph>Under <Bold>Exam</Bold>, select the modality (CT, MR, CR, DX, US, XA, RF, MG, PT or NM), which of its images under <Bold>Object</Bold>, the exam type, and how many images you want. 1 series with 1 image gives a single test image. <Bold>Estimated size</Bold> shows how much data that is, and <Bold>Image preview...</Bold> what the first image looks like.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Under <Bold>Exam</Bold>, select the modality (CT, MR, CR, DX, US, XA, RF, MG, PT or NM), which of its images under <Bold>Object</Bold>, the exam type, and how many images you want. 1 series with 1 image gives a single test image. <Bold>Estimated size</Bold> shows how much data that is, <Bold>Tags preview...</Bold> every tag of the first object, and <Bold>Image preview...</Bold> what the first image looks like.</Paragraph></ListItem>
                         <ListItem><Paragraph>Click <Bold>Generate &amp; Send</Bold>, and follow each image in the <Bold>Results</Bold> tab.</Paragraph></ListItem>
                         <ListItem><Paragraph>Look the exam up in the PACS viewer. To compare the image with the tags, turn on burned-in text under <Bold>File &gt; Settings</Bold> first.</Paragraph></ListItem>
                     </List>
@@ -202,8 +202,10 @@
                                 <TableCell><Paragraph>Which image of the modality to generate: Single frame, or a multi-frame one where DCST4 has it. US has a cine loop and Enhanced US Volume, XA a cine run and Enhanced XA, RF a fluoro loop and Enhanced XRF, CT and MR their enhanced image and MG Breast Tomosynthesis. CR, DX, PT and NM have one image each. OT is Secondary Capture, DOC an Encapsulated PDF, and SR a Basic Text SR or Enhanced SR report. DOC and SR have no pixels, so the matrix, bits, frames and private payload are greyed out, and only Implicit VR, Explicit VR and Deflated can be chosen as transfer syntax.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Estimated size</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Under Allow fallback in the right column, or at the right end of the compression value's row when a lossy syntax is selected: how much data the whole exam will be. It updates as you change the other fields.</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Tags preview...</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>In the bottom right corner: lists every tag of the first object as it would be sent. See <Italic>Tags preview</Italic> below.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Image preview...</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>In the bottom right corner: shows the first image as it would be sent. See <Italic>Image preview</Italic> below.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>Beside it: shows the first image as it would be sent. See <Italic>Image preview</Italic> below.</Paragraph></TableCell></TableRow>
                         </TableRowGroup>
                     </Table>
                     <Paragraph Style="{StaticResource H2}">Estimated size</Paragraph>
@@ -227,6 +229,19 @@
                         <ListItem><Paragraph>JPEG XL and H.264 are shown before compression, with a note, since DCST4 cannot decode them.</Paragraph></ListItem>
                         <ListItem><Paragraph>DOC and SR have no pixels, so the button is greyed out for them. Values that a run would refuse are reported in the same way, and <Bold>Cancel</Bold> stops a slow preview.</Paragraph></ListItem>
                         <ListItem><Paragraph>Another preview replaces the picture in the open window.</Paragraph></ListItem>
+                    </List>
+                    <Paragraph Style="{StaticResource H2}">Tags preview</Paragraph>
+                    <Paragraph>
+                        <Bold>Tags preview...</Bold>, beside Image preview, generates the first object with the values as they
+                        stand, puts it in the selected transfer syntax with the lossy settings as a run does, and lists every
+                        tag it has, with its VR, its name from the DICOM dictionary and its value. Nothing is sent or saved.
+                    </Paragraph>
+                    <List>
+                        <ListItem><Paragraph>Group 0002, the File Meta Information of a saved file, comes first. It is not sent with C-STORE.</Paragraph></ListItem>
+                        <ListItem><Paragraph>A sequence shows how many items it has, and each item and its elements are indented under it. Private tags are named with their private creator.</Paragraph></ListItem>
+                        <ListItem><Paragraph>Values longer than 256 characters are cut. Binary values, such as Pixel Data or a private payload, are shown as their size, and encapsulated Pixel Data as its fragments.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Filter</Bold> shows only the rows whose tag, name or value contains the text, with the sequence and item above a match. A tag can be typed as (0010,0020), 0010,0020 or 00100020. <Bold>Copy</Bold> puts the rows shown on the clipboard as tab-separated text.</Paragraph></ListItem>
+                        <ListItem><Paragraph>It works for every object type, DOC and SR included. Values that a run would refuse are reported, and <Bold>Cancel</Bold> stops a long cine loop while it is encoded.</Paragraph></ListItem>
                     </List>
                     <Paragraph Style="{StaticResource H2}">Multi-frame images</Paragraph>
                     <Paragraph>
@@ -278,7 +293,8 @@
                         a run so you can look the exam up in PACS. The values a run used are also written to the
                         <Bold>Log</Bold> tab. The Auto patient name is DCST4^TEST^number by default, which is plainly not
                         a person, or an invented Swedish name if you choose that on the <Bold>Identifiers</Bold> tab under
-                        <Bold>File &gt; Settings</Bold>.
+                        <Bold>File &gt; Settings</Bold>. The Auto Patient ID is random by default, or a Swedish test
+                        personnummer, as chosen on the same tab.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Running again</Paragraph>
                     <Paragraph>
@@ -294,14 +310,21 @@
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Patient IDs</Paragraph>
                     <Paragraph>
-                        Random Patient IDs only ever come from Skatteverket's official list of test personnummer, built
-                        into the program. Birth date and sex are taken from the number. The list also holds future dates
-                        and people born in the 1890s, so random selection is limited to the age range below the fields,
-                        0 to 100 by default.
+                        <Bold>Patient ID in generated objects</Bold>, on the <Bold>Identifiers</Bold> tab under
+                        <Bold>File &gt; Settings</Bold>, decides where an Auto Patient ID comes from:
+                    </Paragraph>
+                    <List>
+                        <ListItem><Paragraph><Bold>Random ID</Bold>, the default: DCST4 and ten random digits, such as DCST40482917365. It starts with letters, so it cannot be read as a personnummer. Birth date is a random day within the age range below the fields, and sex is M or F at random.</Paragraph></ListItem>
+                        <ListItem><Paragraph><Bold>Swedish test personnummer</Bold>: a number from Skatteverket's official list of test personnummer, numbers that are never given to a real person. The list is built into the program, and the Settings tab shows where it comes from and when it was fetched. Birth date and sex are taken from the number. The list also holds future dates and people born in the 1890s, so random selection is limited to the age range, 0 to 100 by default.</Paragraph></ListItem>
+                    </List>
+                    <Paragraph>
+                        The setting applies to Generate &amp; Send and to the objects the tests on the Tests and Performance
+                        tabs send. A personnummer is never made up by the program.
                     </Paragraph>
                     <Paragraph Style="{StaticResource Note}">
-                        If you enter a Patient ID that is not on the list, the program warns you. It is still used, but
-                        make sure it is not a real person's number.
+                        If you enter a Patient ID that is neither on the list nor a random DCST4 ID, the program warns you.
+                        It is still used, but make sure it is not a real person's number. A typed personnummer still gives
+                        the birth date and sex.
                     </Paragraph>
                 </Section>
 
@@ -1217,14 +1240,16 @@
                         compressions work.
                     </Paragraph>
                     <Paragraph>
-                        Patient IDs always come from the list of test personnummer. The name is DCST4^TEST^number by
+                        Patient IDs are DCST4 and ten random digits by default, or Skatteverket's test personnummer with
+                        <Italic>--patient-id personnummer</Italic> or the Patient ID setting on the <Bold>Identifiers</Bold>
+                        tab under <Bold>File &gt; Settings</Bold>. The name is DCST4^TEST^number by
                         default, which is plainly not a person. For a Swedish name instead, choose it on the
                         <Bold>Identifiers</Bold> tab under <Bold>File &gt; Settings</Bold>, or use
                         <Italic>--patient-naming RegistrySwedishName</Italic> on the command line.
                     </Paragraph>
                     <Paragraph Style="{StaticResource Note}">
-                        The same setting gives the Auto patient name of Generate &amp; Send, and of the objects that the tests
-                        on the Tests and Performance tabs send. A name typed on the Identifiers tab always wins.
+                        The same settings give the Auto patient name and Patient ID of Generate &amp; Send, and of the objects
+                        that the tests on the Tests and Performance tabs send. A value typed on the Identifiers tab always wins.
                     </Paragraph>
                 </Section>
 
@@ -1251,7 +1276,7 @@
                             <TableRow><TableCell><Paragraph><Bold>Network: Response (DIMSE) timeout</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How long to wait for each response to a C-ECHO or C-STORE request (default 60 s, 0 = no limit).</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Identifiers</Bold></Paragraph></TableCell>
-                                <TableCell><Paragraph>Whether to draw new Auto values after each run, and how an Auto patient name is made, in Generate &amp; Send and in the tests: DCST4^TEST^number (the default) or a Swedish name.</Paragraph></TableCell></TableRow>
+                                <TableCell><Paragraph>Whether to draw new Auto values after each run; where an Auto Patient ID comes from, a random DCST4 ID (the default) or a Swedish test personnummer, with where the personnummer come from; and how an Auto patient name is made: DCST4^TEST^number (the default) or a Swedish name. Both apply to Generate &amp; Send and the tests. See <Italic>Identifiers and Auto values</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Burned-in text</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>See <Italic>Burned-in text</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Images</Bold></Paragraph></TableCell>

@@ -125,6 +125,7 @@ namespace DCST4.Cli
                 Seed = arguments.Seed,
                 SyntaxOverride = arguments.TransferSyntax,
                 Realism = arguments.Realism,
+                PatientIds = arguments.PatientIds,
                 Lossy = arguments.Lossy,
                 IndexWaitSeconds = arguments.IndexWaitSeconds,
                 CommitLingerSeconds = arguments.CommitLingerSeconds,

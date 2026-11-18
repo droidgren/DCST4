@@ -190,7 +190,7 @@ namespace DCST4.Tests
             _check("Max PDU: four different instances, UIDs under the profile's root",
                 Scp.Received.Select(r => r.Dataset.GetSingleValue<string>(DicomTag.SOPInstanceUID)).Distinct().Count() == 4 && attempts.All(a => a.SopInstanceUid.StartsWith("1.2.826.0.1.3680043.10.999.")), null);
             _check("Max PDU: every association released", Scp.Associations.Count == 4 && Scp.Associations.All(a => a.Released), null);
-            _check("Max PDU: Patient ID from the test list", Scp.Received.All(r => DCST4.Core.TestData.TestPersonnummerRegistry.Default.Contains(r.Dataset.GetSingleValue<string>(DicomTag.PatientID))), null);
+            _check("Max PDU: a random DCST4 Patient ID, the default", Scp.Received.All(r => DCST4.Core.TestData.TestPatientIds.IsRandomId(r.Dataset.GetSingleValue<string>(DicomTag.PatientID))), null);
 
             Scp.Reset();
             Scp.StatusFor = _ => DicomStatus.StorageStorageOutOfResources;

@@ -120,6 +120,10 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("MarkedTestName")]
         public string TestPatientNaming { get => (string)this[nameof(TestPatientNaming)]; set => this[nameof(TestPatientNaming)] = value; }
 
+        /// <summary>Where an Auto Patient ID comes from, in Generate &amp; Send and in test-suite datasets: a TestPatientIdSource name.</summary>
+        [UserScopedSetting, DefaultSettingValue("Random")]
+        public string TestPatientIdSource { get => (string)this[nameof(TestPatientIdSource)]; set => this[nameof(TestPatientIdSource)] = value; }
+
         /// <summary>Tags added on top of the fixed identifier fields, serialized as XML.</summary>
         [UserScopedSetting, DefaultSettingValue("")]
         public string AdditionalTags { get => (string)this[nameof(AdditionalTags)]; set => this[nameof(AdditionalTags)] = value; }
