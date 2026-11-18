@@ -1,6 +1,6 @@
 # DCST4 – DICOM C-Store Tester 4
 
-![Version](https://img.shields.io/badge/version-1.13.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Version](https://img.shields.io/badge/version-1.12.0-blue) ![Platform](https://img.shields.io/badge/platform-.NET%20Framework%204.8%20WPF-512BD4) ![fo-dicom](https://img.shields.io/badge/fo--dicom-5.2.6-green) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 A Windows tool for testing a PACS or any DICOM Storage SCP. It generates clearly marked test images that behave like the output of a real modality, and sends them with C-STORE.
 
@@ -1138,24 +1138,6 @@ What this means for a reader: compare a system with itself only over several run
 | Series of a Performance test, written as it runs | Next to the result files, as `DCST4-run-<start>-<test id>.csv`, and for the soak also `-windows.csv` |
 
 ## Changelog
-
-### 1.13.0
-
-New:
-
-- **Send existing files**, on the new **Files** tab next to Exam and Identifiers: the DICOM files of a folder, with or without its subfolders, or of a DICOMDIR, as on a CD or a USB export. While the tab is selected, the Run button reads **Send files**. The tab shows what was found, the transfer syntaxes and modalities, and the files that were skipped and why: not DICOM, without SOP UIDs, a second copy of an instance, or listed in the DICOMDIR but not there. Results has a new column, **Source file**
-- The Files tab chooses **Re-identify as test patients**, the default, or **Send unchanged**, and says what the choice does to the files read. A folder is read as soon as it is chosen, with no question. Re-identified, each patient becomes a test personnummer about as old on the study date and of the same sex, named as under File > Settings; other patient identifiers are removed, accession number and study ID are new per study, other names of people become `DCST4^PERSON`, every UID gets a new one under the UID root with the references between the files kept, and Manufacturer and Image Comments get DCST4's marking. Private tags are kept. Uncompressed pixels get the TEST IMAGE watermark; compressed pixel data is sent byte for byte as in the file, without it. A second send gets new UIDs. Sending unchanged asks first, with the destination
-- The transfer syntax of the Files tab is **As in the files** by default, each file in its own syntax, or any syntax of the list
-- The custom mix of the Performance tab is made of the files while the Files tab is selected: each file once in the pool, every patient as one test patient, in the files' own syntaxes with a presentation context for each SOP class and syntax
-- `DCST4.Cli.exe send-files --source <folder or DICOMDIR>` with `--profile` and/or `--save`, re-identifying unless `--keep-identity` is given
-- In the test harness, `DCST4.Tests.exe files` runs only the new tests, and `filestab <file>` draws the Files tab to a PNG
-
-Changed:
-
-- A send now proposes, when its association opens, every SOP class and syntax that a folder of files will send, not only those of its first four images. Generated exams are proposed as before
-- In a load run, the presentation contexts are per SOP class and transfer syntax, which for the generated mixes is the same as before
-
-Checked by hand with DCMTK 3.7.1, against a local receiver only: `send-files` sent a folder of two generated File-sets, one Explicit VR and one JPEG Lossless, re-identified, to `storescp`, which stored all four files in their own syntaxes; `dcmftest` passes on them, `dcmdump` shows the test patients, new accession numbers and UIDs under the root and DCST4's marking, and `dcm2img` shows the watermark burned into the uncompressed images. Not checked by hand: real modality output, and a DICOMDIR from a real CD or USB export.
 
 ### 1.12.0
 
