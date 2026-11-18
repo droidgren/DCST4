@@ -109,6 +109,37 @@ namespace DCST4.Core.TestData
             return candidates[random.Next(candidates.Length)];
         }
 
+        /// <summary>
+        /// Picks a person who was close to <paramref name="age"/> on <paramref name="onDate"/>, and of the given sex ("M" or
+        /// "F") when the list has one. Used when real files are re-identified: the test patient is born before the study
+        /// and is about as old as the patient replaced. The age is widened step by step until somebody is found, then the
+        /// sex is let go, and with no age known anybody aged 0 to 100 on that date is picked.
+        /// </summary>
+        public Personnummer PickNear(Random random, DateTime onDate, int? age, string sex)
+        {
+            var sexes = sex == "M" || sex == "F" ? new[] { sex, null } : new string[] { null };
+            foreach (var wanted in sexes)
+            {
+                if (age.HasValue)
+                {
+                    foreach (var window in AgeWindows)
+                    {
+                        var near = Candidates(onDate, Math.Max(0, age.Value - window), age.Value + window, wanted);
+                        if (near.Length > 0) return near[random.Next(near.Length)];
+                    }
+                }
+                var any = Candidates(onDate, 0, 100, wanted);
+                if (any.Length > 0) return any[random.Next(any.Length)];
+            }
+            return Pick(random, onDate, 0, 100);
+        }
+
+        private static readonly int[] AgeWindows = { 0, 1, 2, 5, 10, 20 };
+
+        /// <summary>Not cached, unlike <see cref="Pick(Random, DateTime, int, int)"/>: every study date and age of a folder would keep a list.</summary>
+        private Personnummer[] Candidates(DateTime today, int minAge, int maxAge, string sex) =>
+            _all.Where(p => (sex == null || p.Sex == sex) && IsWithinAge(p.BirthDate, today, minAge, maxAge)).ToArray();
+
         public static int AgeOn(DateTime birthDate, DateTime date)
         {
             var age = date.Year - birthDate.Year;

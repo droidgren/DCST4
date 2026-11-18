@@ -1,3 +1,4 @@
+using DCST4.Core.Files;
 using FellowOakDicom;
 using System;
 using System.Collections.Generic;
@@ -55,8 +56,36 @@ namespace DCST4.Core.Performance
         public IReadOnlyList<DataMixEntry> Entries { get; }
         public int PoolPerEntry { get; set; } = DefaultPoolPerEntry;
 
-        /// <summary>The mean over the object types, uncompressed. For a compressed mix it is an upper bound.</summary>
-        public long EstimatedBytesPerObject => Entries.Count == 0 ? 0 : (long)Entries.Average(e => (double)e.EstimatedBytes);
+        /// <summary>The mean over the object types, uncompressed. For a compressed mix it is an upper bound. For files, their mean size on disk.</summary>
+        public long EstimatedBytesPerObject => Files != null
+            ? (Files.Files.Count == 0 ? 0 : Files.TotalBytes / Files.Files.Count)
+            : Entries.Count == 0 ? 0 : (long)Entries.Average(e => (double)e.EstimatedBytes);
+
+        /// <summary>
+        /// Set for a custom mix of existing files from the Files tab instead of generated objects. Each file is one object of
+        /// the pool, re-identified as one test patient, and sent in <see cref="FilesSyntax"/>, or in its own syntax when that is null.
+        /// </summary>
+        public FolderScan Files { get; private set; }
+
+        /// <summary>The syntax files are put in before they go into the pool. Null keeps each file's own.</summary>
+        public DicomTransferSyntax FilesSyntax { get; private set; }
+
+        /// <summary>The files are sent in more than one syntax, so <see cref="Syntax"/> is only the most common of them.</summary>
+        public bool HasMixedSyntaxes => Files != null && FilesSyntax == null && Files.TransferSyntaxes.Count > 1;
+
+        /// <summary>
+        /// A custom mix of the files of a folder. The description names the folder, the number of files, their size and
+        /// syntaxes, since two custom runs are compared only if their descriptions are the same.
+        /// </summary>
+        public static DataMix FromFiles(FolderScan scan, DicomTransferSyntax syntax, string syntaxName)
+        {
+            if (scan == null) throw new ArgumentNullException(nameof(scan));
+            var nominal = syntax ?? scan.Files.GroupBy(f => f.TransferSyntax).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault() ?? DicomTransferSyntax.ExplicitVRLittleEndian;
+            var description = string.Format(CultureInfo.InvariantCulture, "Files of {0}: {1} {2} in {3} series, {4}, {5}",
+                scan.Name, scan.Files.Count, scan.Files.Count == 1 ? "file" : "files", scan.SeriesCount, FolderScan.FormatBytes(scan.TotalBytes),
+                syntax == null ? "as in the files (" + string.Join(", ", scan.TransferSyntaxes.Select(FolderScan.SyntaxName)) + ")" : syntaxName ?? syntax.UID.Name);
+            return new DataMix(CustomId, description, nominal) { Files = scan, FilesSyntax = syntax, PoolPerEntry = 1 };
+        }
 
         public override string ToString() => Id;
 

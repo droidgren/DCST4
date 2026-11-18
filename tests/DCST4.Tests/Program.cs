@@ -105,6 +105,12 @@ namespace DCST4.Tests
                 return 0;
             }
 
+            if (args.Length == 2 && args[0] == "filestab")
+            {
+                ViewModelTests.RenderFilesTab(args[1]);
+                return 0;
+            }
+
             if (args.Length == 2 && args[0] == "screenshots")
             {
                 return Screenshots.Run(args[1]);
@@ -149,7 +155,7 @@ namespace DCST4.Tests
                 return _fail == 0 ? 0 : 1;
             }
 
-            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit" || args[0] == "report" || args[0] == "multiframe" || args[0] == "syntaxes" || args[0] == "realism"))
+            if (args.Length == 1 && (args[0] == "retrieve" || args[0] == "commit" || args[0] == "report" || args[0] == "multiframe" || args[0] == "syntaxes" || args[0] == "realism" || args[0] == "files"))
             {
                 try
                 {
@@ -157,6 +163,7 @@ namespace DCST4.Tests
                     {
                         if (args[0] == "multiframe") MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "syntaxes") TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                        if (args[0] == "files") FolderSourceTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                         if (args[0] == "realism") RealismTests.Run(temp, Check);
                         if (args[0] == "realism") PreviewTests.Run(Check);
                         if (args[0] == "report") ReportingTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();
@@ -210,6 +217,7 @@ namespace DCST4.Tests
                     TestDataTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     MultiFrameTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     TransferSyntaxTests.Run(Port, temp, Check).GetAwaiter().GetResult();
+                    FolderSourceTests.Run(Port, temp, Check).GetAwaiter().GetResult();
                     RealismTests.Run(temp, Check);
                     PreviewTests.Run(Check);
                     RetrieveTests.Run(Port, ClosedPort, temp, Check).GetAwaiter().GetResult();

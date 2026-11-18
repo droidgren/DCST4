@@ -15,6 +15,7 @@ namespace DCST4.Cli
             "  DCST4.Cli.exe report --run <file.json> [--out <file.html>]\n" +
             "  DCST4.Cli.exe compare --runs <a.json> <b.json> [<c.json> ...] [--threshold <percent>] [--out <file.html>]\n" +
             "  DCST4.Cli.exe generate --dataset <id> --out <folder> [options below]\n" +
+            "  DCST4.Cli.exe send-files --source <folder or DICOMDIR> (--profile <file> | --save <folder>) [options below]\n" +
             "  DCST4.Cli.exe list-datasets\n" +
             "  DCST4.Cli.exe list-codecs [--log-dir <folder>]\n" +
             "  DCST4.Cli.exe list-mixes\n" +
@@ -75,12 +76,23 @@ namespace DCST4.Cli
             "  --charset default|empty|latin1|utf8\n" +
             "  --edge private,long,nested\n" +
             "\n" +
+            "Options of send-files, which sends existing DICOM files, re-identified as test patients unless told otherwise:\n" +
+            "  --profile <file>                 Send to the destination of this profile, with its UID root\n" +
+            "  --save <folder>                  Also, or instead, save them there as a File-set with a DICOMDIR\n" +
+            "  --keep-identity                  Send the files unchanged: real patient, own UIDs, no marking. Off by default\n" +
+            "  --transfer-syntax as-is|<name>   as-is (default) keeps each file's own syntax and compressed pixel data\n" +
+            "  --allow-fallback                 Send in Implicit VR if the destination does not accept a file's syntax\n" +
+            "  --uid-root <root>                The root of the new UIDs. Default: the profile's, else 2.25\n" +
+            "  --no-subfolders                  Only the files of the folder itself. A DICOMDIR at its top lists the files instead\n" +
+            "  A re-identified file gets the TEST IMAGE watermark only if its pixels are uncompressed.\n" +
+            "\n" +
             "report writes a run as one HTML file that is complete in itself, beside the JSON file unless --out says otherwise.\n" +
             "run writes the same file by itself. compare takes the first run as the baseline and writes DCST4-compare-<time>.html\n" +
             "in the folder of the last run, unless --out says otherwise.\n" +
             "  --threshold <percent>   How much lower a throughput or higher a p95 latency may be before it is a regression. Default 10\n" +
             "\n" +
             "Exit codes of run: 0 no FAIL or TOOL_ERROR, 1 at least one of those, 2 bad arguments, profile or output folder, 130 cancelled.\n" +
+            "Exit codes of send-files: 0 every file stored or saved, 1 at least one not, 2 bad arguments, profile or source, 130 cancelled.\n" +
             "Exit codes of compare: 0 no regression, 1 at least one regression, 2 bad arguments or a file that cannot be read.\n" +
             "Exit codes of report: 0 written, 2 bad arguments or a file that cannot be read or written.";
 

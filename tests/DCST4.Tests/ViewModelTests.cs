@@ -110,6 +110,7 @@ namespace DCST4.Tests
                         await RunTestSuite(port, closedPort, temp, check);
                         await RunReports(port, temp, check);
                         await RunPerformanceTab(port, temp, check);
+                        await RunFilesTab(port, temp, check);
                         await RunResetSettings(port, check);
                     }
                     catch (Exception ex) { failure = ex; }
@@ -1180,7 +1181,7 @@ namespace DCST4.Tests
             help.UpdateLayout();
             try
             {
-                check("All the topics are listed", help.Topics.Count == 23 && help.Topics.Any(t => t.Title == "Realistic images and lossy compression") && help.Topics.Any(t => t.Title == "Limits and faults") && help.Topics.Any(t => t.Title == "Performance") && help.Topics.Any(t => t.Title == "Reports and comparison")
+                check("All the topics are listed", help.Topics.Count == 24 && help.Topics.Any(t => t.Title == "Sending files from a folder") && help.Topics.Any(t => t.Title == "Realistic images and lossy compression") && help.Topics.Any(t => t.Title == "Limits and faults") && help.Topics.Any(t => t.Title == "Performance") && help.Topics.Any(t => t.Title == "Reports and comparison")
                     && help.Topics.Any(t => t.Title == "Transfer syntaxes"), help.Topics.Count.ToString());
                 check("Topic titles are unique", help.Topics.Select(t => t.Title).Distinct().Count() == help.Topics.Count, null);
 
@@ -1453,6 +1454,91 @@ namespace DCST4.Tests
             var settings = (System.Configuration.ApplicationSettingsBase)typeof(MainViewModel).Assembly.GetType("DCST4.Properties.Settings")
                 .GetProperty("Default", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static).GetValue(null);
             return settings[name];
+        }
+
+        /// <summary>The Files tab: reading a folder, the question after it, sending, and the custom mix made of the files.</summary>
+        private static async Task RunFilesTab(int port, string temp, Action<string, bool, string> check)
+        {
+            Console.WriteLine("\nFiles tab");
+            var h = new Harness(port);
+            var vm = h.Vm;
+            var savedFolder = vm.Files.Folder;
+            var savedMix = vm.Performance.SelectedMix;
+            try
+            {
+                var fixture = FolderSourceTests.MakeFixture(Path.Combine(temp, "vm-files"));
+                check("Exam tab selected: the button generates", !vm.IsFilesSource && vm.RunButtonText == "Generate & Send", vm.RunButtonText);
+                vm.SelectedInputTab = MainViewModel.FilesTabIndex;
+                check("Files tab selected: the button sends the files", vm.IsFilesSource && vm.RunButtonText == "Send files", vm.RunButtonText);
+                vm.SendImages = false;
+                vm.SaveImages = true;
+                check("Files tab, save only: Save files", vm.RunButtonText == "Save files", vm.RunButtonText);
+                vm.SaveImages = false;
+                vm.SendImages = true;
+
+                vm.Performance.SelectedMix = vm.Performance.Mixes.First(m => m.IsCustom);
+                check("Custom mix before a folder is read: says so", vm.Performance.MixDescription.StartsWith("From the Files tab: nothing to send yet", StringComparison.Ordinal), vm.Performance.MixDescription);
+
+                vm.Files.Folder = string.Empty;
+                Scp.Reset();
+                await h.Execute(vm.RunCommand);
+                check("Send files before a folder is read: refused with a message, nothing sent", Scp.StoreCount == 0 && h.Messages.Any(m => m.Contains("no files to send")), string.Join("; ", h.Messages));
+                h.Messages.Clear();
+
+                vm.Files.Folder = fixture.Folder;
+                await h.Execute(vm.ReadFilesCommand);
+                check("Read: the files are found, with no message", vm.Files.HasFiles && vm.Files.Scan.Files.Count == 6 && vm.Files.IsScanCurrent && h.Messages.Count == 0, string.Join("; ", h.Messages));
+                check("Read: re-identify is chosen, and the tab says what it does", vm.Files.Reidentify && !vm.Files.KeepUnchanged && vm.Files.EffectText.Contains("test patient")
+                    && vm.Files.SkippedHeader == "Skipped: 2" && vm.Files.Skipped.Count == 2, vm.Files.EffectText);
+                check("Read: As in the files is the transfer syntax", vm.Files.SelectedSyntax.Syntax == null && vm.Files.SelectedSyntax.Name == FilesViewModel.AsInFilesName, null);
+                check("Custom mix: made of the files while the Files tab is selected", vm.Performance.MixDescription.StartsWith("From the Files tab: Files of vm-files: 6 files", StringComparison.Ordinal), vm.Performance.MixDescription);
+
+                Scp.Reset();
+                await h.Execute(vm.RunCommand);
+                var received = Scp.Received.ToList();
+                check("Send files: all six stored, re-identified", vm.Results.Count == 6 && vm.Results.All(r => r.State == StoreState.Success) && received.Count == 6
+                    && received.All(r => Core.TestData.TestPersonnummerRegistry.Default.Contains(r.Dataset.GetString(DicomTag.PatientID))), vm.StatusText);
+                check("Send files: each result names its source file", vm.Results.All(r => r.SourcePath != null && r.SourcePath.StartsWith(fixture.Folder, StringComparison.OrdinalIgnoreCase)), null);
+
+                vm.Files.KeepUnchanged = true;
+                check("Send unchanged chosen: the tab says what it does", !vm.Files.Reidentify && vm.Files.EffectText.Contains("real patient"), vm.Files.EffectText);
+                var confirmations = new List<string>();
+                vm.Confirm = question => { confirmations.Add(question); return false; };
+                Scp.Reset();
+                await h.Execute(vm.RunCommand);
+                check("Send unchanged: asked again, naming the destination, and a No sends nothing", confirmations.Count == 1 && confirmations[0].Contains("unchanged to MOCKSCP at 127.0.0.1:" + port) && Scp.StoreCount == 0, string.Join("; ", confirmations));
+                vm.Confirm = question => true;
+                await h.Execute(vm.RunCommand);
+                check("Send unchanged, confirmed: the original patients arrive", Scp.Received.Count(r => r.Dataset.GetString(DicomTag.PatientID) == "ORIG-A") == 5, null);
+
+                // A typed path that was never read is read by the Run button, and starts at re-identify again.
+                vm.Files.IncludeSubfolders = false;
+                check("Subfolders switched off: the scan is no longer current", !vm.Files.IsScanCurrent, null);
+                vm.Files.IncludeSubfolders = true;
+                vm.Files.Clear();
+                Scp.Reset();
+                await h.Execute(vm.RunCommand);
+                check("Send files with a typed path not yet read: read first, re-identified and sent", vm.Files.IsScanCurrent && vm.Files.Reidentify && Scp.StoreCount == 6
+                    && Scp.Received.All(r => Core.TestData.TestPersonnummerRegistry.Default.Contains(r.Dataset.GetString(DicomTag.PatientID))), vm.StatusText);
+
+                vm.Files.Folder = Path.Combine(temp, "vm-files-none");
+                Directory.CreateDirectory(vm.Files.Folder);
+                h.Messages.Clear();
+                await h.Execute(vm.ReadFilesCommand);
+                check("Read an empty folder: said on the tab, no message", !vm.Files.HasFiles && h.Messages.Count == 0 && vm.Files.SummaryText.StartsWith("No DICOM files", StringComparison.Ordinal), vm.Files.SummaryText);
+                vm.Files.Folder = Path.Combine(temp, "vm-files-missing");
+                await h.Execute(vm.ReadFilesCommand);
+                check("Read a folder that is not there: said on the tab, no message", !vm.Files.HasFiles && h.Messages.Count == 0 && vm.Files.SummaryText.StartsWith("Could not be read", StringComparison.Ordinal), vm.Files.SummaryText);
+
+                vm.SelectedInputTab = 0;
+                check("Back on the Exam tab: the button and the custom mix are the Exam tab's again", vm.RunButtonText == "Generate & Send" && vm.Performance.MixDescription.StartsWith("From the Exam tab:", StringComparison.Ordinal), vm.Performance.MixDescription);
+            }
+            finally
+            {
+                vm.Files.Folder = savedFolder;
+                vm.Performance.SelectedMix = savedMix;
+                Scp.Reset();
+            }
         }
 
         private static async Task RunPerformanceTab(int port, string temp, Action<string, bool, string> check)
@@ -1873,6 +1959,107 @@ namespace DCST4.Tests
             await CheckCapabilities(h, folder, check);
             await CheckTestsTabLayout(port, check);
             await CheckExamTabLayout(port, check, null);
+            await CheckFilesTabLayout(port, check, null);
+        }
+
+        /// <summary>
+        /// The Files tab with a folder read, laid out at the window's smallest size: its controls must fit and its bindings,
+        /// which go through the tab's own DataContext, must resolve. With a path it is also drawn to a PNG.
+        /// </summary>
+        internal static async Task CheckFilesTabLayout(int port, Action<string, bool, string> check, string pngPath)
+        {
+            var listener = new BindingErrorListener();
+            PresentationTraceSources.Refresh();
+            PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
+            PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
+            var temp = Path.Combine(Path.GetTempPath(), "DCST4FilesTab_" + Guid.NewGuid().ToString("N"));
+            var window = new MainWindow();
+            var vm = (MainViewModel)window.DataContext;
+            var savedFolder = vm.Files.Folder;
+            try
+            {
+                vm.ShowMessage = (message, icon, title) => { };
+                vm.SaveSettings = () => { };
+                vm.ServerHost = "127.0.0.1";
+                vm.ServerPort = port;
+                vm.ServerAET = "MOCKSCP";
+                vm.CallingAET = "DCST4";
+                vm.ProfileName = string.Empty;
+                vm.SaveFolder = string.Empty;
+                vm.SendImages = true;
+                vm.SaveImages = false;
+                var fixture = FolderSourceTests.MakeFixture(Path.Combine(temp, "Export"));
+                vm.Files.Folder = fixture.Folder;
+                vm.Files.SetScan(Core.Files.FolderScanner.Scan(fixture.Folder, true, CancellationToken.None), fixture.Folder, true);
+                vm.SelectedInputTab = MainViewModel.FilesTabIndex;
+
+                var content = (FrameworkElement)window.Content;
+                window.Content = null;
+                content.DataContext = vm;
+                var width = (int)window.MinWidth;
+                var height = (int)window.MinHeight;
+                content.Measure(new Size(width, height));
+                content.Arrange(new Rect(0, 0, width, height));
+                content.UpdateLayout();
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => content.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+
+                var all = VisualDescendants(content).OfType<FrameworkElement>().ToList();
+                var tabs = all.OfType<TabControl>().First(t => t.Items.OfType<TabItem>().Any(i => (string)i.Header == "Files"));
+                var read = all.OfType<Button>().SingleOrDefault(b => (b.Content as string) == "Read");
+                var browse = all.OfType<Button>().SingleOrDefault(b => (b.Content as string) == "DICOMDIR...");
+                var syntax = all.OfType<ComboBox>().SingleOrDefault(c => System.Windows.Data.BindingOperations.GetBinding(c, ComboBox.SelectedItemProperty)?.Path.Path == nameof(FilesViewModel.SelectedSyntax));
+                var radios = all.OfType<RadioButton>().ToList();
+                Func<FrameworkElement, bool> inside = element =>
+                {
+                    var corner = element.TransformToAncestor(tabs).Transform(new Point(0, 0));
+                    return element.ActualWidth > 0 && corner.X >= 0 && corner.Y >= 0 && corner.X + element.ActualWidth <= tabs.ActualWidth + 0.5;
+                };
+                check("Files tab: selected, with the browse buttons, the syntax list and both answers drawn inside it", tabs.SelectedIndex == MainViewModel.FilesTabIndex && browse != null && syntax != null && radios.Count == 2
+                    && inside(browse) && inside(syntax) && radios.All(r => inside(r)), tabs.ActualWidth + " x " + tabs.ActualHeight);
+                check("Files tab: no Read button, since choosing a folder reads it", read == null, null);
+                check("Files tab: Re-identify is chosen, and the syntax list starts at As in the files", radios.Count == 2 && radios[0].IsChecked == true && radios[1].IsChecked == false
+                    && syntax?.SelectedItem?.ToString() == FilesViewModel.AsInFilesName, syntax?.SelectedItem?.ToString());
+                var problems = listener.Errors.Where(e => e.Contains("Files") || e.Contains("Folder") || e.Contains("Reidentify") || e.Contains("KeepUnchanged") || e.Contains("Syntax")
+                    || e.Contains("Skipped") || e.Contains("Summary") || e.Contains("EffectText") || e.Contains("SourcePath") || e.Contains("SelectedInputTab")).ToList();
+                check("Files tab: every binding resolves", problems.Count == 0, string.Join("\n", problems));
+
+                if (pngPath != null)
+                {
+                    var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                    bitmap.Render(content);
+                    var encoder = new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                    using (var file = File.Create(pngPath)) encoder.Save(file);
+                }
+            }
+            finally
+            {
+                vm.Files.Folder = savedFolder;
+                PresentationTraceSources.DataBindingSource.Listeners.Remove(listener);
+                try { Directory.Delete(temp, true); } catch (IOException) { }
+            }
+        }
+
+        /// <summary>Draws the Files tab to a PNG: DCST4.Tests.exe filestab &lt;file&gt;. Not part of the test run.</summary>
+        public static void RenderFilesTab(string path)
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                var dispatcher = Dispatcher.CurrentDispatcher;
+                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
+                dispatcher.InvokeAsync(async () =>
+                {
+                    try { await CheckFilesTabLayout(1, (name, ok, detail) => Console.WriteLine((ok ? "  PASS  " : "  FAIL  ") + name + (ok ? string.Empty : "  -> " + detail)), path); }
+                    catch (Exception ex) { failure = ex; }
+                    dispatcher.InvokeShutdown();
+                });
+                Dispatcher.Run();
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            Console.WriteLine(failure == null ? "Files tab written to " + path : failure.ToString());
         }
 
         /// <summary>

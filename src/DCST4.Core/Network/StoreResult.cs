@@ -38,6 +38,8 @@ namespace DCST4.Core.Network
         public long ElapsedMs { get; set; }
         public long PixelBytes { get; set; }
         public string SavedPath { get; set; }
+        /// <summary>The file the object was read from, when it came from a folder. Null for a generated object.</summary>
+        public string SourcePath { get; set; }
         public string SaveError { get; set; }
 
         public string StatusCodeText => StatusCode.HasValue ? "0x" + StatusCode.Value.ToString("X4", CultureInfo.InvariantCulture) : string.Empty;

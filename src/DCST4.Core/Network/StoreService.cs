@@ -38,12 +38,18 @@ namespace DCST4.Core.Network
     /// fo-dicom always proposes Implicit VR LE in a presentation context of its own next to the selected syntax, and
     /// silently transcodes to it if the selected one is not accepted. That would let a PACS pass a test of a syntax it
     /// cannot take, so unless fallback is allowed, the run stops with an error when the selected syntax is not accepted.
+    ///
+    /// fo-dicom proposes the contexts of the requests queued when the association opens, which is the first window. A
+    /// source of files of many kinds announces the rest in advance (<see cref="IPlannedContexts"/>), so that an object type
+    /// that first comes later still has a context.
     /// </summary>
     public sealed class StoreService
     {
         private const int WindowSize = 4;
         private const int LingerWhileFeedingMs = 30000;
         private const int LingerAfterLastImageMs = 0;
+        /// <summary>Presentation context IDs are the odd numbers 1 to 255.</summary>
+        private const int MaxContexts = 128;
 
         private static readonly ILogger Logger = Log.ForContext<StoreService>();
 
@@ -60,9 +66,11 @@ namespace DCST4.Core.Network
             bool allowFallback,
             Action<StoreResult> onResult,
             CancellationToken token,
-            AssociationTimeline timeline = null)
+            AssociationTimeline timeline = null,
+            IReadOnlyCollection<KeyValuePair<string, DicomTransferSyntax>> plannedContexts = null)
         {
             var outcome = new StoreSendOutcome();
+            var planned = plannedContexts ?? new KeyValuePair<string, DicomTransferSyntax>[0];
             var pending = new ConcurrentDictionary<string, PendingImage>(StringComparer.Ordinal);
             var acceptedBySopClass = new ConcurrentDictionary<string, DicomTransferSyntax[]>(StringComparer.Ordinal);
             var used = new ConcurrentDictionary<string, bool>(StringComparer.Ordinal);
@@ -97,11 +105,13 @@ namespace DCST4.Core.Network
                         timelineRequests.Clear();
                     }
 
-                    var problem = FindUnacceptedSyntax(pending.Values.Select(p => p.Image), acceptedBySopClass);
+                    // The images queued now, and what the source said will come later.
+                    var expected = pending.Values.Select(p => Pair(p.Image)).Concat(planned).ToList();
+                    var problem = FindUnacceptedSyntax(expected, acceptedBySopClass);
                     if (problem != null) outcome.FailureKind = ConnectivityFailure.ContextNotAccepted;
                     if (problem == null) return;
                     // Falling back means fo-dicom transcodes the image, which it cannot do from a syntax it cannot decode.
-                    var undecodable = UnacceptedWithoutDecoder(pending.Values.Select(p => p.Image), acceptedBySopClass);
+                    var undecodable = UnacceptedWithoutDecoder(expected, acceptedBySopClass);
                     if (undecodable != null)
                     {
                         var error = problem + $" DCST4 has no decoder for {undecodable.UID.Name}, so it cannot fall back to another syntax. Nothing was sent. Select another transfer syntax.";
@@ -132,8 +142,17 @@ namespace DCST4.Core.Network
                 using (var window = new SemaphoreSlim(WindowSize, WindowSize))
                 {
                     Task sendTask = null;
+                    var queuedPairs = new HashSet<string>(StringComparer.Ordinal);
+                    var plannedAdded = false;
                     Func<Task> startSend = () =>
-                        client.SendAsync(responseWatch.Token, DicomClientCancellationMode.ImmediatelyAbortAssociation);
+                    {
+                        if (!plannedAdded)
+                        {
+                            plannedAdded = true;
+                            AddPlannedContexts(client, planned, queuedPairs);
+                        }
+                        return client.SendAsync(responseWatch.Token, DicomClientCancellationMode.ImmediatelyAbortAssociation);
+                    };
 
                     var queued = 0;
                     await Task.Run(async () =>
@@ -162,6 +181,7 @@ namespace DCST4.Core.Network
                                 var entry = new PendingImage { Image = image, QueuedAtMs = clock.ElapsedMilliseconds };
                                 pending[image.SopInstanceUid] = entry;
 
+                                queuedPairs.Add(Key(Pair(image)));
                                 var request = new DicomCStoreRequest(image.File, DicomPriority.Medium);
                                 var dimseIndex = 0;
                                 DeferOrRun(timelineSync, timelineRequests, () => associationOpen, () => dimseIndex = timeline?.RecordRequest("C-STORE", image.SopClassUid) ?? 0);
@@ -244,6 +264,7 @@ namespace DCST4.Core.Network
                     PixelBytes = entry.Image.PixelBytes,
                     SavedPath = entry.Image.SavedPath,
                     SaveError = entry.Image.SaveError,
+                    SourcePath = entry.Image.SourcePath,
                 }, onResult);
             }
             if (outcome.FatalError == null && !outcome.Cancelled && unanswered.Count > 0)
@@ -300,29 +321,66 @@ namespace DCST4.Core.Network
             }
         }
 
-        /// <summary>Describes the first queued image whose own syntax the SCP did not accept, or returns null if all are fine.</summary>
-        private static string FindUnacceptedSyntax(IEnumerable<SourceImage> images, ConcurrentDictionary<string, DicomTransferSyntax[]> acceptedBySopClass)
+        private static KeyValuePair<string, DicomTransferSyntax> Pair(SourceImage image) =>
+            new KeyValuePair<string, DicomTransferSyntax>(image.SopClassUid, image.File.Dataset.InternalTransferSyntax);
+
+        private static string Key(KeyValuePair<string, DicomTransferSyntax> pair) => pair.Key + "|" + pair.Value.UID.UID;
+
+        /// <summary>
+        /// The planned object types that the first window does not have, proposed as fo-dicom proposes them for a request of
+        /// that type, so that they are negotiated exactly as if they had been queued. Leaves room for the window's own.
+        /// </summary>
+        private static void AddPlannedContexts(IDicomClient client, IEnumerable<KeyValuePair<string, DicomTransferSyntax>> planned, HashSet<string> queued)
         {
-            foreach (var image in images)
+            var contexts = new DicomPresentationContextCollection();
+            var skipped = 0;
+            foreach (var pair in planned.GroupBy(Key).Select(g => g.First()).Where(p => !queued.Contains(Key(p))))
             {
-                var syntax = image.File.Dataset.InternalTransferSyntax;
-                acceptedBySopClass.TryGetValue(image.SopClassUid, out var accepted);
+                // Each pair gives at most two contexts, its own syntax and Implicit VR, and the window's own come on top.
+                if (contexts.Count + 2 > MaxContexts - 2 * queued.Count)
+                {
+                    skipped++;
+                    continue;
+                }
+                var stub = new DicomDataset(pair.Value)
+                {
+                    { DicomTag.SOPClassUID, pair.Key },
+                    { DicomTag.SOPInstanceUID, "1.2.3" },
+                };
+                contexts.AddFromRequest(new DicomCStoreRequest(new DicomFile(stub)));
+            }
+            // One by one: the collection does not implement CopyTo, which AddRange uses. The client numbers them itself.
+            foreach (var context in contexts)
+            {
+                var copy = new DicomPresentationContext(0, context.AbstractSyntax, context.UserRole, context.ProviderRole);
+                foreach (var syntax in context.GetTransferSyntaxes()) copy.AddTransferSyntax(syntax);
+                client.AdditionalPresentationContexts.Add(copy);
+            }
+            if (skipped > 0) Logger.Warning("{skipped} combinations of SOP class and transfer syntax do not fit in one association request and are proposed only when their images are queued", skipped);
+        }
+
+        /// <summary>Describes the first image or planned object type whose own syntax the SCP did not accept, or returns null if all are fine.</summary>
+        private static string FindUnacceptedSyntax(IEnumerable<KeyValuePair<string, DicomTransferSyntax>> pairs, ConcurrentDictionary<string, DicomTransferSyntax[]> acceptedBySopClass)
+        {
+            foreach (var pair in pairs)
+            {
+                var syntax = pair.Value;
+                acceptedBySopClass.TryGetValue(pair.Key, out var accepted);
                 if (accepted != null && accepted.Contains(syntax)) continue;
 
-                var sopClass = image.File.Dataset.GetSingleValue<DicomUID>(DicomTag.SOPClassUID).Name;
+                var sopClass = DicomUID.Parse(pair.Key).Name;
                 var alternatives = accepted == null || accepted.Length == 0 ? "nothing" : string.Join(", ", accepted.Select(t => t.UID.Name));
                 return $"The SCP did not accept {syntax.UID.Name} for {sopClass}. It accepted: {alternatives}.";
             }
             return null;
         }
 
-        private static DicomTransferSyntax UnacceptedWithoutDecoder(IEnumerable<SourceImage> images, ConcurrentDictionary<string, DicomTransferSyntax[]> acceptedBySopClass)
+        private static DicomTransferSyntax UnacceptedWithoutDecoder(IEnumerable<KeyValuePair<string, DicomTransferSyntax>> pairs, ConcurrentDictionary<string, DicomTransferSyntax[]> acceptedBySopClass)
         {
-            foreach (var image in images)
+            foreach (var pair in pairs)
             {
-                var syntax = image.File.Dataset.InternalTransferSyntax;
-                acceptedBySopClass.TryGetValue(image.SopClassUid, out var accepted);
-                if ((accepted == null || !accepted.Contains(syntax)) && !Codecs.OwnCodecs.CanDecode(syntax)) return syntax;
+                acceptedBySopClass.TryGetValue(pair.Key, out var accepted);
+                if ((accepted == null || !accepted.Contains(pair.Value)) && !Codecs.OwnCodecs.CanDecode(pair.Value)) return pair.Value;
             }
             return null;
         }
@@ -356,6 +414,7 @@ namespace DCST4.Core.Network
                 PixelBytes = image.PixelBytes,
                 SavedPath = image.SavedPath,
                 SaveError = image.SaveError,
+                SourcePath = image.SourcePath,
             };
 
             // Without an accepted context fo-dicom answers the request itself: nothing was sent to the SCP.

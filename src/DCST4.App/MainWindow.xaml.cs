@@ -186,6 +186,58 @@ namespace DCST4
             }
         }
 
+        private void BrowseFilesFolderButton_Click(object sender, RoutedEventArgs e)
+        {
+            var current = _viewModel.Files.Folder;
+            using (var dialog = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Select the folder of DICOM files to send",
+                SelectedPath = System.IO.File.Exists(current) ? System.IO.Path.GetDirectoryName(current) : current,
+                ShowNewFolderButton = false,
+            })
+            {
+                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    _viewModel.Files.Folder = dialog.SelectedPath;
+                    if (_viewModel.ReadFilesCommand.CanExecute(null)) _viewModel.ReadFilesCommand.Execute(null);
+                }
+            }
+        }
+
+        private void BrowseDicomDirButton_Click(object sender, RoutedEventArgs e)
+        {
+            var current = _viewModel.Files.Folder;
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Select a DICOMDIR",
+                Filter = "DICOMDIR|DICOMDIR;*.DIR|All files|*.*",
+                CheckFileExists = true,
+                InitialDirectory = System.IO.Directory.Exists(current) ? current : System.IO.File.Exists(current) ? System.IO.Path.GetDirectoryName(current) : null,
+            };
+            if (dialog.ShowDialog(this) == true)
+            {
+                _viewModel.Files.Folder = dialog.FileName;
+                if (_viewModel.ReadFilesCommand.CanExecute(null)) _viewModel.ReadFilesCommand.Execute(null);
+            }
+        }
+
+        // A typed path is read when it is confirmed with Enter, or when the box is left, if it differs from what was read.
+        private void FilesFolderBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key != System.Windows.Input.Key.Enter) return;
+            e.Handled = true;
+            _viewModel.ReadFilesIfChanged();
+        }
+
+        private void FilesFolderBox_LostKeyboardFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+        {
+            // Not on the way to a browse button: that reads what it selects, and a read of the old text would make it wait.
+            if (e.NewFocus is Button button && button.Parent == FilesFolderBox.Parent) return;
+            _viewModel.ReadFilesIfChanged();
+        }
+
+        private void FilesIncludeSubfolders_Click(object sender, RoutedEventArgs e) => _viewModel.ReadFilesIfChanged();
+
         private void TestSettingsButton_Click(object sender, RoutedEventArgs e)
         {
             new TestSettingsDialog(new TestSettingsViewModel(_viewModel)) { Owner = this }.ShowDialog();
