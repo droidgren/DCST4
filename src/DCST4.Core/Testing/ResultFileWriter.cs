@@ -76,6 +76,9 @@ namespace DCST4.Core.Testing
         /// <summary>Null when the run has no capability matrix.</summary>
         public string CapabilityJson { get; set; }
         public string CapabilityCsv { get; set; }
+        /// <summary>Null when retrieve-syntaxes did not run.</summary>
+        public string RetrieveCapabilityJson { get; set; }
+        public string RetrieveCapabilityCsv { get; set; }
         /// <summary>Null when no store test ran.</summary>
         public string ChainCsv { get; set; }
         /// <summary>The HTML report, which <see cref="DCST4.Core.Reporting.ReportFiles.WriteRun"/> writes. Null when it was not written.</summary>
@@ -136,6 +139,18 @@ namespace DCST4.Core.Testing
             {
                 paths.CapabilityCsv = unique + "-capability.csv";
                 File.WriteAllText(paths.CapabilityCsv, matrix.ToCsv(), Utf8NoBom);
+            }
+
+            var retrieveMatrix = report.Results.Select(r => r.RetrieveMatrix).FirstOrDefault(m => m != null);
+            if (retrieveMatrix != null && options.Json)
+            {
+                paths.RetrieveCapabilityJson = unique + "-retrieve-capability.json";
+                File.WriteAllText(paths.RetrieveCapabilityJson, retrieveMatrix.ToJson(), Utf8NoBom);
+            }
+            if (retrieveMatrix != null && options.Csv)
+            {
+                paths.RetrieveCapabilityCsv = unique + "-retrieve-capability.csv";
+                File.WriteAllText(paths.RetrieveCapabilityCsv, retrieveMatrix.ToCsv(), Utf8NoBom);
             }
 
             if (report.Chain != null && options.Csv)

@@ -201,7 +201,7 @@ namespace DCST4.Tests
             var report = new TestRunReport
             {
                 ToolVersion = "1.10.0", StartedUtc = new DateTime(2026, 11, 1, 8, 0, 0, DateTimeKind.Utc), EndedUtc = new DateTime(2026, 11, 1, 8, 1, 0, DateTimeKind.Utc), DurationMs = 60000,
-                Profile = new ResultProfile { Name = "Mock", Host = "127.0.0.1", Port = 104, CallingAe = "DCST4", CalledAe = "MOCKSCP", LocalScpAe = "DCST4", LocalScpPort = 11113, UidRoot = Root },
+                Profile = new ResultProfile { Name = "Mock", Host = "127.0.0.1", Port = 104, CallingAe = "DCST4", CalledAe = "MOCKSCP", LocalScpAe = "DCST4", LocalScpPort = 11112, UidRoot = Root },
                 Seed = 7,
             };
             report.Results.AddRange(results);
@@ -551,8 +551,8 @@ namespace DCST4.Tests
                 if (content != null) File.WriteAllText(file, content, new UTF8Encoding(false));
                 try { RunFile.Load(file); return null; } catch (RunFileException ex) { return ex.Message; }
             };
-            var newer = refused("newer.json", ResultFileWriter.ToJson(report).Replace("\"schemaVersion\": 7", "\"schemaVersion\": 8"));
-            Check("A newer schema version is refused, and the message says which", newer != null && newer.Contains("schema version 8") && newer.Contains("up to 7"), newer);
+            var newer = refused("newer.json", ResultFileWriter.ToJson(report).Replace("\"schemaVersion\": 8", "\"schemaVersion\": 9"));
+            Check("A newer schema version is refused, and the message says which", newer != null && newer.Contains("schema version 9") && newer.Contains("up to 8"), newer);
             Check("A file that is not JSON is refused", (refused("text.json", "not json at all") ?? string.Empty).Contains("is not a DCST4 result file"), null);
             Check("A capability matrix file is refused as a run", (refused("matrix.json", Matrix(CapabilityResult.Accepted).ToJson()) ?? string.Empty).Contains("is not a DCST4 result file"), refused("matrix.json", null));
             Check("A profile file is refused as a run", (refused("profile.json", "{ \"name\": \"x\", \"endpoint\": { \"host\": \"h\", \"port\": 104 } }") ?? string.Empty).Contains("is not a DCST4 result file"), null);

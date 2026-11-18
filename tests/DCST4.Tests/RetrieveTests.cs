@@ -33,6 +33,7 @@ namespace DCST4.Tests
             _check = check;
 
             await TestRoundTrip();
+            await TestRetrieveSyntaxes();
             await TestTomosynthesis();
             await TestXrayObjects();
             await TestUsVolume();
@@ -90,6 +91,119 @@ namespace DCST4.Tests
             var changed = frame.ToArray();
             for (var i = 0; i < Math.Min(40, changed.Length); i++) changed[i] ^= 0x7F;
             return changed;
+        }
+
+        // ---------------------------------------------------------------- retrieve-syntaxes
+
+        /// <summary>Few syntaxes, so that the section stays short: three the mock accepts, one it does not, and a video syntax.</summary>
+        private static readonly DicomTransferSyntax[] FewSyntaxes =
+        {
+            DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.ExplicitVRLittleEndian, DicomTransferSyntax.JPEGProcess14SV1,
+            DicomTransferSyntax.JPEG2000Lossless, DicomTransferSyntax.MPEG2,
+        };
+
+        /// <summary>Runs the tests, with retrieve-syntaxes asking for <see cref="FewSyntaxes"/> only.</summary>
+        private static Task<TestRunReport> ExecuteFew(string tests)
+        {
+            var selected = TestCatalog.Select(tests, out var error);
+            if (selected == null) throw new InvalidOperationException(error);
+            var few = selected.Select(t => t.Id == "retrieve-syntaxes" ? new DCST4.Core.Testing.Cases.RetrieveSyntaxesTest(FewSyntaxes) : t).ToList();
+            return new TestRunner().RunAsync(Profile(), few, CancellationToken.None, DCST4.Core.TestData.TestPatientNaming.RegistrySwedishName, new TestRunOptions { Seed = 7, IndexWaitSeconds = 1 });
+        }
+
+        private static DCST4.Core.Capability.CapabilityResult? CellOf(TestResult result, DicomUID sopClass, DicomTransferSyntax syntax) =>
+            result.RetrieveMatrix?.Find(sopClass.UID, syntax.UID.UID)?.Result;
+
+        private static string Cells(TestResult result) => result.RetrieveMatrix == null ? "no matrix" : string.Join(", ",
+            result.RetrieveMatrix.AllCells().Select(c => $"{c.Item1.SopClassName}/{DCST4.Core.Capability.CapabilityCatalog.ShortName(DicomTransferSyntax.Parse(c.Item2.TransferSyntaxUid))}={c.Item2.Result} {c.Item2.Status}"));
+
+        private static async Task TestRetrieveSyntaxes()
+        {
+            Console.WriteLine("\nRetrieve matrix: retrieve-syntaxes");
+            var all = TestCatalog.All.ToList();
+            var test = all.SingleOrDefault(t => t.Id == "retrieve-syntaxes");
+            _check("retrieve-syntaxes exists, after retrieve-cget, and runs with 'all'", test != null && all.IndexOf(test) == all.FindIndex(t => t.Id == "retrieve-cget") + 1
+                && TestCatalog.Select("all", out _).Contains(test) && !test.StoresObjects && test.Category == TestCategory.Capability, null);
+
+            var fitted = DCST4.Core.Testing.Cases.RetrieveSyntaxesTest.Fitted(FewSyntaxes, true, false);
+            _check("Fitted: a single-frame image gets no video syntax", !fitted.Contains(DicomTransferSyntax.MPEG2) && fitted.Count == 4, null);
+            _check("Fitted: a multi-frame image gets them all", DCST4.Core.Testing.Cases.RetrieveSyntaxesTest.Fitted(FewSyntaxes, true, true).Count == FewSyntaxes.Length, null);
+            _check("Fitted: an object without pixel data gets only the native syntaxes", DCST4.Core.Testing.Cases.RetrieveSyntaxesTest.Fitted(FewSyntaxes, false, false)
+                .SequenceEqual(new[] { DicomTransferSyntax.ImplicitVRLittleEndian, DicomTransferSyntax.ExplicitVRLittleEndian }), null);
+
+            Fresh();
+            var report = await ExecuteFew("negotiation-probe,store-ct,store-ct-edge,store-basic-text-sr,retrieve-syntaxes");
+            var result = Result(report, "retrieve-syntaxes");
+            var ct = DicomUID.CTImageStorage;
+            var sr = DicomUID.BasicTextSRStorage;
+            _check("Delivered: PASS", result.Result == TestResultClass.PASS, Show(report) + "\n    " + Cells(result));
+            _check("Delivered: one row per SOP class, so ct-edge adds none", result.RetrieveMatrix?.Rows.Count == 2, Cells(result));
+            _check("Delivered: CT in the three syntaxes the mock accepts", CellOf(result, ct, DicomTransferSyntax.ImplicitVRLittleEndian) == DCST4.Core.Capability.CapabilityResult.Accepted
+                && CellOf(result, ct, DicomTransferSyntax.ExplicitVRLittleEndian) == DCST4.Core.Capability.CapabilityResult.Accepted
+                && CellOf(result, ct, DicomTransferSyntax.JPEGProcess14SV1) == DCST4.Core.Capability.CapabilityResult.Accepted, Cells(result));
+            _check("Delivered: CT not in JPEG 2000, whose context was rejected", CellOf(result, ct, DicomTransferSyntax.JPEG2000Lossless) == DCST4.Core.Capability.CapabilityResult.TransferSyntaxNotSupported, Cells(result));
+            _check("Delivered: no video cell for a single-frame CT, and only native ones for the SR", CellOf(result, ct, DicomTransferSyntax.MPEG2) == null
+                && result.RetrieveMatrix.Rows.Single(r => r.SopClassUid == sr.UID).Cells.Count == 2, Cells(result));
+            _check("Delivered: every cell has its association and raw status", result.RetrieveMatrix.AllCells().All(c => c.Item2.Association > 0 && c.Item2.Status == "0x0000"), Cells(result));
+            _check("Delivered: the store matrix is untouched and the result records the C-GET status", result.CapabilityMatrix == null && result.StatusCodes.Any(s => s.Operation == "C-GET" && s.Code == "0x0000"), null);
+            _check("Delivered: compared with the store matrix", result.Details["storedButNotDelivered"] == "0" && result.Details["deliveredButNotStored"] == "0", string.Join(", ", result.Details.Select(d => d.Key + "=" + d.Value)));
+            _check("Delivered: one C-GET per cell, each a timeline association", result.RetrieveMatrix.Associations.Count == result.RetrieveMatrix.AllCells().Count() && result.Timeline.Select(e => e.Association).Distinct().Count() == result.RetrieveMatrix.Associations.Count, null);
+
+            var html = DCST4.Core.Reporting.RunReportWriter.Render(report);
+            _check("Report: a retrieve matrix section, linked from the top", html.Contains("id=\"retrieve-capability\"") && html.Contains("href=\"#retrieve-capability\"") && html.Contains("Against the capability matrix"), null);
+            var files = ResultFileWriter.Write(report, Path.Combine(_temp, "retrieve-syntaxes"));
+            _check("Result files: the retrieve matrix is written beside the store matrix", File.Exists(files.RetrieveCapabilityJson) && File.Exists(files.RetrieveCapabilityCsv)
+                && files.RetrieveCapabilityCsv.EndsWith("-retrieve-capability.csv") && File.ReadAllText(files.RetrieveCapabilityCsv).Split('\n')[0].TrimEnd('\r').EndsWith(",dimse_status"), files.RetrieveCapabilityCsv);
+            var loaded = DCST4.Core.Reporting.RunFile.Load(files.Json);
+            _check("Result files: the retrieve matrix reads back", Result(loaded, "retrieve-syntaxes").RetrieveMatrix?.AllCells().Count() == result.RetrieveMatrix.AllCells().Count(), null);
+
+            // The view model of the second grid.
+            var view = new DCST4.ViewModels.CapabilityViewModel(isRetrieve: true);
+            var changed = DCST4.Core.Capability.CapabilityMatrix.Load(files.RetrieveCapabilityJson);
+            changed.Find(ct.UID, DicomTransferSyntax.ExplicitVRLittleEndian.UID.UID).Result = DCST4.Core.Capability.CapabilityResult.NotDelivered;
+            changed.Find(ct.UID, DicomTransferSyntax.JPEG2000Lossless.UID.UID).Result = DCST4.Core.Capability.CapabilityResult.Accepted;
+            view.Show(changed);
+            view.SetStoreReference(Result(report, "negotiation-probe").CapabilityMatrix);
+            var ctRow = view.Rows.Single(r => r.SopClassUid == ct.UID);
+            var column = view.Columns.ToList();
+            Func<DicomTransferSyntax, string> code = s => ctRow.Cells[column.FindIndex(c => c.Name == s.UID.Name)].Code;
+            _check("View: D for not delivered, marked v as accepted on store", code(DicomTransferSyntax.ExplicitVRLittleEndian) == "Dv", code(DicomTransferSyntax.ExplicitVRLittleEndian));
+            _check("View: delivered but not accepted on store is marked ^", code(DicomTransferSyntax.JPEG2000Lossless) == "✓^", code(DicomTransferSyntax.JPEG2000Lossless));
+            _check("View: a syntax the SR was not asked about is a blank cell, so the columns line up", view.Rows.Single(r => r.SopClassUid == sr.UID).Cells.Count == column.Count
+                && view.Rows.Single(r => r.SopClassUid == sr.UID).Cells[column.FindIndex(c => c.Name == DicomTransferSyntax.JPEG2000Lossless.UID.Name)].Code == string.Empty, null);
+            _check("View: the differences list and summary", view.Differences.Count == 2 && view.ComparisonSummary.Contains("1 accepted on store but not delivered, 1 delivered but not accepted on store"), view.ComparisonSummary);
+
+            // The comparer: a syntax no longer delivered is a regression.
+            var after = DCST4.Core.Reporting.RunFile.Load(files.Json);
+            Result(after, "retrieve-syntaxes").RetrieveMatrix.Find(ct.UID, DicomTransferSyntax.JPEGProcess14SV1.UID.UID).Result = DCST4.Core.Capability.CapabilityResult.NotDelivered;
+            var comparison = DCST4.Core.Reporting.RunComparer.Compare(new[] { new DCST4.Core.Reporting.NamedRun("a", loaded), new DCST4.Core.Reporting.NamedRun("b", after) });
+            var findings = comparison.Runs[0].Findings;
+            _check("Comparer: a syntax no longer delivered is a Retrieve regression", findings.Any(f => f.Kind == DCST4.Core.Reporting.FindingKind.Regression && f.Area == "Retrieve" && f.Subject == "CT Image Storage" && f.Value.StartsWith("no longer delivered")),
+                string.Join(" | ", findings.Select(f => f.ToString())));
+
+            Fresh();
+            Scp.RetrieveSyntax = DicomTransferSyntax.ImplicitVRLittleEndian;
+            var other = Result(await ExecuteFew("store-ct,retrieve-syntaxes"), "retrieve-syntaxes");
+            _check("Another syntax accepted than proposed: FAIL, and the cell says so", other.Result == TestResultClass.FAIL
+                && CellOf(other, ct, DicomTransferSyntax.ExplicitVRLittleEndian) == DCST4.Core.Capability.CapabilityResult.AcceptedOtherSyntax
+                && CellOf(other, ct, DicomTransferSyntax.ImplicitVRLittleEndian) == DCST4.Core.Capability.CapabilityResult.Accepted, other.Explanation + "\n    " + Cells(other));
+
+            Fresh();
+            Scp.OnRetrieve = f => null;
+            var nothing = Result(await ExecuteFew("store-ct,retrieve-syntaxes"), "retrieve-syntaxes");
+            _check("Success, and nothing sent: FAIL, the cells are not delivered", nothing.Result == TestResultClass.FAIL && nothing.Explanation.Contains("irregular")
+                && CellOf(nothing, ct, DicomTransferSyntax.ExplicitVRLittleEndian) == DCST4.Core.Capability.CapabilityResult.NotDelivered, nothing.Explanation + "\n    " + Cells(nothing));
+
+            Fresh();
+            Scp.ContextTable = new ScpContextTable();
+            Scp.ContextTable.Set(DicomUID.StudyRootQueryRetrieveInformationModelGet, ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported));
+            Scp.ContextTable.Set(DicomUID.PatientRootQueryRetrieveInformationModelGet, ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported));
+            var noGet = Result(await ExecuteFew("store-ct,retrieve-syntaxes"), "retrieve-syntaxes");
+            _check("C-GET not accepted: NOT_SUPPORTED after one try per root", noGet.Result == TestResultClass.NOT_SUPPORTED && noGet.RetrieveMatrix?.Associations.Count == 2, noGet.Explanation);
+
+            Fresh();
+            var alone = Result(await ExecuteFew("retrieve-syntaxes"), "retrieve-syntaxes");
+            _check("Without a store test: INDETERMINATE and says why", alone.Result == TestResultClass.INDETERMINATE && alone.RetrieveMatrix == null && alone.Explanation.Length > 0, alone.Explanation);
         }
 
         /// <summary>
@@ -241,7 +355,7 @@ namespace DCST4.Tests
             var json = ResultFileWriter.ToJson(report);
             _check("JSON: holds the chain", json.Contains("\"chain\"") && json.Contains("\"retrievable\"") && json.Contains("\"intact\"") && json.Contains("\"committed\": null"), null);
             _check("JSON: holds the integrity report", json.Contains("\"integrity\"") && json.Contains("ByteIdentical"), null);
-            _check("JSON: schema version 7", TestRunReport.CurrentSchemaVersion == 7 && json.Contains("\"schemaVersion\": 7"), null);
+            _check("JSON: schema version 8", TestRunReport.CurrentSchemaVersion == 8 && json.Contains("\"schemaVersion\": 8"), null);
 
             var folder = Path.Combine(_temp, "chain-files");
             var files = ResultFileWriter.Write(report, folder);
@@ -461,7 +575,7 @@ namespace DCST4.Tests
         {
             Console.WriteLine("\nPartial selections and cancel");
 
-            foreach (var id in new[] { "query-index", "query-levels", "query-return-keys", "retrieve-cget", "retrieve-cmove", "retrieve-cmove-diagnostic", "verify-integrity" })
+            foreach (var id in new[] { "query-index", "query-levels", "query-return-keys", "retrieve-cget", "retrieve-syntaxes", "retrieve-cmove", "retrieve-cmove-diagnostic", "verify-integrity" })
             {
                 Fresh();
                 var report = await Execute(id);

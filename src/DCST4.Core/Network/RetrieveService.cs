@@ -18,13 +18,18 @@ namespace DCST4.Core.Network
         public static string Of(RetrieveMethod method) => method == RetrieveMethod.CGet ? "C-GET" : "C-MOVE";
     }
 
-    /// <summary>What to retrieve: one study, by the information model chosen.</summary>
+    /// <summary>What to retrieve: one study, or one instance of it, by the information model chosen.</summary>
     public sealed class RetrieveTarget
     {
         public QueryRoot Root { get; set; } = QueryRoot.Study;
         public string StudyInstanceUid { get; set; }
         /// <summary>Needed by Patient Root.</summary>
         public string PatientId { get; set; }
+        /// <summary>With <see cref="SopInstanceUid"/>, retrieves that one instance at the IMAGE level. Only for C-GET.</summary>
+        public string SeriesInstanceUid { get; set; }
+        public string SopInstanceUid { get; set; }
+
+        public bool IsInstance => !string.IsNullOrEmpty(SeriesInstanceUid) && !string.IsNullOrEmpty(SopInstanceUid);
     }
 
     /// <summary>How a C-GET or C-MOVE ended, and what came back.</summary>
@@ -75,8 +80,11 @@ namespace DCST4.Core.Network
             Directory.CreateDirectory(folder);
 
             var sopClass = GetSopClass(target.Root);
-            var request = new DicomCGetRequest(target.StudyInstanceUid);
+            var request = target.IsInstance
+                ? new DicomCGetRequest(target.StudyInstanceUid, target.SeriesInstanceUid, target.SopInstanceUid)
+                : new DicomCGetRequest(target.StudyInstanceUid);
             Aim(request, sopClass, target);
+            var level = target.IsInstance ? "IMAGE" : "STUDY";
 
             var outcome = new RetrieveOutcome();
             var files = new List<RetrievedFile>();
@@ -120,7 +128,7 @@ namespace DCST4.Core.Network
 
                 client.AssociationAccepted += (s, e) =>
                 {
-                    if (exchange.ContextAccepted && timeline != null) dimseIndex = timeline.RecordRequest("C-GET", $"{target.Root} Root, level STUDY");
+                    if (exchange.ContextAccepted && timeline != null) dimseIndex = timeline.RecordRequest("C-GET", $"{target.Root} Root, level {level}");
                 };
 
                 request.OnResponseReceived = (req, response) => OnProgress(response, exchange, watch, outcome, "C-GET", dimseIndex, timeline);

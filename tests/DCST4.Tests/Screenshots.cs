@@ -29,8 +29,8 @@ namespace DCST4.Tests
     /// </summary>
     internal static class Screenshots
     {
-        private const int ScpPort = 11112;
-        private const int ListenPort = 11113;
+        private const int ScpPort = 11114;
+        private const int ListenPort = 11112;
         private const string ResultsFolder = @"C:\Temp\DCST4-results";
 
         public static int Run(string folder)

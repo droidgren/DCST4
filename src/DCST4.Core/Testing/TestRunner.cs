@@ -138,10 +138,12 @@ namespace DCST4.Core.Testing
             {
                 entry.Detail = entry.Detail?.Replace(thumbprint, CertificatePlaceholder);
             }
-            if (result.CapabilityMatrix == null) return;
-            foreach (var association in result.CapabilityMatrix.Associations)
+            foreach (var matrix in new[] { result.CapabilityMatrix, result.RetrieveMatrix }.Where(m => m != null))
             {
-                association.Detail = association.Detail?.Replace(thumbprint, CertificatePlaceholder);
+                foreach (var association in matrix.Associations)
+                {
+                    association.Detail = association.Detail?.Replace(thumbprint, CertificatePlaceholder);
+                }
             }
         }
 

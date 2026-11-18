@@ -41,16 +41,17 @@ namespace DCST4
             FollowNewest.Attach(_viewModel.LogLines, LogList, LogList.ScrollIntoView, onlyWhenVisible: true);
             FollowNewest.Attach(_viewModel.TestSuite.Rows, TestResultsGrid, TestResultsGrid.ScrollIntoView, onlyWhenVisible: false);
 
-            _viewModel.TestSuite.Capabilities.ColumnsChanged += RebuildCapabilityColumns;
+            _viewModel.TestSuite.Capabilities.ColumnsChanged += () => RebuildCapabilityColumns(CapabilityGrid, _viewModel.TestSuite.Capabilities);
+            _viewModel.TestSuite.RetrieveCapabilities.ColumnsChanged += () => RebuildCapabilityColumns(RetrieveCapabilityGrid, _viewModel.TestSuite.RetrieveCapabilities);
         }
 
         /// <summary>One column per transfer syntax, so they follow the matrix rather than being written in the XAML.</summary>
-        private void RebuildCapabilityColumns()
+        private static void RebuildCapabilityColumns(DataGrid grid, CapabilityViewModel capabilities)
         {
-            CapabilityGrid.Columns.Clear();
-            CapabilityGrid.Columns.Add(new DataGridTextColumn { Header = "SOP class", Binding = new Binding(nameof(CapabilityRowView.SopClass)), Width = 310 });
+            grid.Columns.Clear();
+            grid.Columns.Add(new DataGridTextColumn { Header = "SOP class", Binding = new Binding(nameof(CapabilityRowView.SopClass)), Width = 310 });
 
-            var columns = _viewModel.TestSuite.Capabilities.Columns;
+            var columns = capabilities.Columns;
             for (var i = 0; i < columns.Count; i++)
             {
                 var text = new FrameworkElementFactory(typeof(TextBlock));
@@ -63,7 +64,7 @@ namespace DCST4
                 cell.SetBinding(ToolTipProperty, new Binding($"Cells[{i}].{nameof(CapabilityCellView.ToolTip)}"));
                 cell.AppendChild(text);
 
-                CapabilityGrid.Columns.Add(new DataGridTemplateColumn
+                grid.Columns.Add(new DataGridTemplateColumn
                 {
                     Header = new TextBlock { Text = columns[i].ShortName, ToolTip = columns[i].Name, LayoutTransform = new RotateTransform(-90) },
                     CellTemplate = new DataTemplate { VisualTree = cell },
@@ -72,14 +73,18 @@ namespace DCST4
             }
         }
 
-        private void SaveCapabilityJson_Click(object sender, RoutedEventArgs e) => SaveCapabilityMatrix("JSON files (*.json)|*.json", ".json", false);
+        private void SaveCapabilityJson_Click(object sender, RoutedEventArgs e) => SaveCapabilityMatrix("JSON files (*.json)|*.json", ".json", false, false);
 
-        private void SaveCapabilityCsv_Click(object sender, RoutedEventArgs e) => SaveCapabilityMatrix("CSV files (*.csv)|*.csv", ".csv", true);
+        private void SaveCapabilityCsv_Click(object sender, RoutedEventArgs e) => SaveCapabilityMatrix("CSV files (*.csv)|*.csv", ".csv", true, false);
 
-        private void SaveCapabilityMatrix(string filter, string extension, bool asCsv)
+        private void SaveRetrieveCapabilityJson_Click(object sender, RoutedEventArgs e) => SaveCapabilityMatrix("JSON files (*.json)|*.json", ".json", false, true);
+
+        private void SaveRetrieveCapabilityCsv_Click(object sender, RoutedEventArgs e) => SaveCapabilityMatrix("CSV files (*.csv)|*.csv", ".csv", true, true);
+
+        private void SaveCapabilityMatrix(string filter, string extension, bool asCsv, bool retrieve)
         {
-            var dialog = new Microsoft.Win32.SaveFileDialog { Filter = filter, DefaultExt = extension, FileName = "capability-matrix" + extension };
-            if (dialog.ShowDialog(this) == true) _viewModel.SaveCapabilityMatrix(dialog.FileName, asCsv);
+            var dialog = new Microsoft.Win32.SaveFileDialog { Filter = filter, DefaultExt = extension, FileName = (retrieve ? "retrieve-matrix" : "capability-matrix") + extension };
+            if (dialog.ShowDialog(this) == true) _viewModel.SaveCapabilityMatrix(dialog.FileName, asCsv, retrieve);
         }
 
         private void LoadClaimedCapabilities_Click(object sender, RoutedEventArgs e)

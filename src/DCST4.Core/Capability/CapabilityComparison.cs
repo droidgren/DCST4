@@ -91,4 +91,72 @@ namespace DCST4.Core.Capability
             });
         }
     }
+
+    public enum StoreRetrieveDifferenceKind
+    {
+        /// <summary>Accepted on store, and not delivered on C-GET in the same syntax.</summary>
+        StoredButNotDelivered,
+        /// <summary>Delivered on C-GET in a syntax that the store negotiation did not accept, so the system transcodes on retrieve.</summary>
+        DeliveredButNotStored,
+    }
+
+    public sealed class StoreRetrieveDifference
+    {
+        public StoreRetrieveDifferenceKind Kind { get; set; }
+        public string SopClassUid { get; set; }
+        public string SopClassName { get; set; }
+        public string TransferSyntaxUid { get; set; }
+        public string TransferSyntaxName { get; set; }
+        public CapabilityResult Store { get; set; }
+        public CapabilityResult Retrieve { get; set; }
+    }
+
+    /// <summary>
+    /// What a system accepts on store against what it delivers on retrieve. Only combinations that both matrices hold, and
+    /// that both answered, count: a combination one side never asked about says nothing.
+    /// </summary>
+    public sealed class StoreRetrieveComparison
+    {
+        public List<StoreRetrieveDifference> Differences { get; } = new List<StoreRetrieveDifference>();
+        /// <summary>Combinations in both matrices, answered on both sides.</summary>
+        public int Compared { get; private set; }
+
+        public IEnumerable<StoreRetrieveDifference> OfKind(StoreRetrieveDifferenceKind kind) => Differences.Where(d => d.Kind == kind);
+
+        /// <summary>The difference of one cell of the retrieve matrix, or null.</summary>
+        public StoreRetrieveDifference Find(string sopClassUid, string transferSyntaxUid) =>
+            Differences.FirstOrDefault(d => d.SopClassUid == sopClassUid && d.TransferSyntaxUid == transferSyntaxUid);
+
+        public static StoreRetrieveComparison Compare(CapabilityMatrix store, CapabilityMatrix retrieve)
+        {
+            if (store == null) throw new ArgumentNullException(nameof(store));
+            if (retrieve == null) throw new ArgumentNullException(nameof(retrieve));
+
+            var comparison = new StoreRetrieveComparison();
+            foreach (var entry in retrieve.AllCells())
+            {
+                var row = entry.Item1;
+                var cell = entry.Item2;
+                var stored = store.Find(row.SopClassUid, cell.TransferSyntaxUid);
+                if (stored == null || !CapabilityMatrix.WasAnswered(stored.Result) || !CapabilityMatrix.WasAnswered(cell.Result)) continue;
+
+                comparison.Compared++;
+                var accepted = stored.Result == CapabilityResult.Accepted;
+                var delivered = cell.Result == CapabilityResult.Accepted;
+                if (accepted == delivered) continue;
+
+                comparison.Differences.Add(new StoreRetrieveDifference
+                {
+                    Kind = accepted ? StoreRetrieveDifferenceKind.StoredButNotDelivered : StoreRetrieveDifferenceKind.DeliveredButNotStored,
+                    SopClassUid = row.SopClassUid,
+                    SopClassName = row.SopClassName ?? CapabilityMatrix.DisplayName(row.SopClassUid),
+                    TransferSyntaxUid = cell.TransferSyntaxUid,
+                    TransferSyntaxName = CapabilityMatrix.DisplayName(cell.TransferSyntaxUid),
+                    Store = stored.Result,
+                    Retrieve = cell.Result,
+                });
+            }
+            return comparison;
+        }
+    }
 }

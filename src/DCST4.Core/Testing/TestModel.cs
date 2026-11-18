@@ -108,6 +108,9 @@ namespace DCST4.Core.Testing
         /// <summary>Only set by the negotiation probe.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public CapabilityMatrix CapabilityMatrix { get; set; }
+        /// <summary>Only set by retrieve-syntaxes: which syntaxes the system delivered on C-GET, in the same shape as the store matrix.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CapabilityMatrix RetrieveMatrix { get; set; }
         /// <summary>Only set by verify-integrity.</summary>
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public IntegrityReport Integrity { get; set; }
@@ -170,9 +173,10 @@ namespace DCST4.Core.Testing
         /// 2: added the capability matrix and the association number on protocol events. 3: added the seed, the chain summary,
         /// the integrity report and the query report. 4: added the commitment report and the committed step of the chain.
         /// 5: added the limits section of the limit, fault and TLS tests. 6: added the performance section of the load tests.
-        /// 7: added the realism level and the lossy compression settings of the generated data.
+        /// 7: added the realism level and the lossy compression settings of the generated data. 8: added the retrieve matrix
+        /// of retrieve-syntaxes and the raw status of a matrix cell.
         /// </summary>
-        public const int CurrentSchemaVersion = 7;
+        public const int CurrentSchemaVersion = 8;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ToolVersion { get; set; }
