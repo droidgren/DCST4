@@ -15,6 +15,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 * [Usage](#usage)
 * [Testing a PACS](#testing-a-pacs)
   * [What the PACS supports](#what-the-pacs-supports)
+  * [What the PACS can deliver](#what-the-pacs-can-deliver)
   * [Store, query and retrieve](#store-query-and-retrieve)
   * [Storage Commitment](#storage-commitment)
   * [Limits and faults](#limits-and-faults)
@@ -54,6 +55,7 @@ For querying a Modality Worklist check out [DMWLT4](https://github.com/droidgren
 - **Reset to defaults:** **File > Settings** puts every setting back to its default in one go, and keeps the saved destination profiles.
 - **Test suite:** run tests against a PACS from the **Tests** tab or the command line (`DCST4.Cli.exe`). Each run writes an HTML report, and can also write JSON and CSV files for comparison over time. On the Tests tab the tests are in folded groups, each says in a tooltip what it does, nothing is ticked at the start, and a run that stores objects says how many examinations and how much data it will leave on the destination and asks first. Every setting in the program explains itself on hover, with its default. See [Testing a PACS](#testing-a-pacs).
 - **Capability matrix:** finds out from association negotiation alone, with no images sent, which SOP classes and transfer syntaxes a PACS supports, 30 syntaxes from uncompressed to JPEG XL and HEVC/H.265, and compares that with what the vendor's Conformance Statement claims. See [What the PACS supports](#what-the-pacs-supports).
+- **Retrieve matrix:** finds out with C-GET which transfer syntaxes a PACS can actually deliver, per SOP class, which is what viewers and AI nodes depend on. One stored object of each SOP class is fetched once per syntax, with only that syntax proposed, and the result is shown beside what the PACS accepts on store, with the combinations where it transcodes on retrieve marked. See [What the PACS can deliver](#what-the-pacs-can-deliver).
 - **Store, query and retrieve:** proves the chain accepted, indexed, retrievable and intact for each object type, with C-STORE, C-FIND, C-GET and C-MOVE. What comes back is compared with what was sent, level by level. See [Store, query and retrieve](#store-query-and-retrieve).
 - **Storage Commitment:** asks the PACS to commit to what it stored, with N-ACTION, and takes its N-EVENT-REPORT either on the same association or on one the PACS opens to this computer. It records which way the PACS used, how long the report took and the Failure Reason of each instance that was not committed. See [Storage Commitment](#storage-commitment).
 - **Limits and faults:** finds how many associations the PACS holds at once, how long it keeps an idle association or a connection that never sends a request, and whether it keeps to the maximum PDU length it announces. Breaks a C-STORE off on purpose in three ways, and checks what the PACS kept and how it takes the retry. With TLS, checks that a client certificate from an unknown authority or an expired one is refused. See [Limits and faults](#limits-and-faults).
@@ -344,7 +346,7 @@ C-MOVE and Storage Commitment reports go to **Listen AET (SCP)** and **Port** un
   "endpoint": { "host": "pacs.example.org", "port": 104, "callingAe": "DCST4", "calledAe": "PACS" },
   "network": { "connectionTimeoutSeconds": 10, "associationTimeoutSeconds": 10, "responseTimeoutSeconds": 60 },
   "localScpAe": "DCST4",
-  "localScpPort": 11113,
+  "localScpPort": 11112,
   "uidRoot": "2.25"
 }
 ```
@@ -447,6 +449,34 @@ Only `Accepted` counts as a claim. The tab then lists what was **claimed but rej
 
 A PACS that accepts an unknown AE title gets `FAIL` as a finding to report, with `finding` in the Details, and `DCST4.Cli.exe` then exits with 1. A-ABORT or a closed connection in place of a proper rejection is also `FAIL`, and says so. The two AE title tests first open an association with the profile's own titles, and give `INDETERMINATE` if that fails, since a rejection would then prove nothing.
 
+### What the PACS can deliver
+
+The capability matrix says what a PACS accepts on store. What it can send back is another question, and the one that matters to a viewer or an AI node that asks for a particular syntax. The test `retrieve-syntaxes`, in the `Capability` category, finds out. It takes one stored object of each SOP class that the store tests of the same run stored, the first object type of each, so `store-ct` comes before `store-ct-edge`. It fetches that one instance with C-GET at IMAGE level once per transfer syntax, each time with exactly that syntax proposed in the storage context that DCST4 takes in SCP role. It stores nothing.
+
+The syntaxes are fitted to the object, so that no C-GET is spent on a combination that makes no sense:
+
+| Object | Syntaxes asked for |
+| ------ | ------------------ |
+| Without pixel data: SR, KOS, GSPS, PDF, RT Structure Set | Implicit VR LE, Explicit VR LE, Explicit VR BE and Deflated |
+| Single-frame image | Every syntax of the capability matrix except MPEG-2, H.264 and H.265 |
+| Multi-frame image | All 30 |
+
+A full run asks for about 500 combinations, one short association each. Study Root is tried first and Patient Root if Study Root is not accepted. If neither is, the test is `NOT_SUPPORTED` at once. After two C-GETs that time out, the rest are not tried.
+
+The result is the second grid on the **Capabilities** tab, **Deliverable on retrieve**, beside **Accepted on store**. It is saved next to the result files as `<run>-retrieve-capability.json` and `.csv`, in the same layout as the capability matrix, and each cell also has the raw final status of its C-GET, `status` in the JSON and `dimse_status` in the CSV. The cells mean what they mean in the capability matrix, with one more:
+
+| Cell result | Meaning on retrieve |
+| ----------- | ------------------- |
+| `Accepted` (✓) | The storage context was accepted with the proposed syntax, and the object came in it |
+| `NotDelivered` (D) | The context was accepted, but the object did not come: a failed sub-operation, or a failure or warning status |
+| `TransferSyntaxNotSupported` (T) and the other rejections | The PACS refused the storage context, so it would not send in that syntax |
+| `AcceptedOtherSyntax` (≠), `NotAnswered` (?) | An answer that breaks the negotiation rules |
+| blank | A syntax that was not asked for this object |
+
+When the run, or the Capabilities tab, also has a capability matrix, each cell is compared with it: **^** marks a syntax delivered but not accepted on store, so the PACS transcodes on retrieve, and **v** a syntax accepted on store but not delivered. The list under the grid has each such combination.
+
+The test is `PASS` when every answer kept to the rules and each SOP class came back in at least one syntax. A Success status with nothing sent, `AcceptedOtherSyntax`, `NotAnswered`, a failed or rejected association, or a SOP class that came back in none of the syntaxes gives `FAIL`. A timeout gives `TIMEOUT`. The object's content is not checked here. `verify-integrity` compares what `retrieve-cget` and `retrieve-cmove` bring back with what was sent.
+
 ### Store, query and retrieve
 
 These tests prove, per object type, that what the PACS accepted can be found, can be fetched back and has not changed. They run in this order, and a later test works on what the earlier ones stored in the same run. A test without its input gives `INDETERMINATE` and says what was missing.
@@ -461,6 +491,7 @@ These tests prove, per object type, that what the PACS accepted can be found, ca
 | `query-return-keys`                  | Which of a broad set of return keys come back populated, empty or not at all, and whether they match what was sent             |
 | `query-matching`                     | Wildcards, date ranges, case and Swedish characters, on one patient stored in both ISO_IR 100 and ISO_IR 192                    |
 | `retrieve-cget`, `retrieve-cmove`    | Does each object type come back? The Retrievable step, which passes if either way works                                        |
+| `retrieve-syntaxes`                  | In which transfer syntaxes can the PACS deliver each SOP class? See [What the PACS can deliver](#what-the-pacs-can-deliver)     |
 | `retrieve-cmove-diagnostic`          | Why a C-MOVE does not arrive                                                                                                    |
 | `verify-integrity`                   | Is what came back what was sent? The Intact step                                                                                |
 | `duplicate-identical`                | The same SOP Instance UID sent twice                                                                                            |
@@ -473,7 +504,7 @@ These tests prove, per object type, that what the PACS accepted can be found, ca
 
 ![The Chain tab, with one row per object type and the details of the selected row](screenshots/chain.png)
 
-**C-MOVE** makes the PACS connect back to this computer. Add the local AE title (`localScpAe` in the profile, default `DCST4`) on the PACS with this computer's address and the port (`localScpPort`, default 11113), and allow incoming TCP on the port. A PACS that does not know the AE title answers `0xA801`. One that knows it and cannot reach us gets an explanation that names the port and Windows Defender Firewall, a common cause on Windows. In these cases `retrieve-cmove` is `INDETERMINATE`, since it says nothing about the PACS, and it stops after the first object type, since the cause is the same for all of them and a PACS may take its whole connection timeout to answer each one, and `retrieve-cmove-diagnostic` is `FAIL`, so `DCST4.Cli.exe` exits with 1. A port that is already in use is `TOOL_ERROR`. The listener does not use TLS, even if the profile does.
+**C-MOVE** makes the PACS connect back to this computer. Add the local AE title (`localScpAe` in the profile, default `DCST4`) on the PACS with this computer's address and the port (`localScpPort`, default 11112), and allow incoming TCP on the port. A PACS that does not know the AE title answers `0xA801`. One that knows it and cannot reach us gets an explanation that names the port and Windows Defender Firewall, a common cause on Windows. In these cases `retrieve-cmove` is `INDETERMINATE`, since it says nothing about the PACS, and it stops after the first object type, since the cause is the same for all of them and a PACS may take its whole connection timeout to answer each one, and `retrieve-cmove-diagnostic` is `FAIL`, so `DCST4.Cli.exe` exits with 1. A port that is already in use is `TOOL_ERROR`. The listener does not use TLS, even if the profile does.
 
 **What Intact checks.** Each retrieved object is compared with the copy that was sent and with the manifest, reported per level:
 
@@ -690,6 +721,7 @@ The report is one file that is complete in itself, so it can be mailed, archived
 | Summary | The number of results of each class, and every test with its raw statuses, its explanation and, folded, its details and UIDs |
 | Vendor fingerprint | See below |
 | Capability matrix | SOP classes against transfer syntaxes, with the associations of the probe and the role selection and extended negotiation replies folded |
+| Retrieve matrix | What `retrieve-syntaxes` got back, in the same layout, with the raw status of each C-GET in the cell's tooltip, how it compares with the capability matrix, and the C-GET associations folded |
 | Chain | Accepted, indexed, retrievable, intact and committed per object type, with the explanation of each step that did not pass |
 | Integrity | Each level per object type and retrieve, the pixel verdict with the largest and mean difference, what was transcoded, and the attribute differences, at most 200 per set. Attributes that the PACS only added are counted |
 | Limits, faults and TLS | The association limit and how the next one was refused, how idle associations and connections were ended, the PDU attempts, each fault with the state after it and the retry, and the TLS session |
@@ -743,12 +775,12 @@ Compared: after: PACS at pacs.example.org:104, 2026-11-11 08:00:09 UTC, DCST4 1.
 
 `report` returns 0 when the report is written and 2 otherwise. It does not look at the results of the run.
 
-**What is compared.** Tests are matched by their id, object types by their name, cells of the capability matrix by SOP class and transfer syntax, and ramp steps by their number of associations. Each difference is one of four kinds:
+**What is compared.** Tests are matched by their id, object types by their name, cells of the capability matrix and the retrieve matrix by SOP class and transfer syntax, and ramp steps by their number of associations. Each difference is one of four kinds:
 
 | Kind | What it is |
 | ---- | ---------- |
 | Regression | A test or a chain step that did worse: the result classes rank as `PASS` and `EXPECTED_FAILURE`, then `NOT_SUPPORTED`, then `FAIL` and `TIMEOUT`, and a move down is a regression |
-| | A combination of SOP class and transfer syntax that was `Accepted` and now has another answer |
+| | A combination of SOP class and transfer syntax that was `Accepted` and now has another answer. In the retrieve matrix, a syntax that was delivered and no longer is, under the area `Retrieve` |
 | | A load test whose stored per second fell, or whose p95 latency or p95 time-to-available rose, by more than the threshold. A latency must also have risen by at least 1 ms, since a percentage of less says more about the clock than about the PACS |
 | | A load test whose error rate rose by more than 1 percentage point |
 | Improvement | The same moves the other way |
@@ -852,12 +884,12 @@ src\DCST4.Core\     No WPF reference
     Video\          H264Encoder (H.264 in MP4 with the encoder of Windows, and a decoder for checks), MediaFoundation.cs (the COM interop)
   Network\          Ping, C-ECHO, C-STORE, C-FIND (QueryService), C-GET and C-MOVE (RetrieveService), Storage Commitment (StorageCommitment.cs), RawAssociation (limit, fault and load tests), LocalStorageServer, MoveDiagnosis, DimseRunner, AssociationTimeline, AssociationNegotiation
   Performance\      Load engine and its workers (LoadEngine.cs), InstancePool and UidStamper, DataMixCatalog, LoadSettings, MetricsCollector and LatencyHistogram, SaturationDetector, DegradationDetector, RateGate, AvailabilityPoller, MetricsFileWriter
-  Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix, CapabilityComparison
+  Capability\       CapabilityCatalog, ProbePlan, NegotiationProbe, CapabilityMatrix (also the shape of the retrieve matrix), CapabilityComparison (claimed against actual, and StoreRetrieveComparison: store against retrieve)
   Verification\     IntegrityOracle and IntegrityReport: what came back against what was sent
   Output\           DICOM File-set and DICOMDIR
   Reporting\        RunFile (reads a result file back), RunReportWriter and ComparisonReportWriter (HTML), HtmlWriter (the one place where text is encoded), SvgChart, VendorFingerprint, RunComparer, ReportFiles, ResultCleaner (deletes old result files)
   Testing\          TargetProfile, ITestCase, TestRunner, TestRunSession (what the tests of a run hand on), TestCatalog, TestGroups, TestResult, ResultFileWriter
-    Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category, PerformanceTests.cs the Performance category
+    Cases\          The test cases. ChainSupport.cs holds what the store, query and retrieve tests share, RetrieveSyntaxesTest.cs the retrieve matrix, CommitmentTests.cs the Storage Commitment tests, LimitTests.cs, FaultTests.cs and TlsTests.cs the Limits category, PerformanceTests.cs the Performance category
 src\DCST4.App\      WPF app. HelpWindow.xaml.cs holds the help and its quick search. Infrastructure\SplitRowPanel lays out the Exam tab's compression row, with Estimated size at its right. PreviewWindow.xaml shows the Exam tab's image preview, one window reused, opened through MainViewModel.ShowImagePreview, and TagPreviewWindow.xaml its tags preview with the filter and Copy, opened through MainViewModel.ShowTagPreview. Both previews validate the Exam tab through MainViewModel.TryBuildPreviewRequest. The Patient ID setting is Settings.TestPatientIdSource, read by MainViewModel for Generate & Send and put in TestRunOptions.PatientIds for the Tests and Performance tabs. Settings in Properties\Settings.cs, reset by MainViewModel.ResetSettings. The Test settings dialog is TestSettingsDialog.xaml with ViewModels\TestSettingsViewModel.cs, a copy applied at OK, and the Performance settings dialog PerformanceSettingsDialog.xaml with ViewModels\PerformanceSettingsViewModel.cs. The Test and Performance Results tab of SettingsDialog.xaml is ViewModels\ResultSettingsViewModel.cs, applied at OK in the same way. The Tests tab is ViewModels\TestSuiteViewModel.cs, with TestGroupChoice for its groups, the Capabilities tab ViewModels\CapabilityViewModel.cs, the Chain tab ViewModels\ChainSummaryViewModel.cs, the Performance tab ViewModels\PerformanceViewModel.cs with its chart in Controls\LoadChart.cs, the Compare runs dialog CompareRunsDialog.xaml with ViewModels\CompareRunsViewModel.cs
 src\DCST4.Cli\      Command line: DCST4.Cli.exe
 tests\DCST4.Tests\  Console test harness and mock Storage SCP
@@ -873,6 +905,8 @@ The app and the command line are front-ends on the same engine in `Testing\`. To
 A test says what it is doing with `TestContext.Report`, above all before a wait, and `TestRunner` passes it on as a `TestProgress` with the stage `Activity`. It is for the front-ends only and never reaches a result file. `MainViewModel` shows it in the status bar with a timer that counts the seconds since the test last reported.
 
 `TestRunSession` is how tests of one run depend on each other, in catalog order: store tests add a `StoredObjectRecord` with the manifest and the path of what was sent, query and retrieve tests add their step to it, and `TestRunner` turns the records into `TestRunReport.Chain`. `commit-stored` reads the stored instances from the session and fills `StoredObjectRecord.Committed`, which becomes the `Committed` step of `ChainRow`. A store test gets its own seed from `TestRunSession.SeedFor(purpose)`, because a Patient ID follows from the seed alone and two purposes on one seed would put one Patient ID under two names.
+
+`retrieve-syntaxes` is `Testing\Cases\RetrieveSyntaxesTest.cs`. It calls `RetrieveService.GetAsync` with an IMAGE-level `RetrieveTarget` (`SeriesInstanceUid` and `SopInstanceUid` set) and a `sopClassSyntaxes` of one SOP class with one syntax, and reads each cell from the storage context in `DimseExchange.Contexts` and from what arrived. Its matrix is a `CapabilityMatrix` in `TestResult.RetrieveMatrix`, apart from `TestResult.CapabilityMatrix`, so that everything that looks for the probe's matrix never finds this one. The report, the result files, `RunComparer` and the App each read it on its own. `CapabilityResult.NotDelivered` and `MatrixCell.Status` occur only in it.
 
 `DimseRunner` opens one association for one DIMSE request, with the same timeouts and endings everywhere. fo-dicom answers a request itself when no context was accepted, so the callbacks check `DimseExchange.ContextAccepted` before believing a status. C-GET proposes storage contexts in SCP role only for the SOP classes it expects, because there are more storage classes than the 128 an association can hold, and `RetrieveService` sets the SOP class on the command, because fo-dicom's retrieve requests are fixed to Study Root. In the mock SCP, a retrieve provider must not wait for a C-STORE response inside `OnCGetRequestAsync`, which fo-dicom runs in the loop that reads the PDUs, so the sub-operations go out on a task of their own.
 
@@ -933,14 +967,14 @@ Other ways to use it:
 .\tests\run-tests.ps1 -Render C:\Temp\samples
 
 # Run the mock SCP for trying the app by hand. "mixed" scripts warnings and failures. Without "pacs" below it keeps nothing.
-tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 mixed
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11114 mixed
 
 # The same, with a table of what is accepted, for looking at the Capabilities tab
-tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 negotiation
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11114 negotiation
 
-# The same, but it keeps what it receives and answers C-FIND, C-GET, C-MOVE and Storage Commitment, with DCST4 at 127.0.0.1:11113
+# The same, but it keeps what it receives and answers C-FIND, C-GET, C-MOVE and Storage Commitment, with DCST4 at 127.0.0.1:11112
 # as the C-MOVE destination. The commitment report goes on the same association while it is open, otherwise on a new one to DCST4.
-tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11112 pacs
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe scp 11114 pacs
 
 # Only the store, query, retrieve and Storage Commitment tests, which is quicker while working on them
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe retrieve
@@ -975,7 +1009,7 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe fileset C:\Temp\fileset
 # One multi-frame object at full size, saved in a folder and, with a port, sent to 127.0.0.1 only. Prints the time and the peak memory.
 # Folder, the id of the dataset profile that makes the same object, rows, columns, frames, payload in MB, implicit|explicit|jpeg|baseline
 # or a name that generate --transfer-syntax takes (deflated, jpeg-xl, h264 ...), optionally a port
-tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe cine C:\Temp\cine us-multiframe 960 1280 1667 657 baseline 11112
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe cine C:\Temp\cine us-multiframe 960 1280 1667 657 baseline 11114
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe cine C:\Temp\cine xa-cine 1024 1024 300 0 jpeg
 
 # A load run with a custom mix of one large object, against the mock SCP, which keeps nothing
@@ -997,13 +1031,13 @@ tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe realism
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe examtab C:\Temp\examtab.png
 
 # Retake the README pictures of the app windows (all but exam-multiframe, report and compare) into a folder.
-# The real windows are shown on screen against a mock SCP on port 11112 and copied from the screen, so the screen
+# The real windows are shown on screen against a mock SCP on port 11114 and copied from the screen, so the screen
 # must be unlocked and left alone for about a minute. Every setting is at its default, in memory only; user.config
 # is compared with a copy afterwards and put back if it changed. Results go to C:\Temp\DCST4-results.
 tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe screenshots C:\Temp\shots
 
 # Send one exam to any SCP: host, port, called AE, modality, images, bits, implicit|explicit|jpeg or a name that generate --transfer-syntax takes, optionally fallback
-tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe send 127.0.0.1 11112 MYSCP CT 60 16 jpeg
+tests\DCST4.Tests\bin\Release\net48\DCST4.Tests.exe send 127.0.0.1 11114 MYSCP CT 60 16 jpeg
 ```
 
 Version 1.0.0 was checked once by hand with DCMTK 3.7.0. This is not part of `run-tests.ps1`, which has no outside dependency:
@@ -1097,6 +1131,7 @@ What this means for a reader: compare a system with itself only over several run
 | Report of a run                    | Next to its result files, as `DCST4-run-<start>.html`, unless turned off in Settings |
 | Comparison of runs                 | From the program, `DCST4-compare-<time>.html` in the results folder. From the command line, in the folder of the last run or where `--out` says |
 | Capability matrix of a run         | Next to its result files, as `<run>-capability.json` and `.csv` |
+| Retrieve matrix of a run           | Next to its result files, as `<run>-retrieve-capability.json` and `.csv` |
 | Chain summary of a run             | In the JSON file, and next to it as `<run>-chain.csv`          |
 | Objects sent and retrieved by a run | From the command line, `work-<time>` under `--out`. From the program, a temporary folder that is removed |
 | Series of a Performance test, written as it runs | Next to the result files, as `DCST4-run-<start>-<test id>.csv`, and for the soak also `-windows.csv` |

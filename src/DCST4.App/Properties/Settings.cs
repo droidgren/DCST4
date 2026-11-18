@@ -165,7 +165,7 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("DCST4")]
         public string LocalScpAe { get => (string)this[nameof(LocalScpAe)]; set => this[nameof(LocalScpAe)] = value; }
 
-        [UserScopedSetting, DefaultSettingValue("11113")]
+        [UserScopedSetting, DefaultSettingValue("11112")]
         public int LocalScpPort { get => (int)this[nameof(LocalScpPort)]; set => this[nameof(LocalScpPort)] = value; }
 
         /// <summary>UIDs in test datasets start with this root.</summary>

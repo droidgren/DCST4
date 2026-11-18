@@ -1561,6 +1561,9 @@ namespace DCST4.ViewModels
 
             var matrix = report.Results.Select(r => r.CapabilityMatrix).FirstOrDefault(m => m != null);
             if (matrix != null) TestSuite.Capabilities.Show(matrix);
+            var retrieveMatrix = report.Results.Select(r => r.RetrieveMatrix).FirstOrDefault(m => m != null);
+            if (retrieveMatrix != null) TestSuite.RetrieveCapabilities.Show(retrieveMatrix);
+            if (matrix != null || retrieveMatrix != null) TestSuite.RetrieveCapabilities.SetStoreReference(TestSuite.Capabilities.Matrix);
             TestSuite.Chain.Show(report);
 
             LastRunText = string.Join(", ", report.Summary.Where(p => p.Value > 0).Select(p => $"{p.Key} {p.Value}"));
@@ -1698,7 +1701,7 @@ namespace DCST4.ViewModels
             saved = options.Any ? $"Results saved in {folder}" : NoResultFilesText;
             if (ResultsKeepDays <= 0) return files;
 
-            var keep = new[] { files.Json, files.Csv, files.Html, files.CapabilityJson, files.CapabilityCsv, files.ChainCsv }.Concat(alsoKeep ?? Enumerable.Empty<string>());
+            var keep = new[] { files.Json, files.Csv, files.Html, files.CapabilityJson, files.CapabilityCsv, files.RetrieveCapabilityJson, files.RetrieveCapabilityCsv, files.ChainCsv }.Concat(alsoKeep ?? Enumerable.Empty<string>());
             var cleaned = ResultCleaner.Clean(folder, ResultsKeepDays, DateTime.UtcNow, keep);
             if (cleaned.Deleted + cleaned.Skipped > 0)
             {
@@ -1830,16 +1833,16 @@ namespace DCST4.ViewModels
             ShowTestStatus();
         }
 
-        /// <summary>Writes the matrix on the Capabilities tab as JSON or as CSV.</summary>
-        public void SaveCapabilityMatrix(string path, bool asCsv)
+        /// <summary>Writes a matrix on the Capabilities tab as JSON or as CSV: the store matrix, or with <paramref name="retrieve"/> the retrieve matrix.</summary>
+        public void SaveCapabilityMatrix(string path, bool asCsv, bool retrieve = false)
         {
-            var matrix = TestSuite.Capabilities.Matrix;
+            var matrix = retrieve ? TestSuite.RetrieveCapabilities.Matrix : TestSuite.Capabilities.Matrix;
             if (matrix == null) return;
             try
             {
                 if (asCsv) matrix.SaveCsv(path);
                 else matrix.SaveJson(path);
-                StatusText = $"Capability matrix saved to {path}";
+                StatusText = $"{(retrieve ? "Retrieve matrix" : "Capability matrix")} saved to {path}";
             }
             catch (CapabilityFileException ex)
             {

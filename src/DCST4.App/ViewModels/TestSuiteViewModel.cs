@@ -210,6 +210,8 @@ namespace DCST4.ViewModels
         }
         public ObservableCollection<TestResultRow> Rows { get; } = new ObservableCollection<TestResultRow>();
         public CapabilityViewModel Capabilities { get; } = new CapabilityViewModel();
+        /// <summary>The retrieve matrix of retrieve-syntaxes, marked against <see cref="Capabilities"/>.</summary>
+        public CapabilityViewModel RetrieveCapabilities { get; } = new CapabilityViewModel(isRetrieve: true);
         public ChainSummaryViewModel Chain { get; } = new ChainSummaryViewModel();
 
         /// <summary>What the store tests send in. The first choice leaves it to the capability matrix, per object type.</summary>

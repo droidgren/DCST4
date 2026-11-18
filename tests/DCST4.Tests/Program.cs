@@ -2249,7 +2249,7 @@ namespace DCST4.Tests
         // ---------------------------------------------------------------- standalone SCP
 
         /// <summary>
-        /// Runs the mock SCP until the process is stopped, for trying the real app by hand: DCST4.Tests.exe scp 11112 [mixed].
+        /// Runs the mock SCP until the process is stopped, for trying the real app by hand: DCST4.Tests.exe scp 11114 [mixed].
         /// "mixed" answers with a warning for every 5th image and a failure for every 7th. It stores nothing.
         /// </summary>
         /// <summary>A table to look at in the Capabilities tab: Explicit VR everywhere, compression for CT and MR only, and no Query/Retrieve.</summary>
@@ -2282,10 +2282,10 @@ namespace DCST4.Tests
             if (mode == "pacs")
             {
                 Scp.KeepStored = true;
-                Scp.MoveDestinations["DCST4"] = Tuple.Create("127.0.0.1", 11113);
+                Scp.MoveDestinations["DCST4"] = Tuple.Create("127.0.0.1", 11112);
                 Scp.Commit = CommitMode.SameIfOpen;
                 Scp.CommitDelayMs = 500;
-                Scp.CommitDestinations["DCST4"] = Tuple.Create("127.0.0.1", 11113, "DCST4");
+                Scp.CommitDestinations["DCST4"] = Tuple.Create("127.0.0.1", 11112, "DCST4");
             }
             if (mode == "mixed")
             {

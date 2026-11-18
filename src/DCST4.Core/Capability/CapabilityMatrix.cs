@@ -29,6 +29,8 @@ namespace DCST4.Core.Capability
         AssociationRejected,
         /// <summary>The association failed before the SCP answered, for example by timeout or a closed connection.</summary>
         AssociationFailed,
+        /// <summary>Only in the retrieve matrix: the context was accepted, but the object did not come on it.</summary>
+        NotDelivered,
     }
 
     public enum AssociationEnding { NotStarted, Released, Rejected, Aborted, TimedOut, ConnectionFailed, Cancelled, LocalProblem }
@@ -57,6 +59,9 @@ namespace DCST4.Core.Capability
         /// <summary>Which association of the probe carried this cell, from 1.</summary>
         public int? Association { get; set; }
         public int? PresentationContextId { get; set; }
+        /// <summary>Only in the retrieve matrix: the raw final status of the C-GET, as 0xNNNN. Null if none came.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string Status { get; set; }
     }
 
     public sealed class MatrixRow
@@ -123,7 +128,7 @@ namespace DCST4.Core.Capability
 
         private static readonly string[] CsvColumns =
         {
-            "sop_class_uid", "sop_class_name", "transfer_syntax_uid", "transfer_syntax_name", "result", "accepted_transfer_syntax_uid", "association", "presentation_context_id",
+            "sop_class_uid", "sop_class_name", "transfer_syntax_uid", "transfer_syntax_name", "result", "accepted_transfer_syntax_uid", "association", "presentation_context_id", "dimse_status",
         };
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -164,7 +169,7 @@ namespace DCST4.Core.Capability
                 ResultFileWriter.AppendRow(text, new[]
                 {
                     entry.Item1.SopClassUid, entry.Item1.SopClassName, cell.TransferSyntaxUid, syntaxName, cell.Result.ToString(), cell.AcceptedTransferSyntaxUid,
-                    Number(cell.Association), Number(cell.PresentationContextId),
+                    Number(cell.Association), Number(cell.PresentationContextId), cell.Status,
                 });
             }
             return text.ToString();

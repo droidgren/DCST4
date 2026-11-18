@@ -759,7 +759,21 @@ namespace DCST4.Tests
                 {
                     var done = new TaskCompletionSource<DicomStatus>();
                     var store = new DicomCStoreRequest(file) { OnResponseReceived = (q, r) => done.TrySetResult(r.Status) };
-                    await SendRequestAsync(store).ConfigureAwait(false);
+                    if (!Association.PresentationContexts.Any(c => c.AbstractSyntax == store.SOPClassUID && c.Result == DicomPresentationContextResult.Accept))
+                    {
+                        failed++;
+                        continue;
+                    }
+                    try
+                    {
+                        await SendRequestAsync(store).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is DicomNetworkException || ex is DicomException || ex is InvalidOperationException)
+                    {
+                        // No storage context was accepted for it, or it could not be transcoded to the one that was: a failed sub-operation.
+                        failed++;
+                        continue;
+                    }
                     var status = await done.Task.ConfigureAwait(false);
                     if (status == DicomStatus.Success) completed++;
                     else failed++;

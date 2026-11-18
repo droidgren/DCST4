@@ -265,6 +265,8 @@ namespace DCST4.Cli
                     Console.WriteLine("Capability matrix: " + files.CapabilityJson);
                     Console.WriteLine("Capability matrix: " + files.CapabilityCsv);
                 }
+                if (files.RetrieveCapabilityJson != null) Console.WriteLine("Retrieve matrix: " + files.RetrieveCapabilityJson);
+                if (files.RetrieveCapabilityCsv != null) Console.WriteLine("Retrieve matrix: " + files.RetrieveCapabilityCsv);
                 if (files.ChainCsv != null) Console.WriteLine("Chain: " + files.ChainCsv);
             }
             catch (Exception ex) when (IsFileProblem(ex))

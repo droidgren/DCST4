@@ -826,7 +826,25 @@
                         One row per SOP class and one column per transfer syntax. Rest the mouse on a cell to see the full
                         answer, and on a column heading for the full name. <Bold>Save as JSON</Bold> and
                         <Bold>Save as CSV</Bold> write the table, and every run also saves it next to the result files.
-                        The tab also shows what the destination identified itself as and its maximum PDU length.
+                        The tab also shows what the destination identified itself as and its maximum PDU length. The
+                        matrix of the probe is under <Bold>Accepted on store</Bold>, and the matrix of the test below under
+                        <Bold>Deliverable on retrieve</Bold>.
+                    </Paragraph>
+                    <Paragraph Style="{StaticResource H2}">What the destination can deliver</Paragraph>
+                    <Paragraph>
+                        The test <Italic>C-GET: which transfer syntaxes the system can deliver</Italic> (retrieve-syntaxes)
+                        fetches one stored object of each SOP class with C-GET, once per transfer syntax, each time
+                        proposing only that syntax. Tick it with at least one store test. It stores nothing. An object
+                        without pixel data is asked for in the four uncompressed and deflated syntaxes, a single-frame
+                        image in every syntax but the video ones, and a multi-frame image in all 30.
+                    </Paragraph>
+                    <Paragraph>
+                        A tick means the object came in that syntax, and <Bold>D</Bold> that the destination accepted the
+                        syntax but did not send the object. The other letters mean what they mean on store. When there is
+                        also a capability matrix, <Bold>^</Bold> marks a syntax delivered but not accepted on store, so the
+                        destination transcodes on retrieve, and <Bold>v</Bold> one accepted on store but not delivered.
+                        Rest the mouse on a cell for the raw status of its C-GET. Every run saves this matrix next to the
+                        result files as well.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Comparing with the Conformance Statement</Paragraph>
                     <Paragraph>

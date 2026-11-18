@@ -33,18 +33,25 @@ namespace DCST4.ViewModels
 
     public sealed class CapabilityDifferenceRow
     {
-        public CapabilityDifferenceKind Kind { get; set; }
+        /// <summary>The kind of difference, as the grid shows it.</summary>
+        public string Kind { get; set; }
         public string SopClass { get; set; }
         public string TransferSyntax { get; set; }
         public string Actual { get; set; }
     }
 
-    /// <summary>What the Capabilities tab shows: the last probe, and how it compares with what the vendor claims.</summary>
+    /// <summary>
+    /// What the Capabilities tab shows: the last probe, and how it compares with what the vendor claims. A second instance
+    /// shows the retrieve matrix of retrieve-syntaxes, and how it compares with the probe.
+    /// </summary>
     public sealed class CapabilityViewModel : INotifyPropertyChanged
     {
         public const string Legend = "✓ accepted   A abstract syntax not supported   T transfer syntax not supported   U rejected by user   N rejected, no reason   ? not answered   ≠ another syntax accepted   R association rejected   F association failed   blank: not probed.   With a claimed file: ! claimed but rejected, + accepted but not claimed, ~ claimed but no answer.";
 
+        public const string RetrieveLegend = "✓ delivered in this syntax   D context accepted, object not delivered   A abstract syntax not supported   T transfer syntax not supported   U rejected by user   N rejected, no reason   ? not answered   ≠ another syntax accepted   R association rejected   F association failed   blank: not asked.   Against the store matrix: ^ delivered but not accepted on store (transcodes on retrieve), v accepted on store but not delivered.";
+
         private const string NoMatrix = "No probe has run yet. Tick the negotiation probe on the Tests tab and run it.";
+        private const string NoRetrieveMatrix = "retrieve-syntaxes has not run yet. Tick it on the Tests tab together with at least one store test, and run them.";
 
         private static readonly Brush AcceptedBrush = Frozen(0xC8, 0xE6, 0xC9);
         private static readonly Brush AbstractBrush = Frozen(0xF0, 0xF0, 0xF0);
@@ -55,10 +62,19 @@ namespace DCST4.ViewModels
         private static readonly Brush ClaimedButRejectedBrush = Frozen(0xE5, 0x73, 0x73);
         private static readonly Brush NotClaimedBrush = Frozen(0x90, 0xCA, 0xF9);
 
+        private readonly bool _isRetrieve;
         private CapabilityMatrix _matrix;
         private CapabilityMatrix _claimed;
-        private string _remoteSummary = NoMatrix;
+        private CapabilityMatrix _store;
+        private string _remoteSummary;
         private string _comparisonSummary = string.Empty;
+
+        /// <param name="isRetrieve">Shows the retrieve matrix, which is compared with the store matrix rather than with a claimed file.</param>
+        public CapabilityViewModel(bool isRetrieve = false)
+        {
+            _isRetrieve = isRetrieve;
+            _remoteSummary = isRetrieve ? NoRetrieveMatrix : NoMatrix;
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
         /// <summary>The columns are generated in the window, since their number follows the matrix.</summary>
@@ -71,7 +87,8 @@ namespace DCST4.ViewModels
         public CapabilityMatrix Matrix => _matrix;
         public bool HasMatrix => _matrix != null;
         public bool HasClaimed => _claimed != null;
-        public string LegendText => Legend;
+        public bool IsRetrieve => _isRetrieve;
+        public string LegendText => _isRetrieve ? RetrieveLegend : Legend;
 
         public string RemoteSummary
         {
@@ -89,9 +106,16 @@ namespace DCST4.ViewModels
         {
             _matrix = matrix ?? throw new ArgumentNullException(nameof(matrix));
             Columns = matrix.TransferSyntaxes.Select(s => new CapabilityColumnView { ShortName = s.ShortName, Name = s.Name }).ToList();
-            RemoteSummary = Describe(matrix);
+            RemoteSummary = _isRetrieve ? DescribeRetrieve(matrix) : Describe(matrix);
             OnPropertyChanged(nameof(HasMatrix));
             ColumnsChanged?.Invoke();
+            Rebuild();
+        }
+
+        /// <summary>The store matrix to mark the retrieve matrix against, or null. Only for the retrieve matrix.</summary>
+        public void SetStoreReference(CapabilityMatrix store)
+        {
+            _store = _isRetrieve ? store : null;
             Rebuild();
         }
 
@@ -111,6 +135,12 @@ namespace DCST4.ViewModels
             ComparisonSummary = string.Empty;
             if (_matrix == null) return;
 
+            if (_isRetrieve)
+            {
+                RebuildRetrieve();
+                return;
+            }
+
             var comparison = _claimed != null ? CapabilityComparison.Compare(_matrix, _claimed) : null;
             var differences = comparison?.Differences.ToDictionary(d => d.SopClassUid + "|" + d.TransferSyntaxUid) ?? new Dictionary<string, CapabilityDifference>();
 
@@ -120,7 +150,7 @@ namespace DCST4.ViewModels
                 {
                     SopClass = row.SopClassName,
                     SopClassUid = row.SopClassUid,
-                    Cells = row.Cells.Select(c => CellView(row, c, differences)).ToList(),
+                    Cells = Aligned(row, c => CellView(row, c, differences)),
                 });
             }
 
@@ -129,7 +159,7 @@ namespace DCST4.ViewModels
             {
                 Differences.Add(new CapabilityDifferenceRow
                 {
-                    Kind = difference.Kind,
+                    Kind = difference.Kind.ToString(),
                     SopClass = difference.SopClassName,
                     TransferSyntax = difference.TransferSyntaxName,
                     Actual = difference.Actual?.ToString() ?? "Not part of the probe",
@@ -141,6 +171,71 @@ namespace DCST4.ViewModels
                 comparison.OfKind(CapabilityDifferenceKind.ClaimedButRejected).Count(),
                 comparison.OfKind(CapabilityDifferenceKind.AcceptedButNotClaimed).Count(),
                 comparison.OfKind(CapabilityDifferenceKind.ClaimedButNotProbed).Count());
+        }
+
+        /// <summary>One cell per column, in column order. A syntax the row was not asked about gets an empty cell.</summary>
+        private IReadOnlyList<CapabilityCellView> Aligned(MatrixRow row, Func<MatrixCell, CapabilityCellView> view) =>
+            _matrix.TransferSyntaxes.Select(s =>
+            {
+                var cell = row.Cells.FirstOrDefault(c => c.TransferSyntaxUid == s.Uid);
+                return cell == null ? new CapabilityCellView { Code = string.Empty, Background = Brushes.White, ToolTip = $"{row.SopClassName}\n{s.Name}\nNot asked for this object" } : view(cell);
+            }).ToList();
+
+        private void RebuildRetrieve()
+        {
+            var comparison = _store != null ? StoreRetrieveComparison.Compare(_store, _matrix) : null;
+            foreach (var row in _matrix.Rows)
+            {
+                Rows.Add(new CapabilityRowView
+                {
+                    SopClass = row.SopClassName,
+                    SopClassUid = row.SopClassUid,
+                    Cells = Aligned(row, c => RetrieveCellView(row, c, comparison)),
+                });
+            }
+
+            if (comparison == null) return;
+            foreach (var difference in comparison.Differences)
+            {
+                Differences.Add(new CapabilityDifferenceRow
+                {
+                    Kind = difference.Kind == StoreRetrieveDifferenceKind.StoredButNotDelivered ? "Accepted on store, not delivered" : "Delivered, not accepted on store",
+                    SopClass = difference.SopClassName,
+                    TransferSyntax = difference.TransferSyntaxName,
+                    Actual = $"Store: {difference.Store}, retrieve: {difference.Retrieve}",
+                });
+            }
+            ComparisonSummary = string.Format(CultureInfo.InvariantCulture, "Store vs retrieve: {0} combinations in both, {1} accepted on store but not delivered, {2} delivered but not accepted on store.",
+                comparison.Compared,
+                comparison.OfKind(StoreRetrieveDifferenceKind.StoredButNotDelivered).Count(),
+                comparison.OfKind(StoreRetrieveDifferenceKind.DeliveredButNotStored).Count());
+        }
+
+        private CapabilityCellView RetrieveCellView(MatrixRow row, MatrixCell cell, StoreRetrieveComparison comparison)
+        {
+            var view = new CapabilityCellView
+            {
+                Code = CodeOf(cell.Result),
+                Background = BrushOf(cell.Result),
+                ToolTip = TooltipOf(row, cell),
+            };
+            if (cell.Status != null) view.ToolTip += $"\nFinal C-GET status {cell.Status}";
+
+            var difference = comparison?.Find(row.SopClassUid, cell.TransferSyntaxUid);
+            if (difference == null) return view;
+            if (difference.Kind == StoreRetrieveDifferenceKind.DeliveredButNotStored)
+            {
+                view.Code += "^";
+                view.Background = NotClaimedBrush;
+                view.ToolTip += "\nDelivered, but not accepted on store: the system transcodes on retrieve.";
+            }
+            else
+            {
+                view.Code += "v";
+                view.Background = ClaimedButRejectedBrush;
+                view.ToolTip += "\nAccepted on store, but not delivered.";
+            }
+            return view;
         }
 
         private CapabilityCellView CellView(MatrixRow row, MatrixCell cell, Dictionary<string, CapabilityDifference> differences)
@@ -199,6 +294,13 @@ namespace DCST4.ViewModels
             return text;
         }
 
+        private static string DescribeRetrieve(CapabilityMatrix matrix)
+        {
+            var cells = matrix.AllCells().ToList();
+            var delivered = cells.Count(c => c.Item2.Result == CapabilityResult.Accepted);
+            return $"{matrix.Target?.CalledAe} at {matrix.Target?.Host}:{matrix.Target?.Port}: {delivered} of {cells.Count} delivered on C-GET, for {matrix.Rows.Count} SOP classes, in {matrix.Associations.Count} associations.";
+        }
+
         private static string CodeOf(CapabilityResult result)
         {
             switch (result)
@@ -212,6 +314,7 @@ namespace DCST4.ViewModels
                 case CapabilityResult.AcceptedOtherSyntax: return "≠";
                 case CapabilityResult.AssociationRejected: return "R";
                 case CapabilityResult.AssociationFailed: return "F";
+                case CapabilityResult.NotDelivered: return "D";
                 default: return string.Empty;
             }
         }
@@ -224,7 +327,8 @@ namespace DCST4.ViewModels
                 case CapabilityResult.AbstractSyntaxNotSupported: return AbstractBrush;
                 case CapabilityResult.TransferSyntaxNotSupported: return SyntaxBrush;
                 case CapabilityResult.UserRejection:
-                case CapabilityResult.NoReason: return RefusedBrush;
+                case CapabilityResult.NoReason:
+                case CapabilityResult.NotDelivered: return RefusedBrush;
                 case CapabilityResult.NotAnswered:
                 case CapabilityResult.AcceptedOtherSyntax: return IrregularBrush;
                 default: return UnknownBrush;

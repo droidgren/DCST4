@@ -23,7 +23,7 @@ namespace DCST4.Core.Reporting
     public sealed class ComparisonFinding
     {
         public FindingKind Kind { get; set; }
-        /// <summary>Result, Capability, Chain, Performance, Behaviour, Negotiation or Status codes.</summary>
+        /// <summary>Result, Capability, Retrieve, Chain, Performance, Behaviour, Negotiation or Status codes.</summary>
         public string Area { get; set; }
         public string Subject { get; set; }
         public string Baseline { get; set; }
@@ -139,6 +139,7 @@ namespace DCST4.Core.Reporting
                 var delta = new RunDelta { Run = run };
                 CompareResults(runs[0].Report, run.Report, delta);
                 CompareCapabilities(runs[0].Report, run.Report, delta);
+                CompareRetrieveCapabilities(runs[0].Report, run.Report, delta);
                 CompareChain(runs[0].Report, run.Report, delta);
                 CompareBehaviour(runs[0].Report, run.Report, delta);
                 ComparePerformance(runs[0].Report, run.Report, delta, options);
@@ -222,24 +223,43 @@ namespace DCST4.Core.Reporting
 
         private static CapabilityMatrix MatrixOf(TestRunReport report) => report.Results.Select(r => r.CapabilityMatrix).FirstOrDefault(m => m != null);
 
+        private static CapabilityMatrix RetrieveMatrixOf(TestRunReport report) => report.Results.Select(r => r.RetrieveMatrix).FirstOrDefault(m => m != null);
+
         private static void CompareCapabilities(TestRunReport baseline, TestRunReport run, RunDelta delta)
         {
             var before = MatrixOf(baseline);
             var after = MatrixOf(run);
-            if (before == null && after == null) return;
+            if (!CompareMatrix(before, after, "Capability", "Capability matrix", "accepted", "rejected", delta)) return;
+
+            var roles = Changed(before.RoleSelectionReplies, after.RoleSelectionReplies, r => r.SopClassUid, r => r.Replied + "/" + r.ScuRole + "/" + r.ScpRole);
+            if (roles > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Difference, Area = "Negotiation", Subject = "SCP/SCU role selection", Note = $"The reply differs for {roles} SOP classes." });
+            var extended = Changed(before.ExtendedNegotiationReplies, after.ExtendedNegotiationReplies, r => r.SopClassUid, r => r.Replied + "/" + r.Accepted);
+            if (extended > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Difference, Area = "Negotiation", Subject = "Extended negotiation", Note = $"The reply differs for {extended} SOP classes." });
+        }
+
+        /// <summary>What retrieve-syntaxes found: a syntax no longer delivered is a regression, as one no longer accepted on store is.</summary>
+        private static void CompareRetrieveCapabilities(TestRunReport baseline, TestRunReport run, RunDelta delta) =>
+            CompareMatrix(RetrieveMatrixOf(baseline), RetrieveMatrixOf(run), "Retrieve", "Retrieve matrix", "delivered", "not delivered", delta);
+
+        /// <summary>Returns true if both runs have the matrix, so that the caller can compare more of it.</summary>
+        /// <param name="verb">"accepted", as the findings read.</param>
+        /// <param name="refused">"rejected": the cell was answered, and not with <paramref name="verb"/>.</param>
+        private static bool CompareMatrix(CapabilityMatrix before, CapabilityMatrix after, string area, string name, string verb, string refused, RunDelta delta)
+        {
+            if (before == null && after == null) return false;
             if (before == null || after == null)
             {
                 delta.Findings.Add(new ComparisonFinding
                 {
-                    Kind = FindingKind.NotComparable, Area = "Capability", Subject = "Capability matrix",
-                    Baseline = before == null ? "none" : "probed", Value = after == null ? "none" : "probed", Note = "Only one of the runs has a capability matrix.",
+                    Kind = FindingKind.NotComparable, Area = area, Subject = name,
+                    Baseline = before == null ? "none" : "probed", Value = after == null ? "none" : "probed", Note = $"Only one of the runs has a {name.ToLowerInvariant()}.",
                 });
-                return;
+                return false;
             }
 
             var syntaxNames = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var s in after.TransferSyntaxes.Concat(before.TransferSyntaxes)) if (s?.Uid != null) syntaxNames[s.Uid] = s.ShortName ?? s.Name ?? s.Uid;
-            Func<string, string> syntax = uid => syntaxNames.TryGetValue(uid, out var name) ? name : uid;
+            Func<string, string> syntax = uid => syntaxNames.TryGetValue(uid, out var shortName) ? shortName : uid;
 
             var unanswered = 0;
             foreach (var row in before.Rows)
@@ -261,10 +281,10 @@ namespace DCST4.Core.Reporting
                     else changed.Add($"{syntax(cell.TransferSyntaxUid)} ({cell.Result} \u2192 {now.Result})");
                 }
 
-                var name = row.SopClassName ?? row.SopClassUid;
-                if (lost.Count > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Regression, Area = "Capability", Subject = name, Baseline = "Accepted", Value = "no longer accepted: " + string.Join(", ", lost), Note = row.SopClassUid });
-                if (gained.Count > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Improvement, Area = "Capability", Subject = name, Baseline = "not accepted", Value = "now accepted: " + string.Join(", ", gained), Note = row.SopClassUid });
-                if (changed.Count > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Difference, Area = "Capability", Subject = name, Baseline = "rejected", Value = "rejected for another reason: " + string.Join(", ", changed), Note = row.SopClassUid });
+                var sopClass = row.SopClassName ?? row.SopClassUid;
+                if (lost.Count > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Regression, Area = area, Subject = sopClass, Baseline = Capitalized(verb), Value = $"no longer {verb}: " + string.Join(", ", lost), Note = row.SopClassUid });
+                if (gained.Count > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Improvement, Area = area, Subject = sopClass, Baseline = $"not {verb}", Value = $"now {verb}: " + string.Join(", ", gained), Note = row.SopClassUid });
+                if (changed.Count > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Difference, Area = area, Subject = sopClass, Baseline = refused, Value = $"{refused} for another reason: " + string.Join(", ", changed), Note = row.SopClassUid });
             }
 
             var onlyAfter = after.Rows.Count(r => before.Rows.All(b => b.SopClassUid != r.SopClassUid));
@@ -273,14 +293,12 @@ namespace DCST4.Core.Reporting
                 var parts = new List<string>();
                 if (unanswered > 0) parts.Add($"{unanswered} combinations were not answered in one of the runs");
                 if (onlyAfter > 0) parts.Add($"{onlyAfter} SOP classes were only asked about in this run");
-                delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.NotComparable, Area = "Capability", Subject = "Capability matrix", Note = string.Join(", and ", parts) + "." });
+                delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.NotComparable, Area = area, Subject = name, Note = string.Join(", and ", parts) + "." });
             }
-
-            var roles = Changed(before.RoleSelectionReplies, after.RoleSelectionReplies, r => r.SopClassUid, r => r.Replied + "/" + r.ScuRole + "/" + r.ScpRole);
-            if (roles > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Difference, Area = "Negotiation", Subject = "SCP/SCU role selection", Note = $"The reply differs for {roles} SOP classes." });
-            var extended = Changed(before.ExtendedNegotiationReplies, after.ExtendedNegotiationReplies, r => r.SopClassUid, r => r.Replied + "/" + r.Accepted);
-            if (extended > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Difference, Area = "Negotiation", Subject = "Extended negotiation", Note = $"The reply differs for {extended} SOP classes." });
+            return true;
         }
+
+        private static string Capitalized(string text) => string.IsNullOrEmpty(text) ? text : char.ToUpperInvariant(text[0]) + text.Substring(1);
 
         private static int Changed<T>(IEnumerable<T> before, IEnumerable<T> after, Func<T, string> key, Func<T, string> value)
         {

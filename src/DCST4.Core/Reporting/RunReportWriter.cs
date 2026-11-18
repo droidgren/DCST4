@@ -53,6 +53,7 @@ namespace DCST4.Core.Reporting
             html.Element("p", $"{profile.CalledAe} at {profile.Host}:{profile.Port.ToString(CultureInfo.InvariantCulture)}, {ReportFormat.Time(report.StartedUtc)}", "class", "sub").Line();
 
             var matrix = results.Select(r => r.CapabilityMatrix).FirstOrDefault(m => m != null);
+            var retrieveMatrix = results.Select(r => r.RetrieveMatrix).FirstOrDefault(m => m != null);
             var integrity = results.Where(r => r.Integrity != null).ToList();
             var limits = results.Where(r => r.Limits != null).ToList();
             var commitments = results.Where(r => r.Commitment != null).ToList();
@@ -64,6 +65,7 @@ namespace DCST4.Core.Reporting
             link("summary", "Summary", true);
             link("fingerprint", "Vendor fingerprint", true);
             link("capability", "Capability matrix", matrix != null);
+            link("retrieve-capability", "Retrieve matrix", retrieveMatrix != null);
             link("chain", "Chain", report.Chain != null);
             link("integrity", "Integrity", integrity.Count > 0);
             link("limits", "Limits", limits.Count > 0);
@@ -76,6 +78,7 @@ namespace DCST4.Core.Reporting
             WriteSummary(html, report, results);
             WriteFingerprint(html, VendorFingerprint.From(report));
             if (matrix != null) WriteCapability(html, matrix);
+            if (retrieveMatrix != null) WriteRetrieveCapability(html, retrieveMatrix, matrix);
             if (report.Chain != null) WriteChain(html, report.Chain);
             if (integrity.Count > 0) WriteIntegrity(html, integrity);
             if (limits.Count > 0) WriteLimits(html, limits);
@@ -188,6 +191,7 @@ namespace DCST4.Core.Reporting
                 case CapabilityResult.AcceptedOtherSyntax: return "\u2260";
                 case CapabilityResult.AssociationRejected: return "R";
                 case CapabilityResult.AssociationFailed: return "F";
+                case CapabilityResult.NotDelivered: return "D";
                 default: return "\u00B7";
             }
         }
@@ -200,7 +204,8 @@ namespace DCST4.Core.Reporting
                 case CapabilityResult.AbstractSyntaxNotSupported:
                 case CapabilityResult.TransferSyntaxNotSupported:
                 case CapabilityResult.UserRejection:
-                case CapabilityResult.NoReason: return "c-rejected";
+                case CapabilityResult.NoReason:
+                case CapabilityResult.NotDelivered: return "c-rejected";
                 case CapabilityResult.NotAnswered:
                 case CapabilityResult.AcceptedOtherSyntax: return "c-broken";
                 default: return "c-unknown";
@@ -220,6 +225,7 @@ namespace DCST4.Core.Reporting
                 case CapabilityResult.AcceptedOtherSyntax: return "Accepted with another syntax than proposed";
                 case CapabilityResult.AssociationRejected: return "The whole association was refused";
                 case CapabilityResult.AssociationFailed: return "The association failed before an answer";
+                case CapabilityResult.NotDelivered: return "Accepted, but the object was not delivered";
                 default: return "Not probed";
             }
         }
@@ -228,10 +234,73 @@ namespace DCST4.Core.Reporting
         {
             Section(html, "capability", "Capability matrix");
             html.Element("p", "What the system accepted in association negotiation, per SOP class and transfer syntax. No image was sent to find this out.", "class", "sub");
+            WriteMatrixGrid(html, matrix, value => value != CapabilityResult.NotDelivered, null);
+            WriteMatrixAssociations(html, matrix, "the probe");
 
+            if (matrix.RoleSelectionReplies.Count > 0)
+            {
+                html.Open("details").Element("summary", $"SCP/SCU role selection: answered for {matrix.RoleSelectionReplies.Count(r => r.Replied)} of {matrix.RoleSelectionReplies.Count} SOP classes");
+                html.Open("table").HeaderRow("SOP class", "Replied", "SCU role", "SCP role").Open("tbody");
+                foreach (var r in matrix.RoleSelectionReplies)
+                {
+                    html.Open("tr").Element("td", r.SopClassName ?? r.SopClassUid, "title", r.SopClassUid).Cell(ReportFormat.YesNo(r.Replied))
+                        .Cell(r.ScuRole.HasValue ? ReportFormat.YesNo(r.ScuRole.Value) : string.Empty).Cell(r.ScpRole.HasValue ? ReportFormat.YesNo(r.ScpRole.Value) : string.Empty).Close("tr").Line();
+                }
+                html.Close("tbody").Close("table").Close("details").Line();
+            }
+
+            if (matrix.ExtendedNegotiationReplies.Count > 0)
+            {
+                html.Open("details").Element("summary", $"Extended negotiation: answered for {matrix.ExtendedNegotiationReplies.Count(r => r.Replied)} of {matrix.ExtendedNegotiationReplies.Count} SOP classes");
+                html.Open("table").HeaderRow("SOP class", "Requested", "Replied", "Accepted").Open("tbody");
+                foreach (var r in matrix.ExtendedNegotiationReplies)
+                {
+                    html.Open("tr").Element("td", r.SopClassName ?? r.SopClassUid, "title", r.SopClassUid).Cell(r.Requested, "mono").Cell(ReportFormat.YesNo(r.Replied)).Cell(r.Accepted, "mono").Close("tr").Line();
+                }
+                html.Close("tbody").Close("table").Close("details").Line();
+            }
+            html.Close("section").Line();
+        }
+
+        private static void WriteRetrieveCapability(HtmlWriter html, CapabilityMatrix matrix, CapabilityMatrix store)
+        {
+            Section(html, "retrieve-capability", "Retrieve matrix");
+            html.Element("p", "What the system delivered on C-GET, per SOP class and transfer syntax: one stored object retrieved once per syntax, each time with only that syntax proposed. Next to the capability matrix it tells what the system can deliver from what it accepts on store.", "class", "sub");
+            WriteMatrixGrid(html, matrix, value => true, cell => cell.Status == null ? null : "final status " + cell.Status);
+
+            if (store != null)
+            {
+                var comparison = StoreRetrieveComparison.Compare(store, matrix);
+                var notDelivered = comparison.OfKind(StoreRetrieveDifferenceKind.StoredButNotDelivered).ToList();
+                var transcoded = comparison.OfKind(StoreRetrieveDifferenceKind.DeliveredButNotStored).ToList();
+                html.Element("p", $"Against the capability matrix: {comparison.Compared} combinations in both, {notDelivered.Count} accepted on store but not delivered, {transcoded.Count} delivered but not accepted on store, which means the system transcodes on retrieve.");
+                if (comparison.Differences.Count > 0)
+                {
+                    html.Open("details").Element("summary", "Store against retrieve");
+                    html.Open("table").HeaderRow("SOP class", "Transfer syntax", "On store", "On retrieve").Open("tbody");
+                    foreach (var d in comparison.Differences.Take(DifferenceLimit))
+                    {
+                        html.Open("tr").Element("td", d.SopClassName ?? d.SopClassUid, "title", d.SopClassUid).Element("td", d.TransferSyntaxName, "title", d.TransferSyntaxUid)
+                            .Cell(CellMeaning(d.Store)).Cell(CellMeaning(d.Retrieve)).Close("tr").Line();
+                    }
+                    html.Close("tbody").Close("table");
+                    if (comparison.Differences.Count > DifferenceLimit) html.Element("p", $"{comparison.Differences.Count - DifferenceLimit} more not shown.", "class", "muted");
+                    html.Close("details").Line();
+                }
+            }
+
+            WriteMatrixAssociations(html, matrix, "the C-GETs");
+            html.Close("section").Line();
+        }
+
+        /// <param name="inLegend">Which results the legend explains.</param>
+        /// <param name="extra">More for a cell's title, or null.</param>
+        private static void WriteMatrixGrid(HtmlWriter html, CapabilityMatrix matrix, Func<CapabilityResult, bool> inLegend, Func<MatrixCell, string> extra)
+        {
             html.Open("div", "class", "legend");
             foreach (CapabilityResult value in Enum.GetValues(typeof(CapabilityResult)))
             {
+                if (!inLegend(value)) continue;
                 html.Open("span").Element("span", CellSymbol(value), "class", "key " + CellClass(value)).Text(CellMeaning(value)).Close("span");
             }
             html.Close("div").Line();
@@ -257,49 +326,29 @@ namespace DCST4.Core.Reporting
                         continue;
                     }
                     var title = CellMeaning(cell.Result) + (cell.Result == CapabilityResult.AcceptedOtherSyntax && cell.AcceptedTransferSyntaxUid != null ? ": " + VendorFingerprint.SyntaxName(cell.AcceptedTransferSyntaxUid) : string.Empty);
+                    var more = extra?.Invoke(cell);
+                    if (!string.IsNullOrEmpty(more)) title += ", " + more;
                     html.Element("td", CellSymbol(cell.Result), "class", "cell " + CellClass(cell.Result), "title", title);
                 }
                 html.Close("tr").Line();
             }
             html.Close("tbody").Close("table").Close("div").Line();
+        }
 
-            if (matrix.Associations.Count > 0)
+        /// <param name="whose">"the probe", as it reads in the summary line.</param>
+        private static void WriteMatrixAssociations(HtmlWriter html, CapabilityMatrix matrix, string whose)
+        {
+            if (matrix.Associations.Count == 0) return;
+            html.Open("details").Element("summary", $"The {matrix.Associations.Count} associations of {whose}");
+            html.Open("table").HeaderRow("Association#", "Contexts proposed#", "Ended", "Rejection", "Implementation Class UID", "Version Name", "Max PDU#", "Detail").Open("tbody");
+            foreach (var a in matrix.Associations)
             {
-                html.Open("details").Element("summary", $"The {matrix.Associations.Count} associations of the probe");
-                html.Open("table").HeaderRow("Association#", "Contexts proposed#", "Ended", "Rejection", "Implementation Class UID", "Version Name", "Max PDU#", "Detail").Open("tbody");
-                foreach (var a in matrix.Associations)
-                {
-                    html.Open("tr").Num(a.Index.ToString(CultureInfo.InvariantCulture) + (a.IsFeatureProbe ? " (roles and extended negotiation)" : string.Empty))
-                        .Num(a.ProposedContexts.ToString(CultureInfo.InvariantCulture)).Cell(a.Ending.ToString())
-                        .Cell(a.Rejection == null ? string.Empty : $"result {a.Rejection.Result}, source {a.Rejection.Source}, reason {a.Rejection.Reason}")
-                        .Cell(a.RemoteImplementationClassUid, "mono").Cell(a.RemoteImplementationVersionName).Num(ReportFormat.Number(a.RemoteMaxPduLength)).Cell(a.Detail, "wrap").Close("tr").Line();
-                }
-                html.Close("tbody").Close("table").Close("details").Line();
+                html.Open("tr").Num(a.Index.ToString(CultureInfo.InvariantCulture) + (a.IsFeatureProbe ? " (roles and extended negotiation)" : string.Empty))
+                    .Num(a.ProposedContexts.ToString(CultureInfo.InvariantCulture)).Cell(a.Ending.ToString())
+                    .Cell(a.Rejection == null ? string.Empty : $"result {a.Rejection.Result}, source {a.Rejection.Source}, reason {a.Rejection.Reason}")
+                    .Cell(a.RemoteImplementationClassUid, "mono").Cell(a.RemoteImplementationVersionName).Num(ReportFormat.Number(a.RemoteMaxPduLength)).Cell(a.Detail, "wrap").Close("tr").Line();
             }
-
-            if (matrix.RoleSelectionReplies.Count > 0)
-            {
-                html.Open("details").Element("summary", $"SCP/SCU role selection: answered for {matrix.RoleSelectionReplies.Count(r => r.Replied)} of {matrix.RoleSelectionReplies.Count} SOP classes");
-                html.Open("table").HeaderRow("SOP class", "Replied", "SCU role", "SCP role").Open("tbody");
-                foreach (var r in matrix.RoleSelectionReplies)
-                {
-                    html.Open("tr").Element("td", r.SopClassName ?? r.SopClassUid, "title", r.SopClassUid).Cell(ReportFormat.YesNo(r.Replied))
-                        .Cell(r.ScuRole.HasValue ? ReportFormat.YesNo(r.ScuRole.Value) : string.Empty).Cell(r.ScpRole.HasValue ? ReportFormat.YesNo(r.ScpRole.Value) : string.Empty).Close("tr").Line();
-                }
-                html.Close("tbody").Close("table").Close("details").Line();
-            }
-
-            if (matrix.ExtendedNegotiationReplies.Count > 0)
-            {
-                html.Open("details").Element("summary", $"Extended negotiation: answered for {matrix.ExtendedNegotiationReplies.Count(r => r.Replied)} of {matrix.ExtendedNegotiationReplies.Count} SOP classes");
-                html.Open("table").HeaderRow("SOP class", "Requested", "Replied", "Accepted").Open("tbody");
-                foreach (var r in matrix.ExtendedNegotiationReplies)
-                {
-                    html.Open("tr").Element("td", r.SopClassName ?? r.SopClassUid, "title", r.SopClassUid).Cell(r.Requested, "mono").Cell(ReportFormat.YesNo(r.Replied)).Cell(r.Accepted, "mono").Close("tr").Line();
-                }
-                html.Close("tbody").Close("table").Close("details").Line();
-            }
-            html.Close("section").Line();
+            html.Close("tbody").Close("table").Close("details").Line();
         }
 
         // ---------------------------------------------------------------- chain and integrity

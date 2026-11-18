@@ -35,6 +35,7 @@ namespace DCST4.Core.Testing
             tests.Add(new QueryReturnKeysTest());
             tests.Add(new QueryMatchingTest());
             tests.Add(new RetrieveGetTest());
+            tests.Add(new RetrieveSyntaxesTest());
             tests.Add(new RetrieveMoveTest());
             tests.Add(new RetrieveMoveDiagnosticTest());
             tests.Add(new VerifyIntegrityTest());
