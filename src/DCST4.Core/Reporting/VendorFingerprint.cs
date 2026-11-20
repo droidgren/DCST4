@@ -38,6 +38,7 @@ namespace DCST4.Core.Reporting
         private const string Commitment = "Storage Commitment";
         private const string Limits = "Limits and faults";
         private const string Performance = "Performance";
+        private const string AsyncWindowLabel = "Asynchronous Operations Window: operations outstanding at once on one association";
 
         public static List<FingerprintItem> From(TestRunReport report)
         {
@@ -101,6 +102,9 @@ namespace DCST4.Core.Reporting
                         $"answered for {replied} of {matrix.ExtendedNegotiationReplies.Count} SOP classes", probe.TestId, false);
                 }
                 else add("extended-negotiation", Negotiation, "Extended negotiation for Query/Retrieve", null, null, false);
+
+                var window = matrix.AsyncOperationsReply;
+                add("async-operations-window", Negotiation, AsyncWindowLabel, window?.Describe(), window == null ? null : probe.TestId, false);
             }
             else
             {
@@ -109,6 +113,7 @@ namespace DCST4.Core.Reporting
                     Tuple.Create("sop-classes-accepted", "SOP classes accepted"), Tuple.Create("combinations-accepted", "SOP class and transfer syntax combinations accepted"),
                     Tuple.Create("transfer-syntaxes-accepted", "Transfer syntaxes accepted for at least one SOP class"), Tuple.Create("negotiation-rule-breaks", "Answers that break the negotiation rules"),
                     Tuple.Create("role-selection", "SCP/SCU role selection, which C-GET needs"), Tuple.Create("extended-negotiation", "Extended negotiation for Query/Retrieve"),
+                    Tuple.Create("async-operations-window", AsyncWindowLabel),
                 })
                 {
                     add(pair.Item1, Negotiation, pair.Item2, null, null, false);

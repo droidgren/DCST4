@@ -43,6 +43,9 @@ namespace DCST4.Tests
         public string CalledAe;
         public List<ReceivedContext> Contexts;
         public List<string> ExtendedNegotiationSopClasses;
+        /// <summary>The Asynchronous Operations Window of the request. 1 and 1 when the item was left out, as fo-dicom reads it.</summary>
+        public int AsyncInvoked;
+        public int AsyncPerformed;
         public volatile bool Released;
         public volatile bool AbortedByPeer;
         /// <summary>The connection is gone, however it ended.</summary>
@@ -206,6 +209,11 @@ namespace DCST4.Tests
         public static Func<string, Tuple<bool?, bool?>> RoleReply;
         /// <summary>The application information to answer per SOP class, or null to leave that item unanswered.</summary>
         public static Func<string, byte[]> ExtendedReply;
+        /// <summary>
+        /// The Asynchronous Operations Window to answer: invoked and performed, 0 meaning no limit. Null answers nothing, as
+        /// most systems do. fo-dicom still handles one request at a time per association, whatever is answered.
+        /// </summary>
+        public static Tuple<int, int> AsyncOpsReply;
 
         // ------------------------------------------------------------ what it does with what it stores
         /// <summary>Keep what is stored, so that it can be queried and retrieved. Off by default, so that a long send does not fill the memory.</summary>
@@ -313,6 +321,7 @@ namespace DCST4.Tests
             MaxPduLength = 0;
             RoleReply = null;
             ExtendedReply = null;
+            AsyncOpsReply = null;
             KeepStored = false;
             lock (Archive) Archive.Clear();
             Duplicates = DuplicatePolicy.Overwrite;
@@ -423,6 +432,8 @@ namespace DCST4.Tests
                     ScpRole = c.ProviderRole,
                 }).ToList(),
                 ExtendedNegotiationSopClasses = association.ExtendedNegotiations.Select(e => e.SopClassUid.UID).ToList(),
+                AsyncInvoked = association.MaxAsyncOpsInvoked,
+                AsyncPerformed = association.MaxAsyncOpsPerformed,
             };
             Scp.Associations.Enqueue(_received);
 
@@ -484,6 +495,11 @@ namespace DCST4.Tests
                     if (reply != null) negotiation.AcceptApplicationInfo(new DicomServiceApplicationInfo(reply));
                 }
             }
+
+            // fo-dicom would echo the proposed window, since the A-ASSOCIATE-AC is written from the same association.
+            // 1 and 1 leave the item out of the answer.
+            association.MaxAsyncOpsInvoked = Scp.AsyncOpsReply?.Item1 ?? 1;
+            association.MaxAsyncOpsPerformed = Scp.AsyncOpsReply?.Item2 ?? 1;
 
             await SendAssociationAcceptAsync(association);
         }

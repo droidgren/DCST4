@@ -48,6 +48,8 @@ namespace DCST4.Cli
             "  --load-duration <time>           How long load-throughput runs, as 20, 90s, 5m or 1h. Default 20 s\n" +
             "  --load-count <n>                 Send exactly this many instead of running for a duration\n" +
             "  --load-per-association <n>       Release and open a new association after this many. 0 (default) keeps one\n" +
+            "  --load-outstanding <n>           C-STOREs in flight at once per association, if the system agrees to the\n" +
+            "                                   Asynchronous Operations Window. 1 to 64. Default 1, one at a time\n" +
             "  --load-rate <n>                  Instances per second over all associations. 0 (default) is as fast as answered\n" +
             "  --load-mix <id>                  What is sent, from list-mixes. Default ct\n" +
             "  --load-pdu <bytes>               Maximum PDU length announced and sent with. 0 (default) is fo-dicom's default\n" +
@@ -179,6 +181,7 @@ namespace DCST4.Cli
                 case "--load-duration": if (!TryDuration(name, value, out number, out error)) return false; load.DurationSeconds = number; return true;
                 case "--load-count": if (!TryWhole(name, value, out whole, out error)) return false; load.InstanceCount = whole; return true;
                 case "--load-per-association": if (!TryWhole(name, value, out whole, out error)) return false; load.InstancesPerAssociation = whole; return true;
+                case "--load-outstanding": if (!TryWhole(name, value, out whole, out error)) return false; load.Outstanding = whole; return true;
                 case "--load-rate": if (!TryNumber(name, value, out number, out error)) return false; load.RatePerSecond = number; return true;
                 case "--load-mix":
                     if (DCST4.Core.Performance.DataMixCatalog.Find(value) == null)

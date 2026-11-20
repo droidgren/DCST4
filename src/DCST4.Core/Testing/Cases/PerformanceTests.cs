@@ -52,6 +52,7 @@ namespace DCST4.Core.Testing.Cases
                 MaxPdu = settings.ResolvedMaxPdu,
                 PlannedInstances = settings.PlannedInstances(Mode),
                 PlannedMegabytes = Math.Round(settings.PlannedMegabytes(Mode), 1),
+                OutstandingRequested = settings.Outstanding > 1 ? settings.Outstanding : (int?)null,
             };
             result.Performance = performance;
 
@@ -107,6 +108,7 @@ namespace DCST4.Core.Testing.Cases
                 run.Windows?.Dispose();
             }
 
+            AddWindowNote(run);
             foreach (var status in run.Statuses) Fixtures.AddStatus(result, "C-STORE", status);
             Fixtures.AddContexts(result, run.Contexts);
             if (run.FirstStudy != null) result.Uids["firstStudyInstanceUid"] = run.FirstStudy;
@@ -148,6 +150,7 @@ namespace DCST4.Core.Testing.Cases
                 Budget = budget,
                 RatePerSecond = rate,
                 MaxPdu = run.Settings.ResolvedMaxPdu,
+                Outstanding = run.Settings.Outstanding,
                 WarmUpSeconds = run.Settings.WarmUpSeconds,
                 Step = step,
                 WorkerOffset = workerOffset,
@@ -175,6 +178,28 @@ namespace DCST4.Core.Testing.Cases
             if (outcome.FirstProblem != null && !run.Result.Details.ContainsKey("firstProblem")) run.Result.Details["firstProblem"] = outcome.FirstProblem;
             if (run.Contexts.Count == 0) run.Contexts.AddRange(outcome.Contexts);
             run.Performance.StoppedBy = outcome.StoppedBy;
+
+            var performance = run.Performance;
+            if (performance.OutstandingRequested.HasValue && outcome.AsyncOperationsAnswered)
+            {
+                if (performance.OutstandingAgreed == null) performance.AsyncOperationsReply = outcome.AsyncOperationsReply;
+                performance.OutstandingAgreed = Math.Min(performance.OutstandingAgreed ?? int.MaxValue, outcome.OutstandingAgreed);
+                performance.OutstandingReached = Math.Max(performance.OutstandingReached ?? 0, outcome.OutstandingReached);
+            }
+        }
+
+        /// <summary>
+        /// Says in the explanation when the system agreed to fewer outstanding C-STOREs than were asked for. That is how
+        /// the system was measured, not a fault, so the result class stays.
+        /// </summary>
+        internal static void AddWindowNote(LoadRun run)
+        {
+            var p = run.Performance;
+            if (!p.OutstandingRequested.HasValue || !p.OutstandingAgreed.HasValue || p.OutstandingAgreed >= p.OutstandingRequested) return;
+            var reply = p.AsyncOperationsReply == null ? "sent no Asynchronous Operations Window" : "answered the Asynchronous Operations Window with " + p.AsyncOperationsReply;
+            var agreed = p.OutstandingAgreed.Value == 1 ? "so the C-STOREs went one at a time" : $"so at most {Fixtures.Int(p.OutstandingAgreed.Value)} were outstanding at once";
+            var note = $"Note: {Fixtures.Int(p.OutstandingRequested.Value)} C-STOREs per association were asked to be outstanding at once, and the system {reply}, {agreed}.";
+            run.Result.Explanation = string.IsNullOrEmpty(run.Result.Explanation) ? note : run.Result.Explanation + " " + note;
         }
 
         /// <summary>

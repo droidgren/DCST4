@@ -524,6 +524,16 @@ namespace DCST4.Tests
             Check("Fingerprint: with the probe, from the matrix", value(probed, "implementation-class-uid") == "1.2.3.4" && value(probed, "implementation-version-name") == "MOCK_1"
                 && value(probed, "combinations-accepted") == "2 of 3" && value(probed, "sop-classes-accepted") == "1 of 1 asked about", value(probed, "combinations-accepted"));
             Check("Fingerprint: keys are unique", print.Select(i => i.Key).Distinct().Count() == print.Count, null);
+            Check("Fingerprint: no window when the probe did not ask", value(print, "async-operations-window") == null && value(probed, "async-operations-window") == null, value(probed, "async-operations-window"));
+            var windowed = Probe(CapabilityResult.Accepted);
+            windowed.CapabilityMatrix.AsyncOperationsReply = new AsyncOperationsReply { Association = 2, ProposedInvoked = 0, ProposedPerformed = 1, Invoked = 16, Performed = 1 };
+            var windowPrint = VendorFingerprint.From(Report(windowed));
+            Check("Fingerprint: the Asynchronous Operations Window from the probe", value(windowPrint, "async-operations-window") == "16 invoked, 1 performed"
+                && windowPrint.Single(i => i.Key == "async-operations-window").Source == windowed.TestId, value(windowPrint, "async-operations-window"));
+            var serial = Probe(CapabilityResult.Accepted);
+            serial.CapabilityMatrix.AsyncOperationsReply = new AsyncOperationsReply { Association = 2, ProposedInvoked = 0, ProposedPerformed = 1, Invoked = 1, Performed = 1 };
+            var windowDelta = Compare(Report(serial), Report(windowed));
+            Check("Comparison: another window is a difference in negotiation", windowDelta.Regressions == 0 && windowDelta.Runs[0].Findings.Any(f => f.Subject == "Asynchronous Operations Window" && f.Value == "16 invoked, 1 performed"), Findings(windowDelta));
 
             var vendorA = Report(Probe(CapabilityResult.Accepted));
             var vendorB = Report(Probe(CapabilityResult.Accepted));

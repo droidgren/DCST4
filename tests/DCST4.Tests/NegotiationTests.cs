@@ -355,12 +355,34 @@ namespace DCST4.Tests
             var getReply = features.Matrix.ExtendedNegotiationReplies.Single(r => r.SopClassUid == DicomUID.StudyRootQueryRetrieveInformationModelGet.UID);
             check("Features: an extended negotiation reply is recorded", findReply.Replied && findReply.Requested == "01 01 01 01" && findReply.Accepted == "01 00 01 00", findReply.Accepted);
             check("Features: an unanswered item is told apart", !getReply.Replied && getReply.Requested == "01" && getReply.Accepted == null, getReply.Accepted);
+            check("Async window: only the last association proposes it, with no limit invoked and 1 performed",
+                featureAssociation.AsyncInvoked == 0 && featureAssociation.AsyncPerformed == 1 && Scp.Associations.Take(Scp.AssociationCount - 1).All(a => a.AsyncInvoked == 1 && a.AsyncPerformed == 1),
+                string.Join(", ", Scp.Associations.Select(a => a.AsyncInvoked + "/" + a.AsyncPerformed)));
+            var silent = features.Matrix.AsyncOperationsReply;
+            check("Async window: no answer is one operation at a time", silent != null && !silent.Windowed && silent.Invoked == 1 && silent.Performed == 1 && silent.ProposedInvoked == 0
+                && silent.Association == features.Matrix.Associations.Last().Index && silent.Describe().StartsWith("one operation at a time", StringComparison.Ordinal), silent?.Describe());
+
+            Scp.Reset();
+            Scp.ContextTable = new ScpContextTable();
+            Scp.AsyncOpsReply = Tuple.Create(8, 1);
+            var windowed = await NegotiationProbe.RunAsync(Profile(port), featureOptions, CancellationToken.None);
+            var granted = windowed.Matrix.AsyncOperationsReply;
+            check("Async window: the answer is recorded", granted != null && granted.Windowed && granted.Invoked == 8 && granted.Performed == 1 && granted.Describe() == "8 invoked, 1 performed", granted?.Describe());
+            check("Async window: it lands in the JSON", windowed.Matrix.ToJson().Contains("\"asyncOperationsReply\"") && !identity.Matrix.ToJson().Contains("asyncOperationsReply"), null);
+            check("Async window: the matrix only proposes it with the features", identity.Matrix.AsyncOperationsReply == null, null);
+
+            Scp.Reset();
+            Scp.ContextTable = new ScpContextTable();
+            Scp.AsyncOpsReply = Tuple.Create(0, 0);
+            var unlimited = await NegotiationProbe.RunAsync(Profile(port), featureOptions, CancellationToken.None);
+            check("Async window: 0 is no limit", unlimited.Matrix.AsyncOperationsReply?.Describe() == "no limit invoked, no limit performed", unlimited.Matrix.AsyncOperationsReply?.Describe());
 
             Scp.Reset();
             Scp.ContextTable = new ScpContextTable();
             Scp.AbortAtAssociation = 2;
             var featureAbort = await NegotiationProbe.RunAsync(Profile(port), featureOptions, CancellationToken.None);
             check("Features: an SCP that aborts on them leaves the matrix intact", featureAbort.Matrix.AllCells().All(c => c.Item2.Result == CapabilityResult.Accepted) && featureAbort.Matrix.Associations.Last().Ending == AssociationEnding.Aborted, featureAbort.Matrix.Associations.Last().Ending.ToString());
+            check("Async window: no answer is recorded when the association that asked was aborted", featureAbort.Matrix.AsyncOperationsReply == null, null);
         }
 
         // ---------------------------------------------------------------- associations that do not go well

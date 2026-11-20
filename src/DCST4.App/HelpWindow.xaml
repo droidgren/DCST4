@@ -830,6 +830,13 @@
                         matrix of the probe is under <Bold>Accepted on store</Bold>, and the matrix of the test below under
                         <Bold>Deliverable on retrieve</Bold>.
                     </Paragraph>
+                    <Paragraph>
+                        The last association of the probe also proposes the <Bold>Asynchronous Operations Window</Bold>: how
+                        many operations may be outstanding at once on one association. DCST4 asks for no limit, so the
+                        answer is the destination's own limit, for example <Italic>16 invoked, 1 performed</Italic>. A
+                        destination that does not answer, or answers 1 and 1, takes one operation at a time. The answer is
+                        in the summary above the matrix, in the report and in the vendor fingerprint.
+                    </Paragraph>
                     <Paragraph Style="{StaticResource H2}">What the destination can deliver</Paragraph>
                     <Paragraph>
                         The test <Italic>C-GET: which transfer syntaxes the system can deliver</Italic> (retrieve-syntaxes)
@@ -1042,6 +1049,15 @@
                         once, only how often they are replaced, and tests association setup under load. With 4 associations and
                         1000 images, 0 opens 4 associations in all, 50 about 20, and 1 opens one per image.
                     </Paragraph>
+                    <Paragraph>
+                        <Bold>Outstanding</Bold> is how many C-STOREs each association keeps in flight at once, 1 by default.
+                        Above 1, DCST4 proposes the Asynchronous Operations Window and sends the next image before the response
+                        to the previous one has come, as many modalities and routers do, but only as many as the destination
+                        agrees to. One that does not answer gets one at a time, and the explanation says so. The result shows
+                        what was asked for, agreed and reached. Latency is still per image, from its first byte to its
+                        response, so it includes the time an image waited behind the others. On the command line it is
+                        <Italic>--load-outstanding</Italic>.
+                    </Paragraph>
                     <Table>
                         <Table.Columns>
                             <TableColumn Width="160"/>
@@ -1129,7 +1145,8 @@
                         are compared: what it accepts, whether an unknown AE title is refused, whether it returns objects in
                         the transfer syntax they were sent in, which attributes it changes or adds, how it takes a duplicate,
                         where its Storage Commitment report comes, how many associations it holds and how it refuses the next
-                        one, and what it does after a broken transfer. Each row names the test it came from. A row says
+                        one, how many operations it allows outstanding on one association, and what it does after a broken
+                        transfer. Each row names the test it came from. A row says
                         <Italic>not tested</Italic> when no test of the run could tell, so run the tests you want it to cover.
                     </Paragraph>
                     <Paragraph Style="{StaticResource H2}">Compare runs</Paragraph>

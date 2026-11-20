@@ -38,6 +38,8 @@ namespace DCST4.Core.Capability
         public bool IsFeatureProbe { get; set; }
         public List<ProbeContext> Contexts { get; } = new List<ProbeContext>();
         public List<DicomExtendedNegotiation> ExtendedNegotiations { get; } = new List<DicomExtendedNegotiation>();
+        /// <summary>Propose the Asynchronous Operations Window, which only the last feature association does.</summary>
+        public bool ProposeAsyncOps { get; set; }
     }
 
     /// <summary>The whole probe, split into associations that respect the context limit.</summary>
@@ -51,6 +53,13 @@ namespace DCST4.Core.Capability
         private static readonly byte[] FindInformation = { 1, 1, 1, 1 };
         // PS3.4 C.5.2 and C.5.3: relational retrieval.
         private static readonly byte[] RetrieveInformation = { 1 };
+
+        /// <summary>
+        /// The Asynchronous Operations Window the probe proposes: no limit on what we invoke, so that the answer is the
+        /// SCP's own limit, and one operation that we perform, since DCST4 serves nothing on these associations.
+        /// </summary>
+        public const int ProposedAsyncInvoked = 0;
+        public const int ProposedAsyncPerformed = 1;
 
         private ProbePlan(IReadOnlyList<DicomUID> sopClasses, IReadOnlyList<DicomTransferSyntax> syntaxes)
         {
@@ -88,7 +97,13 @@ namespace DCST4.Core.Capability
 
             plan.AddAssociations(cells, perAssociation, false);
             if (plan.Associations.Count == 0) plan.Associations.Add(new ProbeAssociationPlan { Index = 1 });
-            if (options.NegotiationFeatures) plan.AddFeatureAssociations(perAssociation);
+            if (options.NegotiationFeatures)
+            {
+                plan.AddFeatureAssociations(perAssociation);
+                // On the last association, so that an SCP that cannot take the item costs no other answer.
+                var last = plan.Associations[plan.Associations.Count - 1];
+                if (last.IsFeatureProbe) last.ProposeAsyncOps = true;
+            }
             return plan;
         }
 

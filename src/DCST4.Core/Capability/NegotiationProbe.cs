@@ -62,6 +62,8 @@ namespace DCST4.Core.Capability
             public string ImplementationClassUid;
             public string ImplementationVersionName;
             public long MaxPduLength;
+            public int AsyncInvoked;
+            public int AsyncPerformed;
         }
 
         public static async Task<NegotiationProbeOutcome> RunAsync(TargetProfile profile, ProbeOptions options, CancellationToken token)
@@ -104,6 +106,8 @@ namespace DCST4.Core.Capability
             {
                 client.AdditionalPresentationContexts.AddRange(association.Contexts.Select(ToPresentationContext));
                 client.AdditionalExtendedNegotiations.AddRange(association.ExtendedNegotiations);
+                // fo-dicom writes the item only when the values are not 1 and 1, and sets 1 and 1 before it reads the answer.
+                if (association.ProposeAsyncOps) client.NegotiateAsyncOps(ProbePlan.ProposedAsyncInvoked, ProbePlan.ProposedAsyncPerformed);
                 client.AssociationAccepted += (s, e) => accepted = Snapshot(e.Association);
             }).ConfigureAwait(false);
 
@@ -189,6 +193,8 @@ namespace DCST4.Core.Capability
             ImplementationClassUid = association.RemoteImplementationClassUID?.UID,
             ImplementationVersionName = association.RemoteImplementationVersion,
             MaxPduLength = association.MaximumPDULength,
+            AsyncInvoked = association.MaxAsyncOpsInvoked,
+            AsyncPerformed = association.MaxAsyncOpsPerformed,
         };
 
         private static string Hex(DicomServiceApplicationInfo information) =>
@@ -231,6 +237,18 @@ namespace DCST4.Core.Capability
             if (plan.CoversEchoContext && !CapabilityMatrix.WasAnswered(outcome.Matrix.Find(ProbePlan.EchoSopClass.UID, ProbePlan.EchoSyntax.UID.UID).Result))
             {
                 Fill(outcome.Matrix, ProbePlan.EchoSopClass, ProbePlan.EchoSyntax, echoContext, association.Index);
+            }
+
+            if (association.ProposeAsyncOps)
+            {
+                outcome.Matrix.AsyncOperationsReply = new AsyncOperationsReply
+                {
+                    Association = association.Index,
+                    ProposedInvoked = ProbePlan.ProposedAsyncInvoked,
+                    ProposedPerformed = ProbePlan.ProposedAsyncPerformed,
+                    Invoked = accepted.AsyncInvoked,
+                    Performed = accepted.AsyncPerformed,
+                };
             }
 
             if (association.IsFeatureProbe)

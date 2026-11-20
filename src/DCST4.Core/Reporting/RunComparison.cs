@@ -235,6 +235,12 @@ namespace DCST4.Core.Reporting
             if (roles > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Difference, Area = "Negotiation", Subject = "SCP/SCU role selection", Note = $"The reply differs for {roles} SOP classes." });
             var extended = Changed(before.ExtendedNegotiationReplies, after.ExtendedNegotiationReplies, r => r.SopClassUid, r => r.Replied + "/" + r.Accepted);
             if (extended > 0) delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Difference, Area = "Negotiation", Subject = "Extended negotiation", Note = $"The reply differs for {extended} SOP classes." });
+            var windowBefore = before.AsyncOperationsReply?.Describe();
+            var windowAfter = after.AsyncOperationsReply?.Describe();
+            if (windowBefore != null && windowAfter != null && windowBefore != windowAfter)
+            {
+                delta.Findings.Add(new ComparisonFinding { Kind = FindingKind.Difference, Area = "Negotiation", Subject = "Asynchronous Operations Window", Baseline = windowBefore, Value = windowAfter, Note = "The answer to the window differs." });
+            }
         }
 
         /// <summary>What retrieve-syntaxes found: a syntax no longer delivered is a regression, as one no longer accepted on store is.</summary>
@@ -430,6 +436,7 @@ namespace DCST4.Core.Reporting
             if (s == null || t == null || a.Mode != b.Mode) return differ;
 
             check("instances per association", s.InstancesPerAssociation, t.InstancesPerAssociation);
+            check("outstanding per association", s.Outstanding, t.Outstanding);
             check("warm-up", s.WarmUpSeconds, t.WarmUpSeconds);
             switch (a.Mode)
             {

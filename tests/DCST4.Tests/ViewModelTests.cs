@@ -2449,7 +2449,7 @@ namespace DCST4.Tests
                 check("Performance settings: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
                 var performanceBoxes = LogicalDescendants(performanceContent).OfType<TextBox>().ToList();
                 var performanceProblems = listener.Errors.Where(e => e.Contains("PerformanceSettingsViewModel")).ToList();
-                check("Performance settings: every binding resolves and every box shows its value", performanceProblems.Count == 0 && performanceBoxes.Count == 16 && performanceBoxes.All(b => b.Text.Length > 0),
+                check("Performance settings: every binding resolves and every box shows its value", performanceProblems.Count == 0 && performanceBoxes.Count == 17 && performanceBoxes.All(b => b.Text.Length > 0),
                     string.Join("\n", performanceProblems) + " " + performanceBoxes.Count);
                 check("Performance settings: a note says where the result files are set", pointsToResults(performanceContent), null);
                 var groups = LogicalDescendants(performanceContent).OfType<GroupBox>().Select(g => (string)g.Header).ToList();
