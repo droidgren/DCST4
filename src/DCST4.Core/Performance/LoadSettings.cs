@@ -12,6 +12,8 @@ namespace DCST4.Core.Performance
     public sealed class LoadSettings
     {
         public const int LargestAssociations = 256;
+        /// <summary>The most C-STOREs a worker keeps outstanding on one association.</summary>
+        public const int LargestOutstanding = 64;
         public const int DefaultAssociations = 4;
         public const double DefaultDurationSeconds = 20;
         public const double DefaultWarmUpSeconds = 2;
@@ -39,6 +41,11 @@ namespace DCST4.Core.Performance
         public int Associations { get; set; } = DefaultAssociations;
         /// <summary>Release and open a new association after this many. 0 keeps one association for the whole run.</summary>
         public int InstancesPerAssociation { get; set; }
+        /// <summary>
+        /// C-STOREs kept outstanding at once on each association, proposed as the Asynchronous Operations Window. The
+        /// system's answer can lower it, and without an answer it is 1. 1 sends one at a time and proposes nothing.
+        /// </summary>
+        public int Outstanding { get; set; } = 1;
         public double DurationSeconds { get; set; } = DefaultDurationSeconds;
         /// <summary>Send exactly this many instead of running for a duration. 0 runs for <see cref="DurationSeconds"/>.</summary>
         public int InstanceCount { get; set; }
@@ -200,6 +207,7 @@ namespace DCST4.Core.Performance
             if (custom != null) return custom;
             if (Associations < 1 || Associations > LargestAssociations) return $"The number of associations must be between 1 and {Int(LargestAssociations)}.";
             if (InstancesPerAssociation < 0) return "Instances per association cannot be negative.";
+            if (Outstanding < 1 || Outstanding > LargestOutstanding) return $"The outstanding C-STOREs per association must be between 1 and {Int(LargestOutstanding)}.";
             if (MaxInstances < 0) return "The instance ceiling cannot be negative.";
             if (WarmUpSeconds < 0) return "The warm-up cannot be negative.";
             if (MaxPdu != 0 && (MaxPdu < 1024 || MaxPdu > 16 * 1024 * 1024)) return "The maximum PDU length must be 0 (the default) or between 1024 and 16777216.";

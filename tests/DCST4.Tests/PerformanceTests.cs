@@ -44,6 +44,7 @@ namespace DCST4.Tests
                 await TestScriptedDelay();
                 await TestRateAndAssociations();
                 await TestCancel();
+                await TestOutstanding();
                 await TestRamp();
                 await TestSoak();
                 await TestTimeToAvailable();
@@ -336,6 +337,8 @@ namespace DCST4.Tests
             Check("Falling ramp steps are refused", new LoadSettings { RampSteps = new List<int> { 4, 2 } }.Validate(LoadMode.Ramp) != null);
             Check("A soak without a rate is refused", new LoadSettings { SoakRatePerSecond = 0 }.Validate(LoadMode.Soak) != null);
             Check("An unknown mix is refused", new LoadSettings { Mix = "nope" }.Validate(LoadMode.Load) != null);
+            Check("Outstanding: 1 by default, 1 to 64 allowed", new LoadSettings().Outstanding == 1 && new LoadSettings { Outstanding = 64 }.Validate(LoadMode.Load) == null
+                && new LoadSettings { Outstanding = 0 }.Validate(LoadMode.Load) != null && new LoadSettings { Outstanding = 65 }.Validate(LoadMode.Ramp) != null);
             Check("Every mix in the catalog has a valid profile", DataMixCatalog.All.All(m => m.Entries.All(e => DatasetProfileCatalog.Find(e.ProfileId) != null)) && DataMixCatalog.Find("ct") != null);
 
             double seconds;
@@ -517,6 +520,77 @@ namespace DCST4.Tests
                 Check("Every association of the mock has ended", closed && all.Count == 8, all.Count(a => a.Closed) + " of " + all.Count);
                 Check("All were released, none aborted, since the delay is shorter than the grace", all.All(a => a.Released) && !all.Any(a => a.AbortedByPeer), all.Count(a => a.Released) + " released, " + all.Count(a => a.AbortedByPeer) + " aborted");
                 Check("Stopped by the cancel", result.Performance?.StoppedBy == "cancelled", result.Performance?.StoppedBy);
+            }
+        }
+
+        /// <summary>
+        /// The Asynchronous Operations Window. fo-dicom's server handles one C-STORE at a time per association whatever it
+        /// answers, so pipelining shows here as requests in flight on the client and as latency that holds the wait behind the
+        /// others, not as more throughput.
+        /// </summary>
+        private static async Task TestOutstanding()
+        {
+            Console.WriteLine("\nPerformance: C-STOREs outstanding per association (Asynchronous Operations Window)");
+
+            ResetScp();
+            Scp.ResponseDelayMs = 100;
+            Scp.AsyncOpsReply = Tuple.Create(4, 1);
+            var granted = await One("load-throughput", Settings(s => { s.Associations = 1; s.InstanceCount = 12; s.Outstanding = 4; }));
+            var proposed = Scp.Associations.ToList();
+            var p = granted.Performance;
+            Check("Outstanding 4: the A-ASSOCIATE-RQ proposes 4 invoked and 1 performed", proposed.Count == 1 && proposed[0].AsyncInvoked == 4 && proposed[0].AsyncPerformed == 1,
+                string.Join(", ", proposed.Select(a => a.AsyncInvoked + "/" + a.AsyncPerformed)));
+            Check("Granted 4: every C-STORE stored, PASS, released", granted.Result == TestResultClass.PASS && p.Summary.Stored == 12 && Scp.StoreCount == 12 && proposed.All(a => a.Released), Show(granted));
+            Check("Granted 4: asked, agreed and reached are 4, and the answer is kept", p.OutstandingRequested == 4 && p.OutstandingAgreed == 4 && p.OutstandingReached == 4 && p.AsyncOperationsReply == "4/1",
+                $"{p.OutstandingRequested}/{p.OutstandingAgreed}/{p.OutstandingReached} {p.AsyncOperationsReply}");
+            Check("Granted 4: one latency per request, which holds the wait behind the others", p.Summary.Latency.Count == 12 && p.Summary.Latency.MeanMs > 180,
+                $"{p.Summary.Latency.Count} samples, mean {N(p.Summary.Latency.MeanMs)} ms");
+            Check("Granted 4: no note in the explanation", !granted.Explanation.Contains("Asynchronous Operations Window"), granted.Explanation);
+
+            ResetScp();
+            Scp.ResponseDelayMs = 100;
+            var one = await One("load-throughput", Settings(s => { s.Associations = 1; s.InstanceCount = 4; }));
+            Check("Outstanding 1: no window proposed, and nothing about it in the result",
+                one.Result == TestResultClass.PASS && Scp.Associations.Single().AsyncInvoked == 1 && Scp.Associations.Single().AsyncPerformed == 1
+                && one.Performance.OutstandingRequested == null && one.Performance.OutstandingAgreed == null && one.Performance.AsyncOperationsReply == null, Show(one));
+            Check("Outstanding 1: latency is the scripted delay", one.Performance.Summary.Latency.MeanMs >= 95 && one.Performance.Summary.Latency.MeanMs < 180, N(one.Performance.Summary.Latency.MeanMs));
+
+            ResetScp();
+            Scp.ResponseDelayMs = 20;
+            var silent = await One("load-throughput", Settings(s => { s.Associations = 1; s.InstanceCount = 6; s.Outstanding = 4; }));
+            var sp = silent.Performance;
+            Check("No answer: one at a time, still PASS", silent.Result == TestResultClass.PASS && sp.Summary.Stored == 6 && sp.OutstandingAgreed == 1 && sp.OutstandingReached == 1 && sp.AsyncOperationsReply == null,
+                $"{sp.OutstandingAgreed}/{sp.OutstandingReached} {Show(silent)}");
+            Check("No answer: the explanation says so", silent.Explanation.Contains("Note: 4 C-STOREs per association were asked to be outstanding at once, and the system sent no Asynchronous Operations Window, so the C-STOREs went one at a time."), silent.Explanation);
+
+            ResetScp();
+            Scp.ResponseDelayMs = 50;
+            Scp.AsyncOpsReply = Tuple.Create(2, 1);
+            var two = await One("load-throughput", Settings(s => { s.Associations = 2; s.InstanceCount = 12; s.Outstanding = 4; }));
+            Check("Granted 2 of 4: at most 2 in flight, on every association", two.Result == TestResultClass.PASS && two.Performance.OutstandingAgreed == 2 && two.Performance.OutstandingReached == 2 && two.Performance.Summary.Stored == 12
+                && two.Explanation.Contains("answered the Asynchronous Operations Window with 2/1, so at most 2 were outstanding at once."), $"{two.Performance.OutstandingAgreed}/{two.Performance.OutstandingReached} {Show(two)}");
+
+            ResetScp();
+            Scp.ResponseDelayMs = 50;
+            Scp.AsyncOpsReply = Tuple.Create(0, 0);
+            var unlimited = await One("load-throughput", Settings(s => { s.Associations = 1; s.InstanceCount = 8; s.Outstanding = 3; }));
+            Check("No limit answered: what was asked for", unlimited.Result == TestResultClass.PASS && unlimited.Performance.OutstandingAgreed == 3 && unlimited.Performance.OutstandingReached == 3 && unlimited.Performance.AsyncOperationsReply == "0/0",
+                $"{unlimited.Performance.OutstandingAgreed}/{unlimited.Performance.OutstandingReached} {Show(unlimited)}");
+
+            ResetScp();
+            Scp.ResponseDelayMs = 200;
+            Scp.AsyncOpsReply = Tuple.Create(4, 1);
+            using (var cancel = new CancellationTokenSource())
+            {
+                var run = One("load-throughput", Settings(s => { s.Associations = 1; s.DurationSeconds = 30; s.Outstanding = 4; }), token: cancel.Token);
+                await WaitFor(() => Scp.StoreCount >= 3, 5000);
+                cancel.Cancel();
+                var finished = await Task.WhenAny(run, Task.Delay(8000)) == run;
+                Check("Cancel with 4 outstanding: returns, INDETERMINATE", finished && run.Result.Result == TestResultClass.INDETERMINATE, finished ? Show(run.Result) : "still running");
+                var ended = await WaitFor(() => Scp.Associations.All(a => a.Closed), 2000);
+                var association = Scp.Associations.Single();
+                Check("Cancel with 4 outstanding: the outstanding ones are answered within the grace, then released", ended && association.Released && !association.AbortedByPeer
+                    && run.Result.Performance.Summary.Errors.Problems == 0, $"released {association.Released}, aborted {association.AbortedByPeer}, problems {run.Result.Performance?.Summary?.Errors?.Problems}");
             }
         }
 
@@ -726,12 +800,13 @@ namespace DCST4.Tests
             Profile().Save(profilePath);
             var outFolder = Path.Combine(_temp, "perf-cli");
             var cli = await TestSuiteTests.RunCli("run", "--profile", profilePath, "--tests", "load-throughput", "--out", outFolder, "--log-dir", Path.Combine(_temp, "perf-log"),
-                "--load-count", "20", "--load-associations", "2", "--tta-sample", "0", "--load-warmup", "0");
+                "--load-count", "20", "--load-associations", "2", "--tta-sample", "0", "--load-warmup", "0", "--load-outstanding", "2");
             Check("CLI load run: exit 0", cli.ExitCode == 0, cli.Output);
             Check("CLI prints the plan before sending", cli.Output.Contains("Plan for the load test: Stores 20 new objects"), cli.Output);
             Check("CLI writes the series file next to the results", Directory.Exists(outFolder) && Directory.GetFiles(outFolder, "*-load-throughput.csv").Length == 1);
             var json = Directory.Exists(outFolder) ? Directory.GetFiles(outFolder, "DCST4-run-*.json").Select(File.ReadAllText).FirstOrDefault() ?? string.Empty : string.Empty;
             Check("The JSON has schema 8 and the performance section", json.Contains("\"schemaVersion\": 8") && json.Contains("\"performance\"") && json.Contains("\"storedPerSecond\""));
+            Check("CLI --load-outstanding: asked for 2, the mock answered no window", json.Contains("\"outstandingRequested\": 2") && json.Contains("\"outstandingAgreed\": 1") && json.Contains("\"outstanding\": 2"));
             Check("Doubles are written short", !System.Text.RegularExpressions.Regex.IsMatch(json, @":\s*-?\d+\.\d{10,}\s*[,\r\n}]"));
 
             var bad = await TestSuiteTests.RunCli("run", "--profile", profilePath, "--tests", "load-throughput", "--out", outFolder, "--load-associations", "0");

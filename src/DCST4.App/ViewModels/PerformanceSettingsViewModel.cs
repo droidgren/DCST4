@@ -19,6 +19,7 @@ namespace DCST4.ViewModels
             _copy = performance.Settings;
             Associations = Int(_copy.Associations);
             InstancesPerAssociation = Int(_copy.InstancesPerAssociation);
+            Outstanding = Int(_copy.Outstanding);
             MaxPdu = _copy.MaxPdu.ToString(CultureInfo.InvariantCulture);
             DurationSeconds = Number(_copy.DurationSeconds);
             InstanceCount = Int(_copy.InstanceCount);
@@ -37,6 +38,7 @@ namespace DCST4.ViewModels
 
         public string Associations { get; set; }
         public string InstancesPerAssociation { get; set; }
+        public string Outstanding { get; set; }
         public string MaxPdu { get; set; }
         public string DurationSeconds { get; set; }
         public string InstanceCount { get; set; }
@@ -63,6 +65,7 @@ namespace DCST4.ViewModels
             string problem = null;
             if (!ReadInt(Associations, "Associations", out var associations, ref problem)
                 || !ReadInt(InstancesPerAssociation, "Per association", out var perAssociation, ref problem)
+                || !ReadInt(Outstanding, "Outstanding", out var outstanding, ref problem)
                 || !ReadInt(MaxPdu, "Max PDU", out var maxPdu, ref problem)
                 || !ReadNumber(DurationSeconds, "Load duration", out var duration, ref problem)
                 || !ReadInt(InstanceCount, "Load count", out var count, ref problem)
@@ -86,6 +89,7 @@ namespace DCST4.ViewModels
             var settings = _copy.Clone();
             settings.Associations = associations;
             settings.InstancesPerAssociation = perAssociation;
+            settings.Outstanding = outstanding;
             settings.MaxPdu = (uint)maxPdu;
             settings.DurationSeconds = duration;
             settings.InstanceCount = count;

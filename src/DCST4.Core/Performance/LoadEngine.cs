@@ -32,6 +32,8 @@ namespace DCST4.Core.Performance
         public int Budget;
         public double RatePerSecond;
         public uint MaxPdu;
+        /// <summary>C-STOREs to keep outstanding per association, if the system agrees. 1 proposes no window.</summary>
+        public int Outstanding = 1;
         public double WarmUpSeconds;
         /// <summary>The ramp step, counted from 1, or 0.</summary>
         public int Step;
@@ -64,11 +66,29 @@ namespace DCST4.Core.Performance
         public string FirstProblem;
         public SortedSet<ushort> Statuses = new SortedSet<ushort>();
         public int Seconds;
+        /// <summary>With more than one outstanding asked for: the smallest window an association agreed to. 0 if none was opened.</summary>
+        public int OutstandingAgreed;
+        /// <summary>With more than one outstanding asked for: the most C-STOREs that were outstanding at once on one association.</summary>
+        public int OutstandingReached;
+        /// <summary>The first A-ASSOCIATE-AC's Asynchronous Operations Window as "invoked/performed", or null if it had none.</summary>
+        public string AsyncOperationsReply;
+        /// <summary>Whether an association was accepted with more than one outstanding asked for, so that <see cref="AsyncOperationsReply"/> says something.</summary>
+        public bool AsyncOperationsAnswered;
+    }
+
+    /// <summary>A C-STORE that has been sent and waits for its response.</summary>
+    internal sealed class PendingStore
+    {
+        public StampedInstance Stamped;
+        public long FirstByte;
+        public long LastByte;
     }
 
     /// <summary>
     /// Sends the pool on N associations at once, each with its own worker and one C-STORE outstanding at a time, so the
-    /// latency of a C-STORE holds no time spent waiting inside DCST4. Nothing is logged per instance.
+    /// latency of a C-STORE holds no time spent waiting inside DCST4. With <see cref="LoadRunOptions.Outstanding"/> above
+    /// 1 the worker proposes the Asynchronous Operations Window and keeps as many outstanding as the system agreed to.
+    /// Latency is still per request: from its first byte to its response. Nothing is logged per instance.
     ///
     /// A cancel stops new requests at once, lets an outstanding one finish for up to <see cref="CancelGraceMs"/> and then
     /// releases. Whatever is still open after that is aborted. The end of the duration lets outstanding requests finish
@@ -305,7 +325,7 @@ namespace DCST4.Core.Performance
                     using (raw.CloseOn(_hard.Token))
                     {
                         var connected = Stopwatch.GetTimestamp();
-                        var answer = await raw.AssociateAsync(Contexts(), _options.MaxPdu, associationTimeout, _hard.Token).ConfigureAwait(false);
+                        var answer = await raw.AssociateAsync(Contexts(), _options.MaxPdu, associationTimeout, _hard.Token, Math.Max(1, _options.Outstanding), 1).ConfigureAwait(false);
                         if (!answer.Accepted)
                         {
                             var rejected = answer.Rejection != null;
@@ -339,69 +359,83 @@ namespace DCST4.Core.Performance
                         }
 
                         var pduLength = raw.PeerMaxPdu == 0 ? _options.MaxPdu : Math.Min(_options.MaxPdu, raw.PeerMaxPdu);
+                        var window = raw.AgreedOutstanding(_options.Outstanding);
+                        NoteWindow(raw, window);
+
+                        // With a window of more than one, the next C-STORE goes out while earlier ones wait for their
+                        // response. Each response is paired with its request by Message ID, and its latency is counted
+                        // from that request's first byte, whenever the worker gets round to reading it.
+                        var pending = new Dictionary<ushort, PendingStore>();
                         var sent = 0;
-                        while (!_stop.IsCancellationRequested && (_options.InstancesPerAssociation == 0 || sent < _options.InstancesPerAssociation))
+                        var mayStart = true;
+                        while (true)
                         {
-                            if (!isHeld())
+                            while (pending.Count > 0 && raw.HasUnread(RawAssociation.PduData))
                             {
-                                if (!TryClaim()) break;
-                                setHeld(true);
+                                if (!await TakeResponseAsync(raw, pending, responseTimeout).ConfigureAwait(false))
+                                {
+                                    broken = true;
+                                    break;
+                                }
                             }
-                            try
-                            {
-                                await _gate.WaitAsync(_stop.Token).ConfigureAwait(false);
-                            }
-                            catch (OperationCanceledException)
-                            {
-                                break;
-                            }
-                            setHeld(false);
+                            if (broken) break;
 
-                            var item = pool[cursor];
-                            cursor = (cursor + 1) % pool.Count;
-                            var stamped = stamper.Stamp(item);
+                            if (mayStart && pending.Count < window && !_stop.IsCancellationRequested && (_options.InstancesPerAssociation == 0 || sent < _options.InstancesPerAssociation))
+                            {
+                                if (!isHeld())
+                                {
+                                    if (!TryClaim())
+                                    {
+                                        mayStart = false;
+                                        continue;
+                                    }
+                                    setHeld(true);
+                                }
+                                try
+                                {
+                                    await _gate.WaitAsync(_stop.Token).ConfigureAwait(false);
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    mayStart = false;
+                                    continue;
+                                }
+                                setHeld(false);
 
-                            var firstByte = Stopwatch.GetTimestamp();
-                            long lastByte;
-                            try
-                            {
-                                await raw.SendStoreCommandAsync(contextIds[stamped.SopClassUid], stamped.SopClassUid, stamped.SopInstanceUid).ConfigureAwait(false);
-                                await raw.SendDatasetAsync(contextIds[stamped.SopClassUid], stamped.Parts, pduLength).ConfigureAwait(false);
-                                lastByte = Stopwatch.GetTimestamp();
+                                var item = pool[cursor];
+                                cursor = (cursor + 1) % pool.Count;
+                                var stamped = stamper.Stamp(item);
+                                var messageId = raw.NextMessageId();
+
+                                var firstByte = Stopwatch.GetTimestamp();
+                                try
+                                {
+                                    await raw.SendStoreCommandAsync(contextIds[stamped.SopClassUid], stamped.SopClassUid, stamped.SopInstanceUid, messageId).ConfigureAwait(false);
+                                    await raw.SendDatasetAsync(contextIds[stamped.SopClassUid], stamped.Parts, pduLength).ConfigureAwait(false);
+                                }
+                                catch (Exception ex) when (IsNetworkFailure(ex))
+                                {
+                                    if (_hard.IsCancellationRequested) return;
+                                    var at = Stopwatch.GetTimestamp();
+                                    _collector.RecordFailure(LoadFailure.AssociationLost, at);
+                                    FailAll(pending, LoadFailure.AssociationLost, at);
+                                    LogFailure("The association broke while sending: " + NetworkErrors.GetUserMessage(ex));
+                                    broken = true;
+                                    break;
+                                }
+
+                                pending[messageId] = new PendingStore { Stamped = stamped, FirstByte = firstByte, LastByte = Stopwatch.GetTimestamp() };
+                                if (_options.Outstanding > 1) NoteReached(pending.Count);
+                                sent++;
+                                continue;
                             }
-                            catch (Exception ex) when (IsNetworkFailure(ex))
+
+                            if (pending.Count == 0) break;
+                            if (!await TakeResponseAsync(raw, pending, responseTimeout).ConfigureAwait(false))
                             {
-                                if (_hard.IsCancellationRequested) return;
-                                _collector.RecordFailure(LoadFailure.AssociationLost, Stopwatch.GetTimestamp());
-                                LogFailure("The association broke while sending: " + NetworkErrors.GetUserMessage(ex));
                                 broken = true;
                                 break;
                             }
-
-                            var reply = await raw.ReadResponseAsync(responseTimeout, _hard.Token).ConfigureAwait(false);
-                            if (reply.TimedOut)
-                            {
-                                _collector.RecordFailure(LoadFailure.NoResponse, Stopwatch.GetTimestamp());
-                                LogFailure($"No C-STORE response within {responseTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} s.");
-                                broken = true;
-                                break;
-                            }
-                            if (reply.Ending != null || !reply.Status.HasValue)
-                            {
-                                _collector.RecordFailure(LoadFailure.AssociationLost, reply.Ending?.AtTicks ?? Stopwatch.GetTimestamp());
-                                LogFailure("The system " + (reply.Ending?.Describe() ?? "sent a response without a status") + " while a C-STORE was outstanding.");
-                                broken = true;
-                                break;
-                            }
-
-                            var status = reply.Status.Value;
-                            _collector.RecordResponse(firstByte, lastByte, reply.ArrivedTicks, status, stamped.Bytes);
-                            lock (_sync) _outcome.Statuses.Add(status);
-                            var state = StoreStatus.Classify(status);
-                            if (state == StoreState.Success || state == StoreState.Warning) _options.OnStored?.Invoke(stamped, reply.ArrivedTicks);
-                            else LogFailure($"C-STORE status 0x{status.ToString("X4", CultureInfo.InvariantCulture)} ({StoreStatus.Describe(status)}), " +
-                                (string.IsNullOrWhiteSpace(reply.ErrorComment) ? "no Error Comment." : $"Error Comment \"{reply.ErrorComment.Trim()}\"."));
-                            sent++;
                         }
 
                         if (broken)
@@ -428,6 +462,101 @@ namespace DCST4.Core.Performance
                     raw.Dispose();
                     if (opened) _collector.AssociationClosed();
                 }
+            }
+        }
+
+        /// <summary>
+        /// Reads one response and records it against the request it answers. Returns false when the association is to be
+        /// given up: no response in time, the association ended, or a response to nothing outstanding. Every request still
+        /// outstanding then counts as a failure, so that the errors match the attempts.
+        /// </summary>
+        private async Task<bool> TakeResponseAsync(RawAssociation raw, Dictionary<ushort, PendingStore> pending, TimeSpan responseTimeout)
+        {
+            var oldest = pending.Values.Min(p => p.LastByte);
+            var left = responseTimeout - TimeSpan.FromSeconds((double)(Stopwatch.GetTimestamp() - oldest) / Stopwatch.Frequency);
+            // A response that is already there is still taken when the worker comes to it late.
+            if (left < TimeSpan.FromMilliseconds(1)) left = TimeSpan.FromMilliseconds(1);
+
+            var reply = await raw.ReadResponseAsync(left, _hard.Token).ConfigureAwait(false);
+            if (reply.TimedOut)
+            {
+                FailAll(pending, LoadFailure.NoResponse, Stopwatch.GetTimestamp());
+                LogFailure($"No C-STORE response within {responseTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} s.");
+                return false;
+            }
+            if (reply.Ending != null || !reply.Status.HasValue)
+            {
+                FailAll(pending, LoadFailure.AssociationLost, reply.Ending?.AtTicks ?? Stopwatch.GetTimestamp());
+                LogFailure("The system " + (reply.Ending?.Describe() ?? "sent a response without a status") + " while a C-STORE was outstanding.");
+                return false;
+            }
+
+            PendingStore request;
+            var id = reply.MessageIdBeingRespondedTo;
+            if (id.HasValue && pending.TryGetValue(id.Value, out request))
+            {
+                pending.Remove(id.Value);
+            }
+            else if (!id.HasValue && pending.Count == 1)
+            {
+                // Without (0000,0120) a response can only be paired when one request is outstanding.
+                request = pending.Values.Single();
+                pending.Clear();
+            }
+            else
+            {
+                FailAll(pending, LoadFailure.AssociationLost, reply.ArrivedTicks);
+                LogFailure(id.HasValue
+                    ? $"The system sent a C-STORE response to Message ID {id.Value.ToString(CultureInfo.InvariantCulture)}, which was not outstanding."
+                    : "The system sent a C-STORE response without Message ID Being Responded To while several were outstanding.");
+                return false;
+            }
+
+            var status = reply.Status.Value;
+            var stamped = request.Stamped;
+            _collector.RecordResponse(request.FirstByte, request.LastByte, reply.ArrivedTicks, status, stamped.Bytes);
+            lock (_sync) _outcome.Statuses.Add(status);
+            var state = StoreStatus.Classify(status);
+            if (state == StoreState.Success || state == StoreState.Warning) _options.OnStored?.Invoke(stamped, reply.ArrivedTicks);
+            else LogFailure($"C-STORE status 0x{status.ToString("X4", CultureInfo.InvariantCulture)} ({StoreStatus.Describe(status)}), " +
+                (string.IsNullOrWhiteSpace(reply.ErrorComment) ? "no Error Comment." : $"Error Comment \"{reply.ErrorComment.Trim()}\"."));
+            return true;
+        }
+
+        private void FailAll(Dictionary<ushort, PendingStore> pending, LoadFailure failure, long atTicks)
+        {
+            for (var i = 0; i < pending.Count; i++) _collector.RecordFailure(failure, atTicks);
+            pending.Clear();
+        }
+
+        /// <summary>Keeps what the associations agreed to, when more than one outstanding was asked for.</summary>
+        private void NoteWindow(RawAssociation raw, int window)
+        {
+            if (_options.Outstanding <= 1) return;
+            var first = false;
+            lock (_sync)
+            {
+                if (!_outcome.AsyncOperationsAnswered)
+                {
+                    first = true;
+                    _outcome.AsyncOperationsAnswered = true;
+                    _outcome.AsyncOperationsReply = raw.PeerAsyncInvoked.HasValue
+                        ? raw.PeerAsyncInvoked.Value.ToString(CultureInfo.InvariantCulture) + "/" + (raw.PeerAsyncPerformed ?? 1).ToString(CultureInfo.InvariantCulture)
+                        : null;
+                }
+                _outcome.OutstandingAgreed = _outcome.OutstandingAgreed == 0 ? window : Math.Min(_outcome.OutstandingAgreed, window);
+            }
+            if (first && window < _options.Outstanding)
+            {
+                Logger.Information("Load: asked for {wanted} outstanding C-STOREs per association, the system agreed to {window}", _options.Outstanding, window);
+            }
+        }
+
+        private void NoteReached(int count)
+        {
+            lock (_sync)
+            {
+                if (count > _outcome.OutstandingReached) _outcome.OutstandingReached = count;
             }
         }
 

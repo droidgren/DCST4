@@ -20,6 +20,18 @@ namespace DCST4.Core.Testing
         /// <summary>What DCST4 announced and sent with, at most what the system announced.</summary>
         public uint MaxPdu { get; set; }
         public int PlannedInstances { get; set; }
+        /// <summary>The C-STOREs asked to be kept outstanding per association. Null when it was 1, the default.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? OutstandingRequested { get; set; }
+        /// <summary>The smallest window an association agreed to: 1 if the system sent no Asynchronous Operations Window.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? OutstandingAgreed { get; set; }
+        /// <summary>The most C-STOREs that were outstanding at once on one association.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? OutstandingReached { get; set; }
+        /// <summary>The Asynchronous Operations Window of the first A-ASSOCIATE-AC as "invoked/performed", 0 meaning no limit. Null if it had none.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string AsyncOperationsReply { get; set; }
         public double PlannedMegabytes { get; set; }
         /// <summary>duration, count, cancelled, not-supported, timeout, connect-failed or workers-stopped.</summary>
         public string StoppedBy { get; set; }

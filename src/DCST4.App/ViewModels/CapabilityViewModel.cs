@@ -291,6 +291,7 @@ namespace DCST4.ViewModels
             }
             if (matrix.RoleSelectionReplies.Count > 0) text += $" Role selection answered for {matrix.RoleSelectionReplies.Count(r => r.Replied)} of {matrix.RoleSelectionReplies.Count}.";
             if (matrix.ExtendedNegotiationReplies.Count > 0) text += $" Extended negotiation answered for {matrix.ExtendedNegotiationReplies.Count(r => r.Replied)} of {matrix.ExtendedNegotiationReplies.Count}.";
+            if (matrix.AsyncOperationsReply != null) text += $" Asynchronous Operations Window: {matrix.AsyncOperationsReply.Describe()}.";
             return text;
         }
 

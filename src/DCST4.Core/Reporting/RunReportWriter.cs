@@ -259,6 +259,13 @@ namespace DCST4.Core.Reporting
                 }
                 html.Close("tbody").Close("table").Close("details").Line();
             }
+
+            if (matrix.AsyncOperationsReply != null)
+            {
+                var window = matrix.AsyncOperationsReply;
+                html.Element("p", $"Asynchronous Operations Window, proposed on association {window.Association} with {AsyncOperationsReply.Count(window.ProposedInvoked)} invoked and " +
+                    $"{AsyncOperationsReply.Count(window.ProposedPerformed)} performed: {window.Describe()}.", "class", "sub");
+            }
             html.Close("section").Line();
         }
 
@@ -618,6 +625,11 @@ namespace DCST4.Core.Reporting
                     break;
             }
             if (s.InstancesPerAssociation > 0) parts.Add($"a new association every {s.InstancesPerAssociation} instances");
+            if (p.OutstandingRequested.HasValue)
+            {
+                parts.Add($"{p.OutstandingRequested.Value} C-STOREs outstanding per association asked for" +
+                    (p.OutstandingAgreed.HasValue ? $", {p.OutstandingAgreed.Value} agreed, at most {p.OutstandingReached ?? 0} reached" : string.Empty));
+            }
             parts.Add("warm-up " + seconds(s.WarmUpSeconds));
             return string.Join(", ", parts);
         }

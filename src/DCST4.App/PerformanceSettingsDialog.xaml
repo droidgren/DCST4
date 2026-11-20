@@ -38,6 +38,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <Label Grid.Row="0" Content="Associations:" ToolTip="{Binding ToolTip, ElementName=AssociationsBox}"/>
@@ -50,10 +51,15 @@
                          ToolTip="How many images an association sends before it is released and a new one is opened in its place, in every test. It never changes how many associations are open at once, only how often they are replaced. It tests association setup under load, as with a modality that opens a new association for every study or every image, and the time each setup took is in the Setup p50 ms column.&#x0a;&#x0a;With 4 associations and 1000 images: 0 opens 4 associations in all, 50 about 20, and 1 opens 1000, one per image.&#x0a;&#x0a;Default: 0, each association stays open for the whole run."/>
                 <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="images, then a new association (0 keeps it for the whole run)"/>
 
-                <Label Grid.Row="2" Content="Max PDU:" ToolTip="{Binding ToolTip, ElementName=MaxPduBox}"/>
-                <TextBox Grid.Row="2" Grid.Column="1" x:Name="MaxPduBox" Text="{Binding MaxPdu, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                <Label Grid.Row="2" Content="Outstanding:" ToolTip="{Binding ToolTip, ElementName=OutstandingBox}"/>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="OutstandingBox" Text="{Binding Outstanding, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="How many C-STOREs each association keeps in flight at once, in every test. Above 1, DCST4 proposes the Asynchronous Operations Window and sends the next image before the response to the previous one has come, as many modalities and routers do. The destination decides: what it answers can lower the number, and a destination that does not answer gets one at a time. The result says what was asked for, agreed and reached. Latency is still measured per image, from its first byte to its response, so it includes the time an image waits behind the others. 1 to 64.&#x0a;&#x0a;Default: 1, one at a time and nothing proposed."/>
+                <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="C-STOREs in flight per association (1 is one at a time)"/>
+
+                <Label Grid.Row="3" Content="Max PDU:" ToolTip="{Binding ToolTip, ElementName=MaxPduBox}"/>
+                <TextBox Grid.Row="3" Grid.Column="1" x:Name="MaxPduBox" Text="{Binding MaxPdu, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          ToolTip="The maximum PDU length DCST4 announces and sends with, at most what the destination announces. 0, or 1024 to 16777216.&#x0a;&#x0a;Default: 0, fo-dicom's default of 262144 bytes."/>
-                <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="bytes (0 is fo-dicom's default)"/>
+                <TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource Unit}" Text="bytes (0 is fo-dicom's default)"/>
             </Grid>
         </GroupBox>
 

@@ -117,6 +117,35 @@ namespace DCST4.Core.Capability
     }
 
     /// <summary>
+    /// The answer to the Asynchronous Operations Window that the probe proposes on its last association (PS3.7 D.3.3.3):
+    /// how many operations may be outstanding at once on one association. 0 means no limit.
+    /// </summary>
+    public sealed class AsyncOperationsReply
+    {
+        /// <summary>The probe association that proposed it, from 1.</summary>
+        public int Association { get; set; }
+        public int ProposedInvoked { get; set; }
+        public int ProposedPerformed { get; set; }
+        /// <summary>
+        /// What we may invoke. 1 and 1 cover both an SCP that left the item out and one that answered 1 and 1, which mean the
+        /// same under PS3.7: one operation at a time. fo-dicom does not tell the two apart.
+        /// </summary>
+        public int Invoked { get; set; }
+        public int Performed { get; set; }
+
+        /// <summary>More than one operation at a time was agreed in either direction.</summary>
+        [JsonIgnore]
+        public bool Windowed => Invoked != 1 || Performed != 1;
+
+        /// <summary>In the words of the fingerprint and the report.</summary>
+        public string Describe() => Windowed
+            ? $"{Count(Invoked)} invoked, {Count(Performed)} performed"
+            : "one operation at a time (no window answered, or 1 and 1)";
+
+        public static string Count(int value) => value == 0 ? "no limit" : value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
     /// What an SCP supports, per SOP class and transfer syntax. A vendor's claims are written in the same shape, of which only
     /// rows[].sopClassUid and rows[].cells[].transferSyntaxUid and result are required.
     /// </summary>
@@ -142,6 +171,9 @@ namespace DCST4.Core.Capability
         public List<ProbeAssociationRecord> Associations { get; set; } = new List<ProbeAssociationRecord>();
         public List<RoleSelectionReply> RoleSelectionReplies { get; set; } = new List<RoleSelectionReply>();
         public List<ExtendedNegotiationReply> ExtendedNegotiationReplies { get; set; } = new List<ExtendedNegotiationReply>();
+        /// <summary>Null if the probe did not propose the window, or the association that did was not accepted.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public AsyncOperationsReply AsyncOperationsReply { get; set; }
 
         /// <summary>The cell of this combination, or null if the matrix does not hold it.</summary>
         public MatrixCell Find(string sopClassUid, string transferSyntaxUid) =>

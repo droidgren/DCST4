@@ -146,6 +146,8 @@ namespace DCST4.Core.Network
         /// <summary>Raw (0000,0900).</summary>
         public ushort? Status;
         public string ErrorComment;
+        /// <summary>Raw (0000,0120), which pairs the response with its request when several are outstanding.</summary>
+        public ushort? MessageIdBeingRespondedTo;
         /// <summary><see cref="Stopwatch.GetTimestamp"/> of the PDU that completed the response command.</summary>
         public long ArrivedTicks;
     }
@@ -212,6 +214,12 @@ namespace DCST4.Core.Network
         public uint OurMaxPdu { get; private set; }
         public string PeerImplementationClassUid { get; private set; }
         public string PeerImplementationVersion { get; private set; }
+        /// <summary>The Asynchronous Operations Window of the A-ASSOCIATE-AC (PS3.7 D.3.3.3): null if the item was not sent.</summary>
+        public int? PeerAsyncInvoked { get; private set; }
+        public int? PeerAsyncPerformed { get; private set; }
+        /// <summary>What we proposed in the A-ASSOCIATE-RQ. 1 and 1 means the item was left out.</summary>
+        public int OurAsyncInvoked { get; private set; } = 1;
+        public int OurAsyncPerformed { get; private set; } = 1;
         /// <summary>The length field of the largest PDU sent and received, which is what the maximum length is about.</summary>
         public uint LargestPduSent { get; private set; }
         public uint LargestPduReceived => (uint)Interlocked.Read(ref _largestReceived);
@@ -420,14 +428,23 @@ namespace DCST4.Core.Network
 
         /// <summary>Sends the A-ASSOCIATE-RQ and waits for the answer.</summary>
         /// <param name="ourMaxPdu">The largest PDU we say we take.</param>
-        public async Task<RawAssociateOutcome> AssociateAsync(IEnumerable<RawContext> contexts, uint ourMaxPdu, TimeSpan timeout, CancellationToken token)
+        /// <param name="asyncInvoked">The outstanding operations we propose to invoke, 0 for no limit. With 1 and 1 the item is left out.</param>
+        /// <param name="asyncPerformed">The outstanding operations we propose to perform.</param>
+        public async Task<RawAssociateOutcome> AssociateAsync(IEnumerable<RawContext> contexts, uint ourMaxPdu, TimeSpan timeout, CancellationToken token, int asyncInvoked = 1, int asyncPerformed = 1)
         {
+            if (asyncInvoked < 0 || asyncInvoked > ushort.MaxValue || asyncPerformed < 0 || asyncPerformed > ushort.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(asyncInvoked), "The asynchronous operations window must be between 0 and 65535.");
+            }
             Contexts = contexts.ToList();
             OurMaxPdu = ourMaxPdu;
+            OurAsyncInvoked = asyncInvoked;
+            OurAsyncPerformed = asyncPerformed;
 
             var body = BuildAssociateRq();
             await WritePduAsync(PduAssociateRq, body, body.Length).ConfigureAwait(false);
-            Timeline?.RecordStep(ProtocolEvent.Sent, "A-ASSOCIATE-RQ", $"Calling AE {_endpoint.CallingAe}, called AE {_endpoint.CalledAe}, max PDU {ourMaxPdu.ToString(CultureInfo.InvariantCulture)}");
+            Timeline?.RecordStep(ProtocolEvent.Sent, "A-ASSOCIATE-RQ", $"Calling AE {_endpoint.CallingAe}, called AE {_endpoint.CalledAe}, max PDU {ourMaxPdu.ToString(CultureInfo.InvariantCulture)}"
+                + (ProposesAsyncWindow ? $", asynchronous operations {AsyncText(asyncInvoked)} invoked, {AsyncText(asyncPerformed)} performed" : string.Empty));
 
             var outcome = new RawAssociateOutcome();
             var answer = await NextAsync(timeout, token).ConfigureAwait(false);
@@ -443,7 +460,8 @@ namespace DCST4.Core.Network
                 outcome.Accepted = true;
                 _accepted = true;
                 Timeline?.RecordAccepted(Negotiation(),
-                    $"Max PDU {PeerMaxPdu.ToString(CultureInfo.InvariantCulture)}, implementation {PeerImplementationClassUid} {PeerImplementationVersion}".TrimEnd());
+                    $"Max PDU {PeerMaxPdu.ToString(CultureInfo.InvariantCulture)}, implementation {PeerImplementationClassUid} {PeerImplementationVersion}".TrimEnd()
+                    + (PeerAsyncInvoked.HasValue ? $", asynchronous operations {AsyncText(PeerAsyncInvoked.Value)} invoked, {AsyncText(PeerAsyncPerformed ?? 1)} performed" : string.Empty));
                 return outcome;
             }
 
@@ -463,6 +481,24 @@ namespace DCST4.Core.Network
             RecordEnding(answer);
             return outcome;
         }
+
+        private bool ProposesAsyncWindow => OurAsyncInvoked != 1 || OurAsyncPerformed != 1;
+
+        private static string AsyncText(int value) => value == 0 ? "no limit" : value.ToString(CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// How many requests may be outstanding at once, for a wish of <paramref name="wanted"/>: what the A-ASSOCIATE-AC
+        /// allows, where 0 is no limit and a missing item is 1 (PS3.7 D.3.3.3), and never more than wanted.
+        /// </summary>
+        public int AgreedOutstanding(int wanted)
+        {
+            if (wanted <= 1 || !PeerAsyncInvoked.HasValue) return 1;
+            var peer = PeerAsyncInvoked.Value;
+            return peer == 0 ? wanted : Math.Max(1, Math.Min(wanted, peer));
+        }
+
+        /// <summary>The Message ID for the next request, to pass to <see cref="SendStoreCommandAsync"/>.</summary>
+        public ushort NextMessageId() => (ushort)Interlocked.Increment(ref _messageId);
 
         /// <summary>The negotiation in the shape the result files use.</summary>
         public List<NegotiatedContext> Negotiation() => Contexts.Select(c => new NegotiatedContext
@@ -509,14 +545,15 @@ namespace DCST4.Core.Network
         }
 
         /// <summary>Sends the C-STORE-RQ command. The dataset follows with <see cref="SendDatasetAsync"/>.</summary>
-        public async Task<int> SendStoreCommandAsync(byte contextId, string sopClassUid, string sopInstanceUid)
+        /// <param name="messageId">From <see cref="NextMessageId"/>, or null to take the next one.</param>
+        public async Task<int> SendStoreCommandAsync(byte contextId, string sopClassUid, string sopInstanceUid, ushort? messageId = null)
         {
-            var messageId = (ushort)Interlocked.Increment(ref _messageId);
+            var id = messageId ?? NextMessageId();
             var command = BuildCommand(new SortedDictionary<ushort, byte[]>
             {
                 { 0x0002, Uid(sopClassUid) },
                 { 0x0100, UInt16(0x0001) },
-                { 0x0110, UInt16(messageId) },
+                { 0x0110, UInt16(id) },
                 { 0x0700, UInt16(0x0000) },
                 { 0x0800, UInt16(0x0001) },
                 { 0x1000, Uid(sopInstanceUid) },
@@ -819,6 +856,10 @@ namespace DCST4.Core.Network
             WriteUInt32(maxLength, 0, OurMaxPdu);
             WriteItem(user, 0x51, maxLength);
             WriteItem(user, 0x52, Encoding.ASCII.GetBytes(DicomImplementation.ClassUID.UID));
+            if (ProposesAsyncWindow)
+            {
+                WriteItem(user, 0x53, new[] { (byte)(OurAsyncInvoked >> 8), (byte)OurAsyncInvoked, (byte)(OurAsyncPerformed >> 8), (byte)OurAsyncPerformed });
+            }
             WriteItem(user, 0x55, Encoding.ASCII.GetBytes(DicomImplementation.Version));
             WriteItem(body, 0x50, user.ToArray());
 
@@ -858,6 +899,11 @@ namespace DCST4.Core.Network
                         var subLength = ReadUInt16(body, sub + 2);
                         if (body[sub] == 0x51 && subLength >= 4) PeerMaxPdu = ReadUInt32(body, sub + 4);
                         else if (body[sub] == 0x52) PeerImplementationClassUid = Text(body, sub + 4, subLength);
+                        else if (body[sub] == 0x53 && subLength >= 4)
+                        {
+                            PeerAsyncInvoked = ReadUInt16(body, sub + 4);
+                            PeerAsyncPerformed = ReadUInt16(body, sub + 6);
+                        }
                         else if (body[sub] == 0x55) PeerImplementationVersion = Text(body, sub + 4, subLength);
                         sub += 4 + subLength;
                     }
@@ -899,6 +945,7 @@ namespace DCST4.Core.Network
                 {
                     if (element == 0x0100 && length >= 2) reply.CommandField = BitConverter.ToUInt16(command, start);
                     else if (element == 0x0900 && length >= 2) reply.Status = BitConverter.ToUInt16(command, start);
+                    else if (element == 0x0120 && length >= 2) reply.MessageIdBeingRespondedTo = BitConverter.ToUInt16(command, start);
                     else if (element == 0x0902) reply.ErrorComment = Text(command, start, length);
                 }
                 position = start + length;
