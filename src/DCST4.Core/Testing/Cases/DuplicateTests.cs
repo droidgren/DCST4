@@ -49,7 +49,7 @@ namespace DCST4.Core.Testing.Cases
             var target = RetrieveSteps.Target(studyUid, dataset.GetSingleValueOrDefault(DicomTag.PatientID, string.Empty), QueryRoot.Study);
 
             var timeline = timelines.Next();
-            var get = await RetrieveService.GetAsync(context.Profile.Endpoint, context.Profile.Network, target, context.Session.NewFolder("retrieved-" + purpose), RetrieveSteps.Contexts(new[] { sopClass }, syntaxUid), token, timeline).ConfigureAwait(false);
+            var get = await RetrieveService.GetAsync(context.Profile.QueryEndpoint, context.Profile.Network, target, context.Session.NewFolder("retrieved-" + purpose), RetrieveSteps.Contexts(new[] { sopClass }, syntaxUid), token, timeline).ConfigureAwait(false);
             timelines.Collect(timeline);
             RetrieveSteps.Record(result, get, "C-GET");
 
@@ -65,7 +65,7 @@ namespace DCST4.Core.Testing.Cases
             using (listener)
             {
                 var moveTimeline = timelines.Next();
-                var move = await RetrieveService.MoveAsync(context.Profile.Endpoint, context.Profile.Network, target, context.Profile.LocalScpAe, listener, token, moveTimeline).ConfigureAwait(false);
+                var move = await RetrieveService.MoveAsync(context.Profile.QueryEndpoint, context.Profile.Network, target, context.Profile.LocalScpAe, listener, token, moveTimeline).ConfigureAwait(false);
                 timelines.Collect(moveTimeline);
                 RetrieveSteps.Record(result, move, "C-MOVE");
                 return move;

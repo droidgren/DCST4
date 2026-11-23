@@ -139,7 +139,7 @@ namespace DCST4.Core.Testing.Cases
         private static async Task<RetrieveOutcome> GetAsync(TestContext context, StoredObjectRecord record, QueryRoot root, IReadOnlyDictionary<string, DicomTransferSyntax[]> contexts, TimelineCollector timelines, CancellationToken token)
         {
             var timeline = timelines.Next();
-            var outcome = await RetrieveService.GetAsync(context.Profile.Endpoint, context.Profile.Network,
+            var outcome = await RetrieveService.GetAsync(context.Profile.QueryEndpoint, context.Profile.Network,
                 RetrieveSteps.Target(record.StudyInstanceUid, RetrieveSteps.PatientIdOf(record), root),
                 context.Session.NewFolder("retrieved-cget-" + record.ObjectType), contexts, token, timeline).ConfigureAwait(false);
             timelines.Collect(timeline);
@@ -223,7 +223,7 @@ namespace DCST4.Core.Testing.Cases
                 }
 
                 RetrieveSteps.Record(result, outcome, "C-MOVE");
-                var diagnosis = MoveDiagnosis.Diagnose(outcome, listener.Associations, expected, context.Profile.LocalScpAe, context.Profile.LocalScpPort, context.Profile.Endpoint.UseTls);
+                var diagnosis = MoveDiagnosis.Diagnose(outcome, listener.Associations, expected, context.Profile.LocalScpAe, context.Profile.LocalScpPort, context.Profile.QueryEndpoint.UseTls);
                 var step = Classify(outcome, diagnosis, expected);
                 record.CMove = new RetrieveRecord { Method = RetrieveMethod.CMove, Outcome = outcome, Step = step };
                 return Tuple.Create(step, diagnosis.IsEnvironmental && outcome.Files.Count == 0);
@@ -233,7 +233,7 @@ namespace DCST4.Core.Testing.Cases
         private static async Task<RetrieveOutcome> MoveAsync(TestContext context, StoredObjectRecord record, QueryRoot root, LocalStorageServer listener, TimelineCollector timelines, CancellationToken token)
         {
             var timeline = timelines.Next();
-            var outcome = await RetrieveService.MoveAsync(context.Profile.Endpoint, context.Profile.Network,
+            var outcome = await RetrieveService.MoveAsync(context.Profile.QueryEndpoint, context.Profile.Network,
                 RetrieveSteps.Target(record.StudyInstanceUid, RetrieveSteps.PatientIdOf(record), root),
                 context.Profile.LocalScpAe, listener, token, timeline).ConfigureAwait(false);
             timelines.Collect(timeline);
@@ -294,14 +294,14 @@ namespace DCST4.Core.Testing.Cases
             {
                 context.Report($"C-MOVE of {record.DisplayName}. Waiting for the system to connect to {context.Profile.LocalScpAe} on port {Fixtures.Int(context.Profile.LocalScpPort)}");
                 var timeline = new AssociationTimeline();
-                var outcome = await RetrieveService.MoveAsync(context.Profile.Endpoint, context.Profile.Network,
+                var outcome = await RetrieveService.MoveAsync(context.Profile.QueryEndpoint, context.Profile.Network,
                     RetrieveSteps.Target(record.StudyInstanceUid, RetrieveSteps.PatientIdOf(record), QueryRoot.Study),
                     context.Profile.LocalScpAe, listener, token, timeline).ConfigureAwait(false);
 
                 result.Timeline = timeline.Events;
                 RetrieveSteps.Record(result, outcome, "C-MOVE");
 
-                var diagnosis = MoveDiagnosis.Diagnose(outcome, listener.Associations, expected, context.Profile.LocalScpAe, context.Profile.LocalScpPort, context.Profile.Endpoint.UseTls);
+                var diagnosis = MoveDiagnosis.Diagnose(outcome, listener.Associations, expected, context.Profile.LocalScpAe, context.Profile.LocalScpPort, context.Profile.QueryEndpoint.UseTls);
                 result.Details["diagnosis"] = diagnosis.Kind.ToString();
                 result.Details["incomingAssociations"] = Fixtures.Int(listener.Associations.Count);
                 Fixtures.Set(result, ResultFor(outcome, diagnosis), diagnosis.Explanation);

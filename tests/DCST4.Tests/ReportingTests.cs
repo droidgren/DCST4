@@ -561,8 +561,8 @@ namespace DCST4.Tests
                 if (content != null) File.WriteAllText(file, content, new UTF8Encoding(false));
                 try { RunFile.Load(file); return null; } catch (RunFileException ex) { return ex.Message; }
             };
-            var newer = refused("newer.json", ResultFileWriter.ToJson(report).Replace("\"schemaVersion\": 8", "\"schemaVersion\": 9"));
-            Check("A newer schema version is refused, and the message says which", newer != null && newer.Contains("schema version 9") && newer.Contains("up to 8"), newer);
+            var newer = refused("newer.json", ResultFileWriter.ToJson(report).Replace("\"schemaVersion\": 9", "\"schemaVersion\": 10"));
+            Check("A newer schema version is refused, and the message says which", newer != null && newer.Contains("schema version 10") && newer.Contains("up to 9"), newer);
             Check("A file that is not JSON is refused", (refused("text.json", "not json at all") ?? string.Empty).Contains("is not a DCST4 result file"), null);
             Check("A capability matrix file is refused as a run", (refused("matrix.json", Matrix(CapabilityResult.Accepted).ToJson()) ?? string.Empty).Contains("is not a DCST4 result file"), refused("matrix.json", null));
             Check("A profile file is refused as a run", (refused("profile.json", "{ \"name\": \"x\", \"endpoint\": { \"host\": \"h\", \"port\": 104 } }") ?? string.Empty).Contains("is not a DCST4 result file"), null);

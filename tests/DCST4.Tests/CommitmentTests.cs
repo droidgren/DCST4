@@ -361,7 +361,7 @@ namespace DCST4.Tests
             var second = await Execute(Store + ",commit-stored,commit-unknown-instance", Options(linger: 0));
 
             var json = ResultFileWriter.ToJson(first);
-            _check("JSON: schema version 8", TestRunReport.CurrentSchemaVersion == 8 && json.Contains("\"schemaVersion\": 8"), null);
+            _check("JSON: schema version 9", TestRunReport.CurrentSchemaVersion == 9 && json.Contains("\"schemaVersion\": 9"), null);
             _check("JSON: holds the commitment report", json.Contains("\"commitment\"") && json.Contains("\"reportVia\": \"SeparateAssociation\"") && json.Contains("\"reportAfterMs\"") && json.Contains("\"failureReason\": \"0x0112\""), null);
             _check("JSON: the chain has committed", json.Contains("\"committed\": {"), null);
             var firstJson = TestSuiteTests.NormalizeJson(json);

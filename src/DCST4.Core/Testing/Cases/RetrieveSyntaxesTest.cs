@@ -175,7 +175,7 @@ namespace DCST4.Core.Testing.Cases
             var contexts = new Dictionary<string, DicomTransferSyntax[]>(StringComparer.Ordinal) { { row.SopClassUid, new[] { syntax } } };
 
             var timeline = timelines.Next();
-            var outcome = await RetrieveService.GetAsync(context.Profile.Endpoint, context.Profile.Network, target,
+            var outcome = await RetrieveService.GetAsync(context.Profile.QueryEndpoint, context.Profile.Network, target,
                 context.Session.NewFolder("retrieved-syntaxes-" + row.Record.ObjectType), contexts, token, timeline).ConfigureAwait(false);
             timelines.Collect(timeline);
             return outcome;

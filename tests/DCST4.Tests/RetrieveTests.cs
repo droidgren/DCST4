@@ -42,6 +42,7 @@ namespace DCST4.Tests
             await TestStoreMapping(closedPort);
             await TestPartialAndCancel();
             await TestQuery();
+            await TestQueryRetrieveAvailable(closedPort);
             await TestDuplicates();
             await TestDeterminismAndSelection();
         }
@@ -355,7 +356,7 @@ namespace DCST4.Tests
             var json = ResultFileWriter.ToJson(report);
             _check("JSON: holds the chain", json.Contains("\"chain\"") && json.Contains("\"retrievable\"") && json.Contains("\"intact\"") && json.Contains("\"committed\": null"), null);
             _check("JSON: holds the integrity report", json.Contains("\"integrity\"") && json.Contains("ByteIdentical"), null);
-            _check("JSON: schema version 8", TestRunReport.CurrentSchemaVersion == 8 && json.Contains("\"schemaVersion\": 8"), null);
+            _check("JSON: schema version 9", TestRunReport.CurrentSchemaVersion == 9 && json.Contains("\"schemaVersion\": 9"), null);
 
             var folder = Path.Combine(_temp, "chain-files");
             var files = ResultFileWriter.Write(report, folder);
@@ -595,6 +596,76 @@ namespace DCST4.Tests
         }
 
         // ---------------------------------------------------------------- query capability
+
+        private static async Task TestQueryRetrieveAvailable(int closedPort)
+        {
+            Console.WriteLine("\nQuery/Retrieve available: qr-basic");
+            var all = TestCatalog.All.ToList();
+            var test = all.SingleOrDefault(t => t.Id == "qr-basic");
+            _check("qr-basic exists, first of the Query group, stores nothing and runs with 'all'", test != null && all.IndexOf(test) == all.FindIndex(t => t.Id == "query-index") - 1
+                && test.Group == TestGroups.Query && !test.StoresObjects && test.Category == TestCategory.Capability && TestCatalog.Select("all", out _).Contains(test), null);
+
+            Fresh();
+            var report = await Execute("qr-basic");
+            var result = Result(report, "qr-basic");
+            _check("qr-basic: PASS against the mock with nothing stored", result.Result == TestResultClass.PASS && Scp.Archive.Count == 0, result.Explanation);
+            _check("qr-basic: both roots, C-MOVE and C-GET answered Success", new[] { "find.studyRoot", "find.patientRoot", "move", "get" }.All(k => result.Details.TryGetValue(k, out var v) && v.StartsWith("accepted, 0x0000")),
+                string.Join("; ", result.Details.Select(d => d.Key + "=" + d.Value)));
+            _check("qr-basic: the study it asks for is under the UID root and matches nothing", result.Uids["studyInstanceUid"].StartsWith(Profile().UidRoot + ".") && result.Details["find.studyRoot"].Contains(", 0 matches"), result.Uids["studyInstanceUid"]);
+            _check("qr-basic: raw statuses of all three operations are recorded", new[] { "C-FIND", "C-MOVE", "C-GET" }.All(op => result.StatusCodes.Any(c => c.Operation == op && c.Code == "0x0000")), null);
+            _check("qr-basic: the explanation names the Q/R server and has no times", result.Explanation.StartsWith("Q/R at MOCKSCP@127.0.0.1:") && !result.Explanation.Contains(" ms"), result.Explanation);
+            var again = Result(await Execute("qr-basic"), "qr-basic");
+            _check("qr-basic: the same seed gives the same result", again.Explanation == result.Explanation && again.Uids["studyInstanceUid"] == result.Uids["studyInstanceUid"], again.Explanation);
+
+            Fresh();
+            Scp.MoveDestinations.Clear();
+            result = Result(await Execute("qr-basic"), "qr-basic");
+            _check("qr-basic: an unknown move destination is still a PASS, with a hint about the Listen AET", result.Result == TestResultClass.PASS && result.Details["move"].Contains("0xA801") && result.Explanation.Contains("does not know the Listen AET DCST4"), result.Explanation);
+
+            Fresh();
+            Scp.ContextTable = new ScpContextTable();
+            Scp.ContextTable.Set(DicomUID.StudyRootQueryRetrieveInformationModelFind, ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported));
+            Scp.ContextTable.Set(DicomUID.PatientRootQueryRetrieveInformationModelFind, ScpAnswer.Reject(DicomPresentationContextResult.RejectAbstractSyntaxNotSupported));
+            result = Result(await Execute("qr-basic"), "qr-basic");
+            _check("qr-basic: NOT_SUPPORTED when neither C-FIND root is accepted", result.Result == TestResultClass.NOT_SUPPORTED && result.Details["find.studyRoot"] == "not offered" && result.Details["find.patientRoot"] == "not offered", result.Explanation);
+            _check("qr-basic: C-MOVE and C-GET are still recorded then", result.Details["move"].StartsWith("accepted") && result.Details["get"].StartsWith("accepted"), result.Explanation);
+
+            Fresh();
+            result = Result(await Execute("qr-basic", Profile(port: closedPort)), "qr-basic");
+            _check("qr-basic: an unreachable server is a FAIL and stops after the first query", result.Result == TestResultClass.FAIL && !result.Details.ContainsKey("move"), result.Explanation);
+
+            // The separate Q/R server: the store destination is closed, so only the Q/R endpoint can answer.
+            Fresh();
+            var split = Profile(port: closedPort);
+            split.QueryRetrieve = new DicomEndpoint { Host = "127.0.0.1", Port = _port, CallingAe = "DCST4", CalledAe = "MOCKQR" };
+            report = await Execute("qr-basic,c-echo", split);
+            result = Result(report, "qr-basic");
+            _check("Q/R server: qr-basic goes to it while C-ECHO goes to the destination", result.Result == TestResultClass.PASS && result.Explanation.StartsWith("Q/R at MOCKQR@127.0.0.1:")
+                && Result(report, "c-echo").Result == TestResultClass.FAIL, Show(report));
+            _check("Q/R server: the result file names it, without the destination's details", report.Profile.QueryRetrieveHost == "127.0.0.1" && report.Profile.QueryRetrievePort == _port && report.Profile.QueryRetrieveCalledAe == "MOCKQR"
+                && report.Profile.Port == closedPort, null);
+            var plain = await Execute("c-echo");
+            _check("Q/R server: left out of the result file when not set", plain.Profile.QueryRetrieveHost == null && !ResultFileWriter.ToJson(plain).Contains("queryRetrieve"), null);
+
+            // query-levels after a store: the store needs the open destination, the query only the Q/R server.
+            Fresh();
+            var both = Profile();
+            both.QueryRetrieve = new DicomEndpoint { Host = "127.0.0.1", Port = closedPort, CallingAe = "DCST4", CalledAe = "NOWHERE" };
+            result = Result(await Execute("store-ct,query-levels", both), "query-levels");
+            _check("Q/R server: the query tests use it, not the destination", result.Result != TestResultClass.PASS && result.Query.Levels.All(l => l.Matches == 0), result.Explanation);
+
+            var json = Path.Combine(_temp, "qr-profile.json");
+            split.Save(json);
+            var loaded = TargetProfile.Load(json);
+            _check("Q/R server: a profile file keeps it", loaded.QueryRetrieve != null && loaded.QueryRetrieve.CalledAe == "MOCKQR" && loaded.QueryEndpoint.Port == _port && loaded.Endpoint.Port == closedPort, File.ReadAllText(json));
+            Profile().Save(json);
+            loaded = TargetProfile.Load(json);
+            _check("Q/R server: a profile without it uses the destination", loaded.QueryRetrieve == null && loaded.QueryEndpoint == loaded.Endpoint && !File.ReadAllText(json).Contains("queryRetrieve"), File.ReadAllText(json));
+            var bad = Profile();
+            bad.QueryRetrieve = new DicomEndpoint { Host = "127.0.0.1", Port = 0, CallingAe = "DCST4", CalledAe = "MOCKQR" };
+            _check("Q/R server: a bad port is reported as the Q/R server's", (bad.Validate() ?? string.Empty).StartsWith("Q/R server: Port 0"), bad.Validate());
+            _check("Q/R server: Trimmed keeps it, trimmed", new TargetProfile { Endpoint = Profile().Endpoint, QueryRetrieve = new DicomEndpoint { Host = " h ", CalledAe = " QR " } }.Trimmed().QueryRetrieve.CalledAe == "QR", null);
+        }
 
         private static async Task TestQuery()
         {

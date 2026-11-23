@@ -136,6 +136,20 @@
                                     ToolTip="Server certificate validation and client certificate"/>
                         </StackPanel>
 
+                        <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding QrServerText}" Foreground="#FF505050" Margin="0,4,0,0"
+                                   VerticalAlignment="Top" TextTrimming="CharacterEllipsis"
+                                   ToolTip="C-FIND, C-MOVE and C-GET go to this server instead of the one above. Set it in File > Settings > Network, and click Save to keep it in the profile">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding QrUseSeparateServer}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
                         <StackPanel Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,8,0,0">
                             <Button Content="Ping" Width="100" Command="{Binding PingCommand}" Margin="0,0,8,0"/>
                             <Button Content="Dicom Echo" Width="100" Command="{Binding DicomEchoCommand}"/>

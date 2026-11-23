@@ -101,6 +101,10 @@ namespace DCST4.Core.Reporting
             html.Pair("Called AE title", profile.CalledAe);
             html.Pair("Calling AE title", profile.CallingAe);
             html.Pair("Host and port", $"{profile.Host}:{profile.Port.ToString(CultureInfo.InvariantCulture)}");
+            if (profile.QueryRetrieveHost != null)
+            {
+                html.Pair("Query/Retrieve server", $"{profile.QueryRetrieveCalledAe} at {profile.QueryRetrieveHost}:{(profile.QueryRetrievePort ?? 0).ToString(CultureInfo.InvariantCulture)}");
+            }
             html.Pair("TLS", profile.UseTls ? (profile.TlsIgnoreCertErrors ? "yes, certificate errors accepted" : "yes") : "no");
             html.Pair("Local SCP", $"{profile.LocalScpAe} on port {profile.LocalScpPort.ToString(CultureInfo.InvariantCulture)}");
             html.Pair("UID root", profile.UidRoot);

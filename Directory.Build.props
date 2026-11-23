@@ -4,7 +4,8 @@
     <Version>1.13.0</Version>
     <Company>Västra Götalandsregionen</Company>
     <Product>DCST4</Product>
-    <Copyright>Copyright © Anders Dahlgren 2026</Copyright>
+    <!-- The year is the year of the build, so a new release never shows an old year. -->
+    <Copyright>Copyright © Anders Dahlgren $([System.DateTime]::Now.Year)</Copyright>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 </Project>

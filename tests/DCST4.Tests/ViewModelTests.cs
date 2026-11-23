@@ -410,7 +410,7 @@ namespace DCST4.Tests
             var savedNaming = settings["TestPatientNaming"];
             try
             {
-                Func<string> shownNaming = () => (string)((ComboBox)new SettingsDialog(new ResultSettingsViewModel(vm)).FindName("TestPatientNaming")).SelectedValue;
+                Func<string> shownNaming = () => (string)((ComboBox)new SettingsDialog(new ResultSettingsViewModel(vm), vm).FindName("TestPatientNaming")).SelectedValue;
                 settings["TestPatientNaming"] = "MarkedTestName";
                 check("Settings: the saved naming is selected", shownNaming() == "MarkedTestName", shownNaming());
                 settings["TestPatientNaming"] = "RegistrySwedishName";
@@ -438,7 +438,7 @@ namespace DCST4.Tests
             var savedIds = settings["TestPatientIdSource"];
             try
             {
-                Func<string> shownIds = () => (string)((ComboBox)new SettingsDialog(new ResultSettingsViewModel(vm)).FindName("TestPatientIdSource")).SelectedValue;
+                Func<string> shownIds = () => (string)((ComboBox)new SettingsDialog(new ResultSettingsViewModel(vm), vm).FindName("TestPatientIdSource")).SelectedValue;
                 check("Settings: the default Patient ID is random", settings.Properties["TestPatientIdSource"].DefaultValue as string == "Random", settings.Properties["TestPatientIdSource"].DefaultValue as string);
                 settings["TestPatientIdSource"] = "TestPersonnummer";
                 check("Settings: the saved Patient ID source is selected", shownIds() == "TestPersonnummer", shownIds());
@@ -446,7 +446,7 @@ namespace DCST4.Tests
                 check("Settings: random can be chosen", shownIds() == "Random", shownIds());
                 settings["TestPatientIdSource"] = "nonsense";
                 check("Settings: an unreadable Patient ID source shows the default", shownIds() == "Random", shownIds());
-                var source = ((TextBlock)new SettingsDialog(new ResultSettingsViewModel(vm)).FindName("PersonnummerSourceText")).Text;
+                var source = ((TextBlock)new SettingsDialog(new ResultSettingsViewModel(vm), vm).FindName("PersonnummerSourceText")).Text;
                 check("Settings: says where the personnummer come from", source.Contains("Skatteverket") && source.Contains("skatteverket.entryscape.net") && source.Contains("fetched"), source);
 
                 settings["TestPatientIdSource"] = "Random";
@@ -782,6 +782,8 @@ namespace DCST4.Tests
             vm.SaveProfileCommand.Execute(null);
             check("Profile without a name: asks for one", h.Messages.Count == 1 && vm.Profiles.Count == 0, string.Join("; ", h.Messages));
 
+            // Settings.Default reads the real user.config, where the Q/R server may be on: start both profiles without one.
+            vm.QrUseSeparateServer = false;
             vm.CallingAET = "CALLER1";
             vm.ServerAET = "PACS1";
             vm.ServerHost = "host-one";
@@ -801,6 +803,29 @@ namespace DCST4.Tests
 
             vm.SelectedProfile = vm.Profiles.First(p => p.Name == "Test PACS");
             check("Selecting a profile fills the destination", vm.CallingAET == "CALLER1" && vm.ServerAET == "PACS1" && vm.ServerHost == "host-one" && vm.ServerPort == 11112, vm.ServerHost);
+
+            // The Q/R server belongs to the profile.
+            check("Q/R server: off, and Q/R goes to the destination", !vm.QrUseSeparateServer && vm.QrServerText == string.Empty && vm.BuildTargetProfile().QueryRetrieve == null, null);
+            vm.QrUseSeparateServer = true;
+            vm.QrServerAET = "QRAE";
+            vm.QrServerHost = " qr-host ";
+            vm.QrServerPort = 4242;
+            var withQr = vm.BuildTargetProfile();
+            check("Q/R server: in the target profile, with the destination's calling AE and TLS", withQr.QueryRetrieve != null && withQr.QueryRetrieve.Host == "qr-host" && withQr.QueryRetrieve.Port == 4242
+                && withQr.QueryRetrieve.CalledAe == "QRAE" && withQr.QueryRetrieve.CallingAe == "CALLER1" && withQr.QueryRetrieve.UseTls == withQr.Endpoint.UseTls && withQr.Endpoint.Host == "host-one", null);
+            check("Q/R server: the line under the Server fields names it", vm.QrServerText == "Q/R: QRAE@qr-host:4242", vm.QrServerText);
+            vm.ProfileName = "Test PACS";
+            vm.SaveProfileCommand.Execute(null);
+            vm.SelectedProfile = vm.Profiles.First(p => p.Name == "Another");
+            check("Q/R server: another profile without one turns it off", !vm.QrUseSeparateServer && vm.BuildTargetProfile().QueryRetrieve == null, null);
+            vm.SelectedProfile = vm.Profiles.First(p => p.Name == "Test PACS");
+            check("Q/R server: selecting the profile brings it back", vm.QrUseSeparateServer && vm.QrServerAET == "QRAE" && vm.QrServerPort == 4242, null);
+            var restored = ConnectionProfile.Deserialize(ConnectionProfile.Serialize(vm.Profiles)).Single(p => p.Name == "Test PACS");
+            check("Q/R server: kept in the saved profiles", restored.QrUseSeparateServer && restored.QrServerHost.Trim() == "qr-host" && restored.QrServerPort == 4242, null);
+            var old = ConnectionProfile.Deserialize("<?xml version=\"1.0\"?><ArrayOfConnectionProfile><ConnectionProfile><Name>Old</Name><ServerPort>104</ServerPort></ConnectionProfile></ArrayOfConnectionProfile>").Single();
+            check("Q/R server: a profile from before reads as off", !old.QrUseSeparateServer && old.QrServerPort == 104, null);
+            vm.QrUseSeparateServer = false;
+            h.Saves = 2; // The save above is not one the delete checks below count.
 
             vm.ProfileName = "Test PACS";
             h.ConfirmAnswer = false;
@@ -1946,7 +1971,7 @@ namespace DCST4.Tests
             var old = ConnectionProfile.Deserialize(oldXml).Single();
             check("Old profile: still reads", old.Name == "From 1.2" && old.ServerPort == 4242, old.Name);
             var roundTripped = ConnectionProfile.Deserialize(ConnectionProfile.Serialize(new[] { old })).Single();
-            check("Old profile: format has no new fields", typeof(ConnectionProfile).GetProperties().Length == 8 && roundTripped.TlsClientCertThumbprint == "AA11", typeof(ConnectionProfile).GetProperties().Length.ToString());
+            check("Old profile: the only new fields are the four of the Q/R server, which read as off", typeof(ConnectionProfile).GetProperties().Length == 12 && roundTripped.TlsClientCertThumbprint == "AA11" && !roundTripped.QrUseSeparateServer && roundTripped.QrServerPort == 104, typeof(ConnectionProfile).GetProperties().Length.ToString());
 
             vm.Profiles.Add(old);
             vm.SelectedProfile = old;
@@ -2338,14 +2363,14 @@ namespace DCST4.Tests
                 // ------------------------------------------------ every setting explains itself on hover
                 var bare = WithoutToolTip(content);
                 check("Main window: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
-                bare = WithoutToolTip((DependencyObject)new SettingsDialog(new ResultSettingsViewModel(vm)).Content);
+                bare = WithoutToolTip((DependencyObject)new SettingsDialog(new ResultSettingsViewModel(vm), vm).Content);
                 check("File > Settings: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
                 bare = WithoutToolTip((DependencyObject)new TlsOptionsDialog(false, string.Empty).Content);
                 check("TLS options: every setting has a tooltip", bare.Count == 0, string.Join("; ", bare));
 
                 // Every setting names its default; the fields that describe one added tag are input, not settings.
                 var tagEditor = new[] { "TagBox", "CreatorBox", "ValueBox" };
-                var noDefault = new[] { (DependencyObject)new SettingsDialog(new ResultSettingsViewModel(vm)).Content, new TestSettingsDialog(new TestSettingsViewModel(vm)).Content as DependencyObject, new TlsOptionsDialog(false, string.Empty).Content as DependencyObject,
+                var noDefault = new[] { (DependencyObject)new SettingsDialog(new ResultSettingsViewModel(vm), vm).Content, new TestSettingsDialog(new TestSettingsViewModel(vm)).Content as DependencyObject, new TlsOptionsDialog(false, string.Empty).Content as DependencyObject,
                         new PerformanceSettingsDialog(new PerformanceSettingsViewModel(vm.Performance)).Content as DependencyObject }
                     .SelectMany(LogicalDescendants).OfType<Control>()
                     .Where(c => (c is TextBox t && !t.IsReadOnly) || c is ComboBox || c is CheckBox)
@@ -2408,7 +2433,10 @@ namespace DCST4.Tests
                     && boxes.All(b => b.Name != "ResultsFolderBox" && b.Name != "KeepDaysBox") && pointsToResults(dialogContent), null);
 
                 // The result files are set in File > Settings, on a tab of their own.
-                var settingsDialog = new SettingsDialog(new ResultSettingsViewModel(vm));
+                var settingsDialog = new SettingsDialog(new ResultSettingsViewModel(vm), vm);
+                check("Settings, Network: the Q/R server shows what the destination profile holds", ((CheckBox)settingsDialog.FindName("QrUseSeparateServer")).IsChecked == vm.QrUseSeparateServer
+                    && ((TextBox)settingsDialog.FindName("QrServerPortBox")).Text == vm.QrServerPort.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    && ((TextBox)settingsDialog.FindName("QrServerHostBox")).Text == vm.QrServerHost, null);
                 var resultsTab = (TabItem)settingsDialog.FindName("ResultsTab");
                 var resultsContent = (FrameworkElement)resultsTab.Content;
                 var resultsContext = resultsTab.DataContext;

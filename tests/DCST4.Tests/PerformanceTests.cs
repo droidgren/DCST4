@@ -805,7 +805,7 @@ namespace DCST4.Tests
             Check("CLI prints the plan before sending", cli.Output.Contains("Plan for the load test: Stores 20 new objects"), cli.Output);
             Check("CLI writes the series file next to the results", Directory.Exists(outFolder) && Directory.GetFiles(outFolder, "*-load-throughput.csv").Length == 1);
             var json = Directory.Exists(outFolder) ? Directory.GetFiles(outFolder, "DCST4-run-*.json").Select(File.ReadAllText).FirstOrDefault() ?? string.Empty : string.Empty;
-            Check("The JSON has schema 8 and the performance section", json.Contains("\"schemaVersion\": 8") && json.Contains("\"performance\"") && json.Contains("\"storedPerSecond\""));
+            Check("The JSON has schema 9 and the performance section", json.Contains("\"schemaVersion\": 9") && json.Contains("\"performance\"") && json.Contains("\"storedPerSecond\""));
             Check("CLI --load-outstanding: asked for 2, the mock answered no window", json.Contains("\"outstandingRequested\": 2") && json.Contains("\"outstandingAgreed\": 1") && json.Contains("\"outstanding\": 2"));
             Check("Doubles are written short", !System.Text.RegularExpressions.Regex.IsMatch(json, @":\s*-?\d+\.\d{10,}\s*[,\r\n}]"));
 

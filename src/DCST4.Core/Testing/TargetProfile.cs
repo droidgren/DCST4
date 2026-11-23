@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DCST4.Core.Testing
 {
@@ -32,6 +33,20 @@ namespace DCST4.Core.Testing
         public string LocalScpAe { get; set; } = DefaultLocalScpAe;
         public int LocalScpPort { get; set; } = DefaultLocalScpPort;
         public string UidRoot { get; set; } = DefaultUidRoot;
+        /// <summary>
+        /// A separate server for C-FIND, C-MOVE and C-GET, or null when Query/Retrieve goes to <see cref="Endpoint"/>.
+        /// The App copies the calling AE and TLS settings from <see cref="Endpoint"/>.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public DicomEndpoint QueryRetrieve { get; set; }
+
+        /// <summary>Where C-FIND, C-MOVE and C-GET go.</summary>
+        [JsonIgnore]
+        public DicomEndpoint QueryEndpoint => QueryRetrieve ?? Endpoint;
+
+        /// <summary>True when Query/Retrieve goes somewhere other than the store destination.</summary>
+        [JsonIgnore]
+        public bool HasSeparateQueryRetrieve => QueryRetrieve != null;
 
         /// <summary>A copy with surrounding spaces removed from the values that are sent on the wire.</summary>
         public TargetProfile Trimmed() => new TargetProfile
@@ -43,6 +58,7 @@ namespace DCST4.Core.Testing
             LocalScpAe = LocalScpAe?.Trim(),
             LocalScpPort = LocalScpPort,
             UidRoot = UidRoot?.Trim(),
+            QueryRetrieve = QueryRetrieve?.Trimmed(),
         };
 
         /// <summary>Returns the first problem with this profile, or null if it is valid.</summary>
@@ -54,6 +70,9 @@ namespace DCST4.Core.Testing
 
             var problem = Endpoint.Validate() ?? DicomEndpoint.ValidateAeTitle("Local SCP AET", LocalScpAe);
             if (problem != null) return problem;
+
+            var queryProblem = QueryRetrieve?.Validate();
+            if (queryProblem != null) return "Q/R server: " + queryProblem;
 
             if (LocalScpPort < 1 || LocalScpPort > 65535) return $"Local SCP port {LocalScpPort} is invalid. It must be between 1 and 65535.";
 

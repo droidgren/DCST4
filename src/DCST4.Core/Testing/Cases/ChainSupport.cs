@@ -111,7 +111,7 @@ namespace DCST4.Core.Testing.Cases
                 };
 
                 var timeline = first ? timelines?.Next() : null;
-                var outcome = await QueryService.FindAsync(context.Profile.Endpoint, context.Profile.Network, QueryRoot.Study, DicomQueryRetrieveLevel.Image, identifier, token, timeline).ConfigureAwait(false);
+                var outcome = await QueryService.FindAsync(context.Profile.QueryEndpoint, context.Profile.Network, QueryRoot.Study, DicomQueryRetrieveLevel.Image, identifier, token, timeline).ConfigureAwait(false);
                 if (timeline != null) timelines.Collect(timeline);
                 first = false;
 
