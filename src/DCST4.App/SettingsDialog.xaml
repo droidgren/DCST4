@@ -41,6 +41,35 @@
                     <TextBox Grid.Row="2" Grid.Column="1" x:Name="ResponseTimeoutBox" VerticalAlignment="Center" Margin="0,2"
                              ToolTip="Time to wait for each response to a C-ECHO or C-STORE request.&#x0a;&#x0a;Default: 60 s."/>
                     <Label Grid.Row="2" Grid.Column="2" Content="seconds (0 = no limit)"/>
+
+                    <GroupBox Grid.Row="3" Grid.ColumnSpan="3" Header="Query/Retrieve server" Margin="0,14,0,0" VerticalAlignment="Top">
+                        <StackPanel Margin="8,6,8,6">
+                            <CheckBox x:Name="QrUseSeparateServer" Content="Use a different server for Query/Retrieve (C-FIND, C-MOVE and C-GET)"
+                                      ToolTip="Send the queries and retrieves of the Tests and Performance tabs to the server below instead of the destination on the main window. C-STORE, C-ECHO and Storage Commitment still go to the destination.&#x0a;&#x0a;Default: off."/>
+                            <Grid Margin="0,6,0,0" IsEnabled="{Binding IsChecked, ElementName=QrUseSeparateServer}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="112"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Label Grid.Row="0" Content="AET:" Target="{Binding ElementName=QrServerAetBox}"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="QrServerAetBox" VerticalAlignment="Center" Margin="0,2"
+                                         ToolTip="The AE title of the Query/Retrieve server, the called AE title of C-FIND, C-MOVE and C-GET. Up to 16 characters.&#x0a;&#x0a;Default: empty."/>
+                                <Label Grid.Row="1" Content="IP/Hostname:" Target="{Binding ElementName=QrServerHostBox}"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="QrServerHostBox" VerticalAlignment="Center" Margin="0,2"
+                                         ToolTip="The host name or IP address of the Query/Retrieve server.&#x0a;&#x0a;Default: empty."/>
+                                <Label Grid.Row="2" Content="Port:" Target="{Binding ElementName=QrServerPortBox}"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="QrServerPortBox" VerticalAlignment="Center" Margin="0,2" Width="70" HorizontalAlignment="Left"
+                                         ToolTip="The port the Query/Retrieve server listens on.&#x0a;&#x0a;Default: 104."/>
+                            </Grid>
+                            <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#FF505050"
+                                       Text="Saved with the destination profile: click Save on the main window to store it in the profile. The Calling AET and the TLS settings are those of the Server fields on the main window."/>
+                        </StackPanel>
+                    </GroupBox>
                 </Grid>
             </TabItem>
 

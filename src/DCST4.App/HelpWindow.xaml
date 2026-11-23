@@ -753,6 +753,22 @@
                         <Bold>Open results folder</Bold> opens the folder in Explorer.
                     </Paragraph>
                     <Paragraph>
+                        <Bold>Is Query/Retrieve there?</Bold> The test <Bold>Q/R: which services are accepted</Bold> (qr-basic), first in the
+                        Query group, sends C-FIND under Study Root and Patient Root, then C-MOVE and C-GET, for a study that cannot
+                        exist. It needs nothing stored and stores nothing. It is PASS if either root answers the C-FIND with Success,
+                        and NOT_SUPPORTED if neither is accepted. C-MOVE and C-GET are recorded beside it, and a C-MOVE answered
+                        0xA801 means the PACS does not know the Listen AET.
+                    </Paragraph>
+                    <Paragraph>
+                        <Bold>A separate Query/Retrieve server.</Bold> If the PACS answers C-FIND, C-MOVE and C-GET on another node than
+                        the one that takes C-STORE, tick <Bold>Use a different server for Query/Retrieve</Bold> under
+                        <Bold>File &gt; Settings &gt; Network</Bold> and enter its AET, IP/Hostname and Port. Every query and retrieve of the
+                        Tests and Performance tabs then goes there. C-STORE, C-ECHO, the negotiation probe and Storage Commitment
+                        still go to the Server fields, and the Calling AET and TLS settings are theirs. The Q/R server belongs to the
+                        destination profile: click <Bold>Save</Bold> to keep it in the profile. While it is on, a line under the Server
+                        fields shows it.
+                    </Paragraph>
+                    <Paragraph>
                         <Bold>A run that stores objects asks first.</Bold> If any ticked test can leave new objects on the
                         destination, DCST4 names the destination and lists those tests, each with how many examinations
                         and objects it stores and about how much data, and then the total. The sizes are uncompressed, the
@@ -1310,6 +1326,8 @@
                                 <TableCell><Paragraph>How long to wait for the server to accept or reject the association (default 10 s).</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Network: Response (DIMSE) timeout</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>How long to wait for each response to a C-ECHO or C-STORE request (default 60 s, 0 = no limit).</Paragraph></TableCell></TableRow>
+                            <TableRow><TableCell><Paragraph><Bold>Network: Query/Retrieve server</Bold></Paragraph></TableCell>
+                                <TableCell><Paragraph>Send C-FIND, C-MOVE and C-GET to another server than the destination: its AET, IP/Hostname and Port (default off). Saved with the destination profile. See <Italic>Running tests against a PACS</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Identifiers</Bold></Paragraph></TableCell>
                                 <TableCell><Paragraph>Whether to draw new Auto values after each run; where an Auto Patient ID comes from, a random DCST4 ID (the default) or a Swedish test personnummer, with where the personnummer come from; and how an Auto patient name is made: DCST4^TEST^number (the default) or a Swedish name. Both apply to Generate &amp; Send and the tests. See <Italic>Identifiers and Auto values</Italic>.</Paragraph></TableCell></TableRow>
                             <TableRow><TableCell><Paragraph><Bold>Burned-in text</Bold></Paragraph></TableCell>

@@ -44,6 +44,19 @@ namespace DCST4.Properties
         [UserScopedSetting, DefaultSettingValue("")]
         public string TlsClientCertThumbprint { get => (string)this[nameof(TlsClientCertThumbprint)]; set => this[nameof(TlsClientCertThumbprint)] = value; }
 
+        /// <summary>Send C-FIND, C-MOVE and C-GET to the server below instead of the destination. Saved with the profile too.</summary>
+        [UserScopedSetting, DefaultSettingValue("False")]
+        public bool QrUseSeparateServer { get => (bool)this[nameof(QrUseSeparateServer)]; set => this[nameof(QrUseSeparateServer)] = value; }
+
+        [UserScopedSetting, DefaultSettingValue("")]
+        public string QrServerAET { get => (string)this[nameof(QrServerAET)]; set => this[nameof(QrServerAET)] = value; }
+
+        [UserScopedSetting, DefaultSettingValue("")]
+        public string QrServerHost { get => (string)this[nameof(QrServerHost)]; set => this[nameof(QrServerHost)] = value; }
+
+        [UserScopedSetting, DefaultSettingValue("104")]
+        public int QrServerPort { get => (int)this[nameof(QrServerPort)]; set => this[nameof(QrServerPort)] = value; }
+
         /// <summary>Saved destination profiles, serialized as XML.</summary>
         [UserScopedSetting, DefaultSettingValue("")]
         public string ConnectionProfiles { get => (string)this[nameof(ConnectionProfiles)]; set => this[nameof(ConnectionProfiles)] = value; }

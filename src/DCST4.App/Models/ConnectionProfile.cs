@@ -15,6 +15,11 @@ namespace DCST4.Models
         public bool UseTLS { get; set; }
         public bool TlsIgnoreCertErrors { get; set; }
         public string TlsClientCertThumbprint { get; set; }
+        /// <summary>A separate Query/Retrieve server. Missing in profiles from before 1.13.0, which then read as off.</summary>
+        public bool QrUseSeparateServer { get; set; }
+        public string QrServerAET { get; set; }
+        public string QrServerHost { get; set; }
+        public int QrServerPort { get; set; } = 104;
 
         public override string ToString() => Name;
 

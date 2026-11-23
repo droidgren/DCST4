@@ -145,7 +145,7 @@ namespace DCST4.Tests
             // ------------------------------------------------ dialogs, with the defaults
             await ShowAndCapture(new TestSettingsDialog(new TestSettingsViewModel(vm)), window, Path.Combine(folder, "test-settings.png"));
             await ShowAndCapture(new PerformanceSettingsDialog(new PerformanceSettingsViewModel(vm.Performance)), window, Path.Combine(folder, "performance-settings.png"));
-            var settingsDialog = new SettingsDialog(new ResultSettingsViewModel(vm));
+            var settingsDialog = new SettingsDialog(new ResultSettingsViewModel(vm), vm);
             await ShowAndCapture(settingsDialog, window, Path.Combine(folder, "settings-tags.png"), () => Select(settingsDialog, "Additional tags"));
             await ShowAndCapture(settingsDialog, window, Path.Combine(folder, "settings-results.png"), () => Select(settingsDialog, "Test and Performance Results"));
             await ShowAndCapture(settingsDialog, window, Path.Combine(folder, "settings-identifiers.png"), () => Select(settingsDialog, "Identifiers"));

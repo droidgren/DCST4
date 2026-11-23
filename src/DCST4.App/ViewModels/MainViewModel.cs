@@ -65,6 +65,24 @@ namespace DCST4.ViewModels
         private int _serverPort;
         public int ServerPort { get => _serverPort; set { _serverPort = value; OnPropertyChanged(); Settings.Default.ServerPort = value; } }
 
+        private bool _qrUseSeparateServer;
+        /// <summary>Send C-FIND, C-MOVE and C-GET to the Q/R server instead of the destination. Saved with the profile.</summary>
+        public bool QrUseSeparateServer { get => _qrUseSeparateServer; set { _qrUseSeparateServer = value; OnPropertyChanged(); OnPropertyChanged(nameof(QrServerText)); Settings.Default.QrUseSeparateServer = value; } }
+
+        private string _qrServerAET;
+        public string QrServerAET { get => _qrServerAET; set { _qrServerAET = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(QrServerText)); Settings.Default.QrServerAET = _qrServerAET; } }
+
+        private string _qrServerHost;
+        public string QrServerHost { get => _qrServerHost; set { _qrServerHost = value ?? string.Empty; OnPropertyChanged(); OnPropertyChanged(nameof(QrServerText)); Settings.Default.QrServerHost = _qrServerHost; } }
+
+        private int _qrServerPort;
+        public int QrServerPort { get => _qrServerPort; set { _qrServerPort = value; OnPropertyChanged(); OnPropertyChanged(nameof(QrServerText)); Settings.Default.QrServerPort = value; } }
+
+        /// <summary>The line under the Server fields that says where Query/Retrieve goes. Empty when it goes to the destination.</summary>
+        public string QrServerText => _qrUseSeparateServer
+            ? $"Q/R: {_qrServerAET?.Trim()}@{_qrServerHost?.Trim()}:{_qrServerPort.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+            : string.Empty;
+
         private string _localScpAe;
         /// <summary>The AE title the PACS must know this computer by for C-MOVE.</summary>
         public string LocalScpAe { get => _localScpAe; set { _localScpAe = value; OnPropertyChanged(); Settings.Default.LocalScpAe = value; } }
@@ -788,6 +806,10 @@ namespace DCST4.ViewModels
             _serverAET = s.ServerAET ?? string.Empty;
             _serverHost = s.ServerHost ?? string.Empty;
             _serverPort = s.ServerPort;
+            _qrUseSeparateServer = s.QrUseSeparateServer;
+            _qrServerAET = s.QrServerAET ?? string.Empty;
+            _qrServerHost = s.QrServerHost ?? string.Empty;
+            _qrServerPort = s.QrServerPort;
             _localScpAe = s.LocalScpAe;
             _localScpPort = s.LocalScpPort;
             _testUidRoot = s.TestUidRoot;
@@ -898,6 +920,17 @@ namespace DCST4.ViewModels
             TlsClientCertThumbprint = TlsClientCertThumbprint,
             TlsExpiredClientCertThumbprint = TlsExpiredClientCertThumbprint?.Trim(),
         }.Trimmed();
+
+        /// <summary>The separate Query/Retrieve server, or null when Q/R goes to the destination. Calling AE and TLS are the destination's.</summary>
+        private DicomEndpoint BuildQueryEndpoint()
+        {
+            if (!_qrUseSeparateServer) return null;
+            var endpoint = BuildEndpoint();
+            endpoint.Host = _qrServerHost?.Trim();
+            endpoint.Port = _qrServerPort;
+            endpoint.CalledAe = _qrServerAET?.Trim();
+            return endpoint;
+        }
 
         private static NetworkOptions BuildNetworkOptions()
         {
@@ -1459,6 +1492,7 @@ namespace DCST4.ViewModels
         {
             Name = ProfileName?.Trim(),
             Endpoint = BuildEndpoint(),
+            QueryRetrieve = BuildQueryEndpoint(),
             Network = BuildNetworkOptions(),
             LocalScpAe = _localScpAe,
             LocalScpPort = _localScpPort,
@@ -1947,6 +1981,10 @@ namespace DCST4.ViewModels
             UseTLS = p.UseTLS;
             TlsIgnoreCertErrors = p.TlsIgnoreCertErrors;
             TlsClientCertThumbprint = p.TlsClientCertThumbprint ?? string.Empty;
+            QrUseSeparateServer = p.QrUseSeparateServer;
+            QrServerAET = p.QrServerAET ?? string.Empty;
+            QrServerHost = p.QrServerHost ?? string.Empty;
+            QrServerPort = p.QrServerPort;
             _logger.Information("Loaded destination profile {name}", p.Name);
             StatusText = $"Profile '{p.Name}' loaded.";
         }
@@ -1977,6 +2015,10 @@ namespace DCST4.ViewModels
             profile.UseTLS = UseTLS;
             profile.TlsIgnoreCertErrors = TlsIgnoreCertErrors;
             profile.TlsClientCertThumbprint = TlsClientCertThumbprint;
+            profile.QrUseSeparateServer = QrUseSeparateServer;
+            profile.QrServerAET = QrServerAET;
+            profile.QrServerHost = QrServerHost;
+            profile.QrServerPort = QrServerPort;
             StoreProfiles();
 
             _selectedProfile = profile; // values are already current, so do not re-apply

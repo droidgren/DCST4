@@ -147,6 +147,13 @@ namespace DCST4.Core.Testing
         public int ConnectionTimeoutSeconds { get; set; }
         public int AssociationTimeoutSeconds { get; set; }
         public int ResponseTimeoutSeconds { get; set; }
+        /// <summary>The separate Query/Retrieve server, or null when Q/R went to the store destination.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string QueryRetrieveHost { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? QueryRetrievePort { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string QueryRetrieveCalledAe { get; set; }
 
         public static ResultProfile From(TargetProfile profile) => new ResultProfile
         {
@@ -163,6 +170,9 @@ namespace DCST4.Core.Testing
             ConnectionTimeoutSeconds = profile.Network.ConnectionTimeoutSeconds,
             AssociationTimeoutSeconds = profile.Network.AssociationTimeoutSeconds,
             ResponseTimeoutSeconds = profile.Network.ResponseTimeoutSeconds,
+            QueryRetrieveHost = profile.QueryRetrieve?.Host,
+            QueryRetrievePort = profile.QueryRetrieve?.Port,
+            QueryRetrieveCalledAe = profile.QueryRetrieve?.CalledAe,
         };
     }
 
@@ -174,9 +184,9 @@ namespace DCST4.Core.Testing
         /// the integrity report and the query report. 4: added the commitment report and the committed step of the chain.
         /// 5: added the limits section of the limit, fault and TLS tests. 6: added the performance section of the load tests.
         /// 7: added the realism level and the lossy compression settings of the generated data. 8: added the retrieve matrix
-        /// of retrieve-syntaxes and the raw status of a matrix cell.
+        /// of retrieve-syntaxes and the raw status of a matrix cell. 9: added the separate Query/Retrieve server to the profile.
         /// </summary>
-        public const int CurrentSchemaVersion = 8;
+        public const int CurrentSchemaVersion = 9;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
         public string ToolVersion { get; set; }

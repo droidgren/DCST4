@@ -1,4 +1,5 @@
 using DCST4.Core.Generation;
+using DCST4.Core.Network;
 using DCST4.Core.Generation.Realism;
 using DCST4.Core.Pipeline;
 using DCST4.Infrastructure;
@@ -42,12 +43,19 @@ namespace DCST4
         private readonly List<BurnInTagChoice> _burnInTags;
         private readonly ObservableCollection<AdditionalTag> _customTags = new ObservableCollection<AdditionalTag>();
         private readonly ResultSettingsViewModel _results;
+        private readonly MainViewModel _main;
 
         /// <param name="results">The Test and Performance Results tab, a copy of what the main window uses.</param>
-        public SettingsDialog(ResultSettingsViewModel results)
+        /// <param name="main">Holds the Query/Retrieve server, which belongs to the destination profile and not to the settings.</param>
+        public SettingsDialog(ResultSettingsViewModel results, MainViewModel main)
         {
             InitializeComponent();
             _results = results;
+            _main = main;
+            QrUseSeparateServer.IsChecked = main.QrUseSeparateServer;
+            QrServerAetBox.Text = main.QrServerAET;
+            QrServerHostBox.Text = main.QrServerHost;
+            QrServerPortBox.Text = main.QrServerPort.ToString(CultureInfo.InvariantCulture);
             ResultsTab.DataContext = results;
             var s = Settings.Default;
             ConnectionTimeoutBox.Text = s.ConnectionTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
@@ -125,6 +133,18 @@ namespace DCST4
             if (!TryRead(ConnectionTimeoutBox, "Connection timeout", 1, 3600, out var connection)) return;
             if (!TryRead(AssociationTimeoutBox, "Association timeout", 1, 3600, out var association)) return;
             if (!TryRead(ResponseTimeoutBox, "Response timeout", 0, 86400, out var response)) return;
+            var useQr = QrUseSeparateServer.IsChecked == true;
+            var qrPort = _main.QrServerPort;
+            if (useQr)
+            {
+                if (!TryRead(QrServerPortBox, "The Q/R server port", 1, 65535, out qrPort)) return;
+                var qrProblem = new DicomEndpoint { Host = QrServerHostBox.Text, Port = qrPort, CallingAe = _main.CallingAET, CalledAe = QrServerAetBox.Text }.Trimmed().Validate();
+                if (qrProblem != null)
+                {
+                    MessageBox.Show(this, "Q/R server: " + qrProblem, "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+            }
             if (!TryReadOptional(JpegQualityBox, "JPEG quality", LossyCompressionSettings.MinJpegQuality, LossyCompressionSettings.MaxJpegQuality, out var jpegQuality)) return;
             if (!TryReadOptional(Jpeg2000RatioBox, "The JPEG 2000 ratio", LossyCompressionSettings.MinJpeg2000Ratio, LossyCompressionSettings.MaxJpeg2000Ratio, out var jpeg2000Ratio)) return;
             if (!TryReadOptional(JpegLsNearBox, "JPEG-LS NEAR", LossyCompressionSettings.MinJpegLsNear, LossyCompressionSettings.MaxJpegLsNear, out var jpegLsNear)) return;
@@ -164,6 +184,10 @@ namespace DCST4
             s.BurnInTags = BurnedInTagCatalog.Format(_burnInTags.Where(c => c.IsChecked).Select(c => c.Tag));
             s.AdditionalTags = AdditionalTagSetting.Serialize(
                 _commonTags.Where(c => c.IsChecked).Select(c => c.Common.Tag).Concat(_customTags).Select(AdditionalTagSetting.From));
+            _main.QrUseSeparateServer = useQr;
+            _main.QrServerAET = QrServerAetBox.Text.Trim();
+            _main.QrServerHost = QrServerHostBox.Text.Trim();
+            _main.QrServerPort = qrPort;
             s.Save();
             DialogResult = true;
         }

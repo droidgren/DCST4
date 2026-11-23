@@ -259,7 +259,7 @@ namespace DCST4.Core.Testing.Cases
         internal static Task<TimeToAvailable> StartPoller(LoadRun run, Task loadDone, CancellationToken token)
         {
             if (run.Settings.SampleEvery <= 0) return null;
-            run.Poller = new AvailabilityPoller(run.Context.Profile.Endpoint, run.Context.Profile.Network, run.Settings.SampleEvery, run.Settings.PollIntervalSeconds, run.Settings.PollTimeoutSeconds);
+            run.Poller = new AvailabilityPoller(run.Context.Profile.QueryEndpoint, run.Context.Profile.Network, run.Settings.SampleEvery, run.Settings.PollIntervalSeconds, run.Settings.PollTimeoutSeconds);
             return Task.Run(() => run.Poller.RunAsync(loadDone, token));
         }
 

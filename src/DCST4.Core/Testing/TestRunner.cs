@@ -36,6 +36,10 @@ namespace DCST4.Core.Testing
             session.RunStartedUtc = report.StartedUtc;
             var clock = Stopwatch.StartNew();
             Logger.Information("Test run of {count} tests against {host}:{port} started", tests.Count, trimmed.Endpoint.Host, trimmed.Endpoint.Port);
+            if (trimmed.HasSeparateQueryRetrieve)
+            {
+                Logger.Information("Query/Retrieve goes to {calledAe} at {host}:{port}", trimmed.QueryRetrieve.CalledAe, trimmed.QueryRetrieve.Host, trimmed.QueryRetrieve.Port);
+            }
 
             for (var i = 0; i < tests.Count; i++)
             {

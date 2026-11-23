@@ -30,6 +30,7 @@ namespace DCST4.Core.Testing
             // The dataset is 700 MB by default and has to be asked for by name. Here it is as small as the other objects.
             tests.Add(new StoreObjectTest(DatasetProfileCatalog.Find("tomosynthesis-large"), "breast-tomosynthesis", frames: Generation.Modalities.FunctionalGroupProfile.EnhancedFrames));
 
+            tests.Add(new QueryRetrieveAvailableTest());
             tests.Add(new QueryIndexTest());
             tests.Add(new QueryLevelsTest());
             tests.Add(new QueryReturnKeysTest());

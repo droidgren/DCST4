@@ -154,7 +154,7 @@ namespace DCST4.Core.Testing.Cases
                 {
                     token.ThrowIfCancellationRequested();
                     var timeline = timelines.Next();
-                    var outcome = await QueryService.FindAsync(context.Profile.Endpoint, context.Profile.Network, root, level, scope.Identifier(root, level), token, timeline).ConfigureAwait(false);
+                    var outcome = await QueryService.FindAsync(context.Profile.QueryEndpoint, context.Profile.Network, root, level, scope.Identifier(root, level), token, timeline).ConfigureAwait(false);
                     timelines.Collect(timeline);
 
                     Fixtures.AddContexts(result, outcome.Exchange.Contexts);
@@ -306,7 +306,7 @@ namespace DCST4.Core.Testing.Cases
                 }
 
                 var timeline = timelines.Next();
-                var outcome = await QueryService.FindAsync(context.Profile.Endpoint, context.Profile.Network, step.Item1, step.Item2, identifier, token, timeline).ConfigureAwait(false);
+                var outcome = await QueryService.FindAsync(context.Profile.QueryEndpoint, context.Profile.Network, step.Item1, step.Item2, identifier, token, timeline).ConfigureAwait(false);
                 timelines.Collect(timeline);
 
                 Fixtures.AddContexts(result, outcome.Exchange.Contexts);
@@ -519,7 +519,7 @@ namespace DCST4.Core.Testing.Cases
             };
 
             var timeline = timelines.Next();
-            var outcome = await QueryService.FindAsync(context.Profile.Endpoint, context.Profile.Network, QueryRoot.Study, DicomQueryRetrieveLevel.Study, identifier, token, timeline).ConfigureAwait(false);
+            var outcome = await QueryService.FindAsync(context.Profile.QueryEndpoint, context.Profile.Network, QueryRoot.Study, DicomQueryRetrieveLevel.Study, identifier, token, timeline).ConfigureAwait(false);
             timelines.Collect(timeline);
 
             Fixtures.AddContexts(result, outcome.Exchange.Contexts);
